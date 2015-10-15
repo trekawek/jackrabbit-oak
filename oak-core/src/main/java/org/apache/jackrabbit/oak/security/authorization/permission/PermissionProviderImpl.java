@@ -116,6 +116,7 @@ public class PermissionProviderImpl implements PermissionProvider, AccessControl
     }
 
     //---------------------------------------< AggregatedPermissionProvider >---
+    @Nonnull
     @Override
     public PrivilegeBits supportedPrivileges(@Nullable Tree tree, @Nullable PrivilegeBits privilegeBits) {
         return (privilegeBits != null) ? privilegeBits : new PrivilegeBitsProvider(immutableRoot).getBits(PrivilegeConstants.JCR_ALL);
@@ -132,7 +133,7 @@ public class PermissionProviderImpl implements PermissionProvider, AccessControl
     }
 
     @Override
-    public long supportedPermissions(@Nonnull TreePermission treePermission, long permissions) {
+    public long supportedPermissions(@Nonnull TreePermission treePermission, @Nullable PropertyState propertyState, long permissions) {
         return permissions;
     }
 

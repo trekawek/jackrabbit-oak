@@ -14,25 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document;
+package org.apache.jackrabbit.oak.security.authorization.composite;
 
 /**
- * <code>CollisionHandler</code>...
+ * Same as {@link CompositeProviderAllTest}
+ * with reverse order of the aggregated providers.
  */
-abstract class CollisionHandler {
+public class CompositeProviderAllReverseTest extends CompositeProviderAllTest {
 
-    static final CollisionHandler DEFAULT = new CollisionHandler() {
-        @Override
-        void concurrentModification(Revision other) {
-            // do nothing
-        }
-    };
-
-    /**
-     * Callback for an concurrent modification in {@link Revision}
-     * <code>other</code>.
-     *
-     * @param other the revision of the concurrent change.
-     */
-    abstract void concurrentModification(Revision other);
+    @Override
+    boolean reverseOrder() {
+        return true;
+    }
 }
