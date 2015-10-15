@@ -21,6 +21,8 @@ Oak offers a few tools which can be used to migrate the old, Jackrabbit 2 reposi
 
 ## Offline migration using oak-upgrade
 
+![oak-upgrade chart](img/migration-general.png)
+
 The `oak-upgrade` module allows to do an upgrade from the classic Jackrabbit 2.0 repository to the Oak node store and also to sidegrade from one nodestore type to another. Besides from that it has a number of features that can be useful in everyday system maintenance:
 
 * copying only a selcted subtree from one repository to another,
@@ -103,6 +105,8 @@ Example:
 
 ### Migrating a subtree
 
+![--include-paths chart](img/migration-paths.png)
+
 It's possible to define a list of content subtrees to include or exclude during the migration. By default, the whole repository gets copied. In order to copy only a subtree, use the `--include-paths`. For example, the following command will copy only the `/content/site` and `/content/other_site` subtrees:
 
     java -jar oak-upgrade-*.jar \
@@ -125,6 +129,8 @@ By default, the source repository replaces the destination repository (if there'
         /new/repository
 
 ### Version history copying
+
+![Version copy chart](img/migration-version.png)
 
 By default, the whole version storage is migrated. This includes referenced version histories (their versionable node still exists in the repository) and orphaned ones (their versionable node no longer exists). `oak-upgrade` allows to skip the orphaned version histories to make the migration faster and the destination repository smaller. It's also possible to define a maximum age for the version histories (both referenced and orphaned) to be copied.
 
