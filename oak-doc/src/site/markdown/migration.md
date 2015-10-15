@@ -153,6 +153,25 @@ There are two parameters: `--copy-orphaned-versions` and `--copy-versions`. Both
         --copy-orphaned-versions=2011-01-01 \
         /old/repository /new/repository
 
+### Resumed migration
+
+The migration might be stop at any time using `^C`. Resume the migration running the same command which was used to start it.
+
+### Custom initializers and commit hooks
+
+It's possible to inject custom logic into the upgrade process, by implementing
+[`RepositoryInitializer`](https://jackrabbit.apache.org/oak/docs/apidocs/org/apache/jackrabbit/oak/spi/lifecycle/RepositoryInitializer.html) or [`CommitHook`](https://jackrabbit.apache.org/oak/docs/apidocs/org/apache/jackrabbit/oak/spi/commit/CommitHook.html).
+
+In order to do that, create a new Maven project, with appropriate implementation. Then create following file:
+
+    src/main/resources/META-INF/services/org.apache.jackrabbit.oak.spi.commit.CommitHook
+
+The file should contain just one line - the name of the class with the `CoomitHook` implementation. Build the project and attach the JAR to the oak-upgrade class path:
+
+    java -cp my-commit-hook.jar:oak-upgrade-*.jar org.apache.jackrabbit.oak.upgrade.cli.OakUpgrade [normal oak-upgrade parameters]
+
+A custom `RepositoryInitializer` can be injected in a similar way.
+
 ### Other parameters
 
 The full list of supported parameters can be displayed using `--help` switch.
