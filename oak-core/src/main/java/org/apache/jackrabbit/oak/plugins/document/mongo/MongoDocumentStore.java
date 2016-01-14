@@ -119,6 +119,8 @@ public class MongoDocumentStore implements DocumentStore {
 
     private Clock clock = Clock.SIMPLE;
 
+    private final ReplicaSetInfo replicaInfo;
+
     private final long maxReplicationLagMillis;
 
     /**
@@ -160,6 +162,15 @@ public class MongoDocumentStore implements DocumentStore {
     private long maxLockedQueryTimeMS =
             Long.getLong("oak.mongo.maxLockedQueryTimeMS", TimeUnit.SECONDS.toMillis(3));
 
+    /**
+     * How often in milliseconds the MongoDocumentStore should estimate the
+     * replication lag.
+     * <p>
+     * Default is 60'000 (one minute).
+     */
+    private long estimationPullFrequencyMS =
+            Long.getLong("oak.mongo.estimationPullFrequencyMS", TimeUnit.SECONDS.toMillis(60));
+
     private String lastReadWriteMode;
 
     private final Map<String, String> metadata;
@@ -176,6 +187,9 @@ public class MongoDocumentStore implements DocumentStore {
         clusterNodes = db.getCollection(Collection.CLUSTER_NODES.toString());
         settings = db.getCollection(Collection.SETTINGS.toString());
         journal = db.getCollection(Collection.JOURNAL.toString());
+
+        replicaInfo = new ReplicaSetInfo(db, builder.getMongoSecondaryCredentials(), estimationPullFrequencyMS);
+        new Thread(replicaInfo, "MongoDocumentStore replica set info provider (" + builder.getClusterId() + ")").start();
 
         maxReplicationLagMillis = builder.getMaxReplicationLagMillis();
 
