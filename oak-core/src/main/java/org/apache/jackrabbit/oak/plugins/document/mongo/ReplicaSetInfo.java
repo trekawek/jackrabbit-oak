@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -63,11 +64,13 @@ public class ReplicaSetInfo implements Runnable {
 
     private final String credentials;
 
-    RevisionVector rootRevisions;
+    private volatile RevisionVector rootRevisions;
 
     private volatile boolean stop;
 
     private final Object stopMonitor = new Object();
+
+    private final List<ReplicaSetInfoListener> listeners = new CopyOnWriteArrayList<ReplicaSetInfoListener>();
 
     public ReplicaSetInfo(DB db, String credentials, long pullFrequencyMillis) {
         this.adminDb = db.getSisterDB("admin");
@@ -76,16 +79,21 @@ public class ReplicaSetInfo implements Runnable {
         this.credentials = credentials;
     }
 
-    boolean isSecondarySafe(RevisionVector lastSeenRev) {
-        if (rootRevisions == null) {
+    public void addListener(ReplicaSetInfoListener listener) {
+        listeners.add(listener);
+    }
+
+    boolean isMoreRecentThan(RevisionVector revisions) {
+        RevisionVector localRootRevisions = rootRevisions;
+        if (localRootRevisions == null) {
             return false;
         } else {
-            return lastSeenRev.compareTo(rootRevisions) <= 0;
+            return revisions.compareTo(localRootRevisions) <= 0;
         }
     }
 
     @Nullable
-    public synchronized RevisionVector getMinimumRootRevisions() {
+    public RevisionVector getMinimumRootRevisions() {
         return rootRevisions;
     }
 
@@ -107,6 +115,11 @@ public class ReplicaSetInfo implements Runnable {
                     members = Collections.emptyList();
                 }
                 updateRevisions(members);
+
+                for (ReplicaSetInfoListener listener : listeners) {
+                    listener.gotRootRevisions(rootRevisions);
+                }
+
                 synchronized (stopMonitor) {
                     try {
                         if (!stop) {
@@ -160,31 +173,13 @@ public class ReplicaSetInfo implements Runnable {
             unknownState = true;
         }
 
-        if (!unknownState) {
-            RevisionVector minRevisions = getMinimumRootRevisions(secondaries);
-            if (minRevisions == null) {
-                unknownState = true;
-            } else {
-                Long minTimestamp = null;
-                for (Revision r : minRevisions) {
-                    long timestamp = r.getTimestamp();
-                    if (minTimestamp == null || minTimestamp > timestamp) {
-                        minTimestamp = timestamp;
-                    }
-                }
-                synchronized (this) {
-                    rootRevisions = minRevisions;
-                }
-                LOG.debug("Minimum revisions: {}", minRevisions);
-                LOG.debug("Minimum root timestamp: {}", minTimestamp);
-            }
-        }
         if (unknownState) {
-            synchronized (this) {
-                rootRevisions = null;
-            }
+            rootRevisions = null;
+        } else {
+            rootRevisions = getMinimumRootRevisions(secondaries);
         }
 
+        LOG.debug("Minimum root revisions: {}", rootRevisions);
         closeConnections(difference(collections.keySet(), secondaries));
     }
 
@@ -193,6 +188,10 @@ public class ReplicaSetInfo implements Runnable {
         for (String name : secondaries) {
             try {
                 RevisionVector revs = getRootRevisions(name);
+                if (revs == null) {
+                    LOG.warn("Can't get the root document on {}", name);
+                    return null;
+                }
                 if (minRevs == null) {
                     minRevs = revs;
                 } else {
@@ -210,6 +209,9 @@ public class ReplicaSetInfo implements Runnable {
         List<Revision> revisions = new ArrayList<Revision>();
         DBCollection collection = getNodeCollection(hostName);
         DBObject root = collection.findOne(new BasicDBObject(Document.ID, "0:/"));
+        if (root == null) {
+            return null;
+        }
         DBObject lastRev = (DBObject) root.get("_lastRev");
         for (String clusterId : lastRev.keySet()) {
             String rev = (String) lastRev.get(clusterId);
@@ -260,4 +262,7 @@ public class ReplicaSetInfo implements Runnable {
         STARTUP, PRIMARY, SECONDARY, RECOVERING, STARTUP2, UNKNOWN, ARBITER, DOWN, ROLLBACK, REMOVED
     }
 
+    public static interface ReplicaSetInfoListener {
+        void gotRootRevisions(RevisionVector rootRevision);
+    }
 }

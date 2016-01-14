@@ -69,9 +69,9 @@ public class ReplicaSetInfoTest {
         addInstance(SECONDARY, "m2").addRevisions(20, 1, 19);
         updateRevisions();
 
-        assertEquals(20, replica.rootRevisions.getRevision(0).getTimestamp());
-        assertEquals( 1, replica.rootRevisions.getRevision(1).getTimestamp());
-        assertEquals( 3, replica.rootRevisions.getRevision(2).getTimestamp());
+        assertEquals(20, replica.getMinimumRootRevisions().getRevision(0).getTimestamp());
+        assertEquals( 1, replica.getMinimumRootRevisions().getRevision(1).getTimestamp());
+        assertEquals( 3, replica.getMinimumRootRevisions().getRevision(2).getTimestamp());
     }
 
     @Test
@@ -81,8 +81,8 @@ public class ReplicaSetInfoTest {
         addInstance(SECONDARY, "m3").addRevisions(14, 13, 22);
         updateRevisions();
 
-        assertTrue(replica.isSecondarySafe(lastRev(9, 13, 10)));
-        assertFalse(replica.isSecondarySafe(lastRev(11, 14, 10)));
+        assertTrue(replica.isMoreRecentThan(lastRev(9, 13, 10)));
+        assertFalse(replica.isMoreRecentThan(lastRev(11, 14, 10)));
     }
 
     @Test
@@ -91,8 +91,8 @@ public class ReplicaSetInfoTest {
         addInstance(RECOVERING, "m2");
         updateRevisions();
 
-        assertNull(replica.rootRevisions);
-        assertFalse(replica.isSecondarySafe(lastRev(1, 1, 1)));
+        assertNull(replica.getMinimumRootRevisions());
+        assertFalse(replica.isMoreRecentThan(lastRev(1, 1, 1)));
     }
 
     @Test
@@ -100,8 +100,8 @@ public class ReplicaSetInfoTest {
         addInstance(PRIMARY, "m1");
         updateRevisions();
 
-        assertNull(replica.rootRevisions);
-        assertFalse(replica.isSecondarySafe(lastRev(1, 1, 1)));
+        assertNull(replica.getMinimumRootRevisions());
+        assertFalse(replica.isMoreRecentThan(lastRev(1, 1, 1)));
     }
 
     private RevisionBuilder addInstance(ReplicaSetMemberState state, String name) {

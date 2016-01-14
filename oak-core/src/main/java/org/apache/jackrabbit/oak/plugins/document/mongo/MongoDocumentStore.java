@@ -55,6 +55,7 @@ import org.apache.jackrabbit.oak.plugins.document.DocumentStoreException;
 import org.apache.jackrabbit.oak.plugins.document.JournalEntry;
 import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
 import org.apache.jackrabbit.oak.plugins.document.Revision;
+import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
 import org.apache.jackrabbit.oak.plugins.document.StableRevisionComparator;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Condition;
@@ -121,6 +122,8 @@ public class MongoDocumentStore implements DocumentStore {
 
     private final ReplicaSetInfo replicaInfo;
 
+    private RevisionVector mostRecentAccessedRevisions;
+
     private final long maxReplicationLagMillis;
 
     /**
@@ -169,7 +172,7 @@ public class MongoDocumentStore implements DocumentStore {
      * Default is 60'000 (one minute).
      */
     private long estimationPullFrequencyMS =
-            Long.getLong("oak.mongo.estimationPullFrequencyMS", TimeUnit.SECONDS.toMillis(60));
+            Long.getLong("oak.mongo.estimationPullFrequencyMS", TimeUnit.SECONDS.toMillis(5));
 
     private String lastReadWriteMode;
 
@@ -455,7 +458,7 @@ public class MongoDocumentStore implements DocumentStore {
         final long start = PERFLOG.start();
         boolean isSlaveOk = false;
         try {
-            ReadPreference readPreference = getMongoReadPreference(collection, Utils.getParentId(key), docReadPref);
+            ReadPreference readPreference = getMongoReadPreference(collection, null, key, docReadPref);
 
             if(readPreference.isSlaveOk()){
                 LOG.trace("Routing call to secondary for fetching [{}]", key);
@@ -482,6 +485,7 @@ public class MongoDocumentStore implements DocumentStore {
             if (doc != null) {
                 doc.seal();
             }
+            updateLatestAccessedRevs(doc);
             return doc;
         } finally {
             PERFLOG.end(start, 1, "findUncached on key={}, isSlaveOk={}", key,
@@ -581,7 +585,7 @@ public class MongoDocumentStore implements DocumentStore {
                 cursor.maxTime(maxQueryTime, TimeUnit.MILLISECONDS);
             }
             ReadPreference readPreference =
-                    getMongoReadPreference(collection, parentId, getDefaultReadPreference(collection));
+                    getMongoReadPreference(collection, parentId, null, getDefaultReadPreference(collection));
 
             if(readPreference.isSlaveOk()){
                 LOG.trace("Routing call to secondary for fetching children from [{}] to [{}]", fromKey, toKey);
@@ -599,6 +603,7 @@ public class MongoDocumentStore implements DocumentStore {
                             && doc != null
                             && lock != null) {
                         nodesCache.putIfNewer((NodeDocument) doc);
+                        updateLatestAccessedRevs(doc);
                     }
                     list.add(doc);
                 }
@@ -646,6 +651,7 @@ public class MongoDocumentStore implements DocumentStore {
                 DBObject query = QueryBuilder.start(Document.ID).in(keyBatch).get();
                 try {
                     dbCollection.remove(query);
+                    
                 } catch (Exception e) {
                     throw DocumentStoreException.convert(e, "Remove failed for " + keyBatch);
                 } finally {
@@ -759,6 +765,7 @@ public class MongoDocumentStore implements DocumentStore {
                 if (collection == Collection.NODES) {
                     NodeDocument newDoc = (NodeDocument) applyChanges(collection, oldDoc, updateOp);
                     nodesCache.put(newDoc);
+                    updateLatestAccessedRevs(newDoc);
                 }
                 oldDoc.seal();
             } else if (upsert) {
@@ -766,6 +773,7 @@ public class MongoDocumentStore implements DocumentStore {
                     NodeDocument doc = (NodeDocument) collection.newDocument(this);
                     UpdateUtils.applyChanges(doc, updateOp);
                     nodesCache.putIfAbsent(doc);
+                    updateLatestAccessedRevs(doc);
                 }
             } else {
                 // updateOp without conditions and not an upsert
@@ -874,6 +882,7 @@ public class MongoDocumentStore implements DocumentStore {
                 if (collection == Collection.NODES) {
                     for (T doc : docs) {
                         nodesCache.putIfAbsent((NodeDocument) doc);
+                        updateLatestAccessedRevs(doc);
                     }
                 }
                 return true;
@@ -990,9 +999,10 @@ public class MongoDocumentStore implements DocumentStore {
         return col == Collection.NODES ? DocumentReadPreference.PREFER_SECONDARY_IF_OLD_ENOUGH : DocumentReadPreference.PRIMARY;
     }
 
-    <T extends Document> ReadPreference getMongoReadPreference(Collection<T> collection,
-                                                               String parentId,
-                                                               DocumentReadPreference preference) {
+    <T extends Document> ReadPreference getMongoReadPreference(@Nonnull Collection<T> collection,
+                                                               @Nullable String parentId,
+                                                               @Nullable String documentId,
+                                                               @Nonnull DocumentReadPreference preference) {
         switch(preference){
             case PRIMARY:
                 return ReadPreference.primary();
@@ -1005,23 +1015,17 @@ public class MongoDocumentStore implements DocumentStore {
                     return ReadPreference.primary();
                 }
 
-                // read from primary unless parent has not been modified
-                // within replication lag period
-                ReadPreference readPreference = ReadPreference.primary();
-                if (parentId != null) {
-                    long replicationSafeLimit = getTime() - maxReplicationLagMillis;
-                    NodeDocument cachedDoc = nodesCache.getIfPresent(parentId);
-                    // FIXME: this is not quite accurate, because ancestors
-                    // are updated in a background thread (_lastRev). We
-                    // will need to revise this for low maxReplicationLagMillis
-                    // values
-                    if (cachedDoc != null && !cachedDoc.hasBeenModifiedSince(replicationSafeLimit)) {
+                boolean secondarySafe = true;
+                secondarySafe &= collection == Collection.NODES;
+                secondarySafe &= mostRecentAccessedRevisions == null || replicaInfo.isMoreRecentThan(mostRecentAccessedRevisions);
 
-                        //If parent has been modified loooong time back then there children
-                        //would also have not be modified. In that case we can read from secondary
-                        readPreference = getConfiguredReadPreference(collection);
-                    }
+                ReadPreference readPreference;
+                if (secondarySafe) {
+                    readPreference = getConfiguredReadPreference(collection);
+                } else {
+                    readPreference = ReadPreference.primary();
                 }
+
                 return readPreference;
             default:
                 throw new IllegalArgumentException("Unsupported usage " + preference);
@@ -1315,6 +1319,18 @@ public class MongoDocumentStore implements DocumentStore {
         final long diff = midPoint - serverLocalTimeMillis;
 
         return diff;
+    }
+
+    private synchronized <T extends Document> void updateLatestAccessedRevs(T doc) {
+        if (doc instanceof NodeDocument) {
+            RevisionVector accessedRevs = new RevisionVector(((NodeDocument) doc).getLastRev().values());
+            if (mostRecentAccessedRevisions == null) {
+                mostRecentAccessedRevisions = accessedRevs;
+            } else {
+                mostRecentAccessedRevisions = mostRecentAccessedRevisions.pmax(accessedRevs);
+            }
+        }
+        LOG.debug("Last accessed revs: {}", mostRecentAccessedRevisions);
     }
 
     private static class InvalidationResult implements CacheInvalidationStats {
