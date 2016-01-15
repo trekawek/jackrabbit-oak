@@ -54,7 +54,6 @@ public class ReadPreferenceIT extends AbstractMongoConnectionTest {
         replicationLag = TimeUnit.SECONDS.toMillis(10);
         mongoConnection = connectionFactory.getConnection();
         mk = new DocumentMK.Builder()
-                .setMaxReplicationLag(replicationLag, TimeUnit.MILLISECONDS)
                 .setMongoDB(mongoConnection.getDB())
                 .setClusterId(1)
                 .setLeaseCheck(false)

@@ -126,6 +126,8 @@ public class MongoDocumentStore implements DocumentStore {
 
     private LocalChanges localChanges;
 
+    private final long maxReplicationLagMillis;
+
     /**
      * Duration in seconds under which queries would use index on _modified field
      * If set to -1 then modifiedTime index would not be used.
@@ -196,6 +198,8 @@ public class MongoDocumentStore implements DocumentStore {
         localChanges = new LocalChanges();
         replicaInfo.addListener(localChanges);
 
+        maxReplicationLagMillis = builder.getMaxReplicationLagMillis();
+
         // indexes:
         // the _id field is the primary key, so we don't need to define it
         DBObject index = new BasicDBObject();
@@ -236,9 +240,9 @@ public class MongoDocumentStore implements DocumentStore {
         this.nodeLocks = new TreeNodeDocumentLocks();
         this.nodesCache = builder.buildNodeDocumentCache(this, nodeLocks);
 
-        LOG.info("Configuration " +
+        LOG.info("Configuration maxReplicationLagMillis {}, " +
                 "maxDeltaForModTimeIdxSecs {}, disableIndexHint {}, {}",
-                maxDeltaForModTimeIdxSecs,
+                maxReplicationLagMillis, maxDeltaForModTimeIdxSecs,
                 disableIndexHint, db.getWriteConcern());
     }
 
@@ -986,7 +990,7 @@ public class MongoDocumentStore implements DocumentStore {
     }
 
     DocumentReadPreference getReadPreference(int maxCacheAge){
-        if(maxCacheAge == 0) {
+        if(maxCacheAge >= 0 && maxCacheAge < maxReplicationLagMillis) {
             return DocumentReadPreference.PRIMARY;
         } else if(maxCacheAge == Integer.MAX_VALUE){
             return DocumentReadPreference.PREFER_SECONDARY;

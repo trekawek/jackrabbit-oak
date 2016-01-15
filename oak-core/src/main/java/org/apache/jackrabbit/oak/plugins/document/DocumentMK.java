@@ -23,6 +23,7 @@ import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -510,6 +511,7 @@ public class DocumentMK {
         private int cacheSegmentCount = DEFAULT_CACHE_SEGMENT_COUNT;
         private int cacheStackMoveDistance = DEFAULT_CACHE_STACK_MOVE_DISTANCE;
         private boolean useSimpleRevision;
+        private long maxReplicationLagMillis = TimeUnit.HOURS.toMillis(6);
         private boolean disableBranches;
         private Clock clock = Clock.SIMPLE;
         private Executor executor;
@@ -910,6 +912,15 @@ public class DocumentMK {
 
         public Clock getClock() {
             return clock;
+        }
+
+        public Builder setMaxReplicationLag(long duration, TimeUnit unit){
+            maxReplicationLagMillis = unit.toMillis(duration);
+            return this;
+        }
+
+        public long getMaxReplicationLagMillis() {
+            return maxReplicationLagMillis;
         }
 
         public Builder disableBranches() {
