@@ -124,6 +124,8 @@ public class MongoDocumentStore implements DocumentStore {
 
     private RevisionVector mostRecentAccessedRevisions;
 
+    private LocalChanges localChanges;
+
     private final long maxReplicationLagMillis;
 
     /**
@@ -193,6 +195,8 @@ public class MongoDocumentStore implements DocumentStore {
 
         replicaInfo = new ReplicaSetInfo(db, builder.getMongoSecondaryCredentials(), estimationPullFrequencyMS);
         new Thread(replicaInfo, "MongoDocumentStore replica set info provider (" + builder.getClusterId() + ")").start();
+        localChanges = new LocalChanges();
+        replicaInfo.addListener(localChanges);
 
         maxReplicationLagMillis = builder.getMaxReplicationLagMillis();
 
@@ -765,7 +769,7 @@ public class MongoDocumentStore implements DocumentStore {
                 if (collection == Collection.NODES) {
                     NodeDocument newDoc = (NodeDocument) applyChanges(collection, oldDoc, updateOp);
                     nodesCache.put(newDoc);
-                    updateLatestAccessedRevs(newDoc);
+                    localChanges.add(newDoc);
                 }
                 oldDoc.seal();
             } else if (upsert) {
@@ -773,7 +777,7 @@ public class MongoDocumentStore implements DocumentStore {
                     NodeDocument doc = (NodeDocument) collection.newDocument(this);
                     UpdateUtils.applyChanges(doc, updateOp);
                     nodesCache.putIfAbsent(doc);
-                    updateLatestAccessedRevs(doc);
+                    localChanges.add(doc);
                 }
             } else {
                 // updateOp without conditions and not an upsert
@@ -882,7 +886,7 @@ public class MongoDocumentStore implements DocumentStore {
                 if (collection == Collection.NODES) {
                     for (T doc : docs) {
                         nodesCache.putIfAbsent((NodeDocument) doc);
-                        updateLatestAccessedRevs(doc);
+                        localChanges.add((NodeDocument) doc);
                     }
                 }
                 return true;
@@ -1017,6 +1021,8 @@ public class MongoDocumentStore implements DocumentStore {
 
                 boolean secondarySafe = true;
                 secondarySafe &= collection == Collection.NODES;
+                secondarySafe &= documentId == null || !localChanges.contains(documentId);
+                secondarySafe &= parentId == null || !localChanges.containsChildrenOf(parentId);
                 secondarySafe &= mostRecentAccessedRevisions == null || replicaInfo.isMoreRecentThan(mostRecentAccessedRevisions);
 
                 ReadPreference readPreference;
