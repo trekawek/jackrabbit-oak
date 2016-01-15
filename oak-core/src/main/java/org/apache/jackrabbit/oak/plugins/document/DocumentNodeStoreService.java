@@ -298,15 +298,6 @@ public class DocumentNodeStoreService {
     )
     public static final String PROP_BLOB_GC_MAX_AGE = "blobGcMaxAgeInSecs";
 
-    private static final long DEFAULT_MAX_REPLICATION_LAG = 6 * 60 * 60;
-    @Property(longValue = DEFAULT_MAX_REPLICATION_LAG,
-            label = "Max Replication Lag (in secs)",
-            description = "Value in seconds. Determines the duration beyond which it can be safely assumed " +
-                    "that the state on the secondaries is consistent with the primary, and it is safe to read from them"
-    )
-    public static final String PROP_REPLICATION_LAG = "maxReplicationLagInSecs";
-    private long maxReplicationLagInSecs = DEFAULT_MAX_REPLICATION_LAG;
-
     @Property(options = {
                 @PropertyOption(name = "MONGO", value = "MONGO"),
                 @PropertyOption(name = "RDB", value = "RDB")
@@ -329,7 +320,6 @@ public class DocumentNodeStoreService {
         whiteboard = new OsgiWhiteboard(context.getBundleContext());
         executor = new WhiteboardExecutor();
         executor.start(whiteboard);
-        maxReplicationLagInSecs = toLong(config.get(PROP_REPLICATION_LAG), DEFAULT_MAX_REPLICATION_LAG);
         customBlobStore = toBoolean(prop(CUSTOM_BLOB_STORE), false);
         documentStoreType = DocumentStoreType.fromString(PropertiesUtil.toString(config.get(PROP_DS_TYPE), "MONGO"));
 
@@ -433,14 +423,13 @@ public class DocumentNodeStoreService {
                 // Take care around not logging the uri directly as it
                 // might contain passwords
                 log.info("Starting DocumentNodeStore with host={}, db={}, cache size (MB)={}, persistentCache={}, " +
-                                "blobCacheSize (MB)={}, maxReplicationLagInSecs={}",
-                        mongoURI.getHosts(), db, cacheSize, persistentCache, blobCacheSize, maxReplicationLagInSecs);
+                                "blobCacheSize (MB)={}",
+                        mongoURI.getHosts(), db, cacheSize, persistentCache, blobCacheSize);
                 log.info("Mongo Connection details {}", MongoConnection.toString(mongoURI.getOptions()));
             }
 
             String mongoSecondaryCredentials = PropertiesUtil.toString(prop(PROP_SECONDARY_CREDENTIALS), null);
             mkBuilder.setMongoSecondaryCredentials(mongoSecondaryCredentials);
-            mkBuilder.setMaxReplicationLag(maxReplicationLagInSecs, TimeUnit.SECONDS);
             mkBuilder.setMongoDB(uri, db, blobCacheSize);
 
             log.info("Connected to database '{}'", db);
