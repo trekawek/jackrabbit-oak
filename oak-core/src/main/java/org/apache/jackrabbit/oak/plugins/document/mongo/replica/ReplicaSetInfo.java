@@ -94,10 +94,11 @@ public class ReplicaSetInfo implements Runnable {
     }
 
     public long getLag() {
-        if (oldestNotReplicated == 0) {
+        long localOldestNotReplicated = oldestNotReplicated;
+        if (localOldestNotReplicated == 0) {
             return maxReplicationLagMillis;
         } else {
-            return System.currentTimeMillis() - oldestNotReplicated;
+            return System.currentTimeMillis() - localOldestNotReplicated;
         }
     }
 
