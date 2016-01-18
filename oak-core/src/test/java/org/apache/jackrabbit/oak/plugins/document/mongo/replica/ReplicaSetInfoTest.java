@@ -16,11 +16,11 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.mongo;
+package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState.PRIMARY;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState.RECOVERING;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState.SECONDARY;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.PRIMARY;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.RECOVERING;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.SECONDARY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -28,7 +28,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,7 +36,7 @@ import java.util.Map;
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
 import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo;
-import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState;
+import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState;
 import org.bson.BasicBSONObject;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,10 +55,15 @@ public class ReplicaSetInfoTest {
         DB db = mock(DB.class);
         when(db.getName()).thenReturn("oak-db");
         when(db.getSisterDB(Mockito.anyString())).thenReturn(db);
-        replica = new ReplicaSetInfo(db, null, 0l) {
+        replica = new ReplicaSetInfo(db, null, 0l, 0l) {
             @Override
-            protected RevisionVector getRootRevisions(String hostName) throws UnknownHostException {
-                return replicationSet.revisions(hostName);
+            protected Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
+                Map<String, TimestampedRevisionVector> result = new HashMap<String, TimestampedRevisionVector>();
+                for (String host : hosts) {
+                    RevisionVector v = replicationSet.revisions(host);
+                    result.put(host, new TimestampedRevisionVector(v, System.currentTimeMillis()));
+                }
+                return result;
             }
         };
     }
