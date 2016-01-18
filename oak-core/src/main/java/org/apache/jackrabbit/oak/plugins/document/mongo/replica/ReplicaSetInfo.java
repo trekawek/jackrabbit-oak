@@ -214,8 +214,11 @@ public class ReplicaSetInfo implements Runnable {
     }
 
     private long getOldestNotReplicated(TimestampedRevisionVector primary, Iterable<TimestampedRevisionVector> secondaries) {
-        final RevisionVector priRev = primary.getRevs();
+        if (primary == null) {
+            return 0;
+        }
 
+        final RevisionVector priRev = primary.getRevs();
         Long oldestNotReplicated = null;
         for (TimestampedRevisionVector v : secondaries) {
             if (v == null) {
