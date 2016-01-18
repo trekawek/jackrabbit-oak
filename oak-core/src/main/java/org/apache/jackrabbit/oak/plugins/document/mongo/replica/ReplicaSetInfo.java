@@ -267,10 +267,10 @@ public class ReplicaSetInfo implements Runnable {
     private static RevisionVector getMinimum(Iterable<RevisionVector> vectors) {
         RevisionVector minimum = null;
         for (RevisionVector v : vectors) {
-            if (v == null) {
-                return null;
-            } else if (minimum == null || minimum.compareTo(v) > 0) {
+            if (minimum == null) {
                 minimum = v;
+            } else {
+                minimum = minimum.pmin(v);
             }
         }
         return minimum;
