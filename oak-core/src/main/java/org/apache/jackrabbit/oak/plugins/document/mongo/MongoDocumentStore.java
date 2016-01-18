@@ -1014,7 +1014,7 @@ public class MongoDocumentStore implements DocumentStore {
     }
 
     DocumentReadPreference getReadPreference(int maxCacheAge){
-        if(maxCacheAge >= 0 && maxCacheAge < maxReplicationLagMillis) {
+        if(maxCacheAge >= 0 && maxCacheAge < replicaInfo.getLag()) {
             return DocumentReadPreference.PRIMARY;
         } else if(maxCacheAge == Integer.MAX_VALUE){
             return DocumentReadPreference.PREFER_SECONDARY;
