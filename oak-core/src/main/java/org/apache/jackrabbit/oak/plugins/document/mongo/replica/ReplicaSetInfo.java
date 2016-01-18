@@ -208,7 +208,7 @@ public class ReplicaSetInfo implements Runnable {
             oldestNotReplicated = getOldestNotReplicated(primaryRevision, secondaryRevisions);
         }
 
-        LOG.debug("Minimum root revisions: {}", rootRevisions);
+        LOG.debug("Minimum root revisions: {}. Current lag: {}", rootRevisions, getLag());
         nodeCollections.retain(secondaries);
     }
 
