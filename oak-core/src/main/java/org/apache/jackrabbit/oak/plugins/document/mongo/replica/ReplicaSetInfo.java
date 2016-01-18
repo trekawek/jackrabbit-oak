@@ -67,6 +67,8 @@ public class ReplicaSetInfo implements Runnable {
 
     private volatile boolean stop;
 
+    private long timeDiff;
+
     private final Object stopMonitor = new Object();
 
     private final List<ReplicaSetInfoListener> listeners = new CopyOnWriteArrayList<ReplicaSetInfoListener>();
@@ -117,7 +119,12 @@ public class ReplicaSetInfo implements Runnable {
     public void run() {
         try {
             while (!stop) {
+                long start = System.currentTimeMillis();
                 CommandResult result = adminDb.command("replSetGetStatus", ReadPreference.primary());
+                long end = System.currentTimeMillis();
+                long midPoint = (start + end) / 2;
+                timeDiff = midPoint - result.getDate("date").getTime();
+
                 Iterable<BasicBSONObject> members = (Iterable<BasicBSONObject>) result.get("members");
                 if (members == null) {
                     members = Collections.emptyList();
@@ -198,14 +205,14 @@ public class ReplicaSetInfo implements Runnable {
             Iterable<TimestampedRevisionVector> secondaryRevisions = filterKeys(vectors, in(secondaries)).values();
 
             rootRevisions = getMinimum(transform(secondaryRevisions, EXTRACT));
-            oldestNotReplicated = getOldestNotReplicated(primaryRevision, secondaryRevisions, 0);
+            oldestNotReplicated = getOldestNotReplicated(primaryRevision, secondaryRevisions);
         }
 
         LOG.debug("Minimum root revisions: {}", rootRevisions);
         nodeCollections.retain(secondaries);
     }
 
-    private long getOldestNotReplicated(TimestampedRevisionVector primary, Iterable<TimestampedRevisionVector> secondaries, long timeDiff) {
+    private long getOldestNotReplicated(TimestampedRevisionVector primary, Iterable<TimestampedRevisionVector> secondaries) {
         final RevisionVector priRev = primary.getRevs();
 
         Long oldestNotReplicated = null;
