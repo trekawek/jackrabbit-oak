@@ -218,6 +218,10 @@ public class ReplicaSetInfo implements Runnable {
 
         Long oldestNotReplicated = null;
         for (TimestampedRevisionVector v : secondaries) {
+            if (v == null) {
+                return 0;
+            }
+
             RevisionVector secRev = v.getRevs();
             if (secRev.compareTo(priRev) == 0) {
                 continue;
@@ -268,7 +272,9 @@ public class ReplicaSetInfo implements Runnable {
     private static RevisionVector getMinimum(Iterable<RevisionVector> vectors) {
         RevisionVector minimum = null;
         for (RevisionVector v : vectors) {
-            if (minimum == null) {
+            if (v == null) {
+                return null;
+            } else if (minimum == null) {
                 minimum = v;
             } else {
                 minimum = minimum.pmin(v);

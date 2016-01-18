@@ -44,7 +44,6 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import com.google.common.base.Function;
-import com.google.common.collect.Maps;
 import com.mongodb.DB;
 
 public class ReplicaSetInfoTest {

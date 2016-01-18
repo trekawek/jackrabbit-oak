@@ -25,7 +25,11 @@ public class TimestampedRevisionVector {
     public static final Function<TimestampedRevisionVector, RevisionVector> EXTRACT = new Function<TimestampedRevisionVector, RevisionVector>() {
         @Override
         public RevisionVector apply(TimestampedRevisionVector input) {
-            return input.revs;
+            if (input == null) {
+                return null;
+            } else {
+                return input.revs;
+            }
         }
     };
 
