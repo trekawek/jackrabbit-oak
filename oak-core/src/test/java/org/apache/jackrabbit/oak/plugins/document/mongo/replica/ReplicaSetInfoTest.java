@@ -18,6 +18,7 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
+import static com.google.common.collect.Maps.transformValues;
 import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.PRIMARY;
 import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.RECOVERING;
 import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.SECONDARY;
@@ -42,6 +43,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Maps;
 import com.mongodb.DB;
 
 public class ReplicaSetInfoTest {
@@ -58,20 +61,22 @@ public class ReplicaSetInfoTest {
         replica = new ReplicaSetInfo(db, null, 0l, 0l) {
             @Override
             protected Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
-                Map<String, TimestampedRevisionVector> result = new HashMap<String, TimestampedRevisionVector>();
-                for (String host : hosts) {
-                    RevisionVector v = replicationSet.revisions(host);
-                    result.put(host, new TimestampedRevisionVector(v, System.currentTimeMillis()));
-                }
-                return result;
+                return transformValues(replicationSet.memberRevisions,
+                        new Function<RevisionBuilder, TimestampedRevisionVector>() {
+                    @Override
+                    public TimestampedRevisionVector apply(RevisionBuilder input) {
+                        return new TimestampedRevisionVector(input.revs, System.currentTimeMillis());
+                    }
+                });
             }
         };
     }
 
     @Test
     public void testMinimumRevision() {
+        addInstance(PRIMARY, "mp").addRevisions(20, 18, 19);
         addInstance(SECONDARY, "m1").addRevisions(20, 18, 3);
-        addInstance(SECONDARY, "m2").addRevisions(20, 1, 19);
+        addInstance(SECONDARY, "m2").addRevisions(20, 1, 17);
         updateRevisions();
 
         assertEquals(20, replica.getMinimumRootRevisions().getRevision(0).getTimestamp());
@@ -81,6 +86,7 @@ public class ReplicaSetInfoTest {
 
     @Test
     public void testIsSafeRevision() {
+        addInstance(PRIMARY, "mp").addRevisions(15, 21, 22);
         addInstance(SECONDARY, "m1").addRevisions(10, 21, 11);
         addInstance(SECONDARY, "m2").addRevisions(15, 14, 13);
         addInstance(SECONDARY, "m3").addRevisions(14, 13, 22);
