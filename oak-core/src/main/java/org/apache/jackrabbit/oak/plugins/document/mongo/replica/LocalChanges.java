@@ -70,22 +70,14 @@ public class LocalChanges implements ReplicaSetInfoListener {
                 localChanges.put(doc.getId(), docRevisions);
                 if (localChanges.size() > SIZE_LIMIT) {
                     localChanges.clear();
-                    updateLatestChange(docRevisions);
-                    LOG.warn(
+                    latestChange = docRevisions;
+                    LOG.debug(
                             "The local changes count > {}. Clearing the list and switching to the 'latest change' mode: {}",
                             SIZE_LIMIT, latestChange);
                 }
             } else {
-                updateLatestChange(docRevisions);
+                latestChange = docRevisions;
             }
-        }
-    }
-
-    private void updateLatestChange(RevisionVector docRevisions) {
-        if (latestChange == null) {
-            latestChange = docRevisions;
-        } else {
-            latestChange = latestChange.pmax(docRevisions);
         }
     }
 
