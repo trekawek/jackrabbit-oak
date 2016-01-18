@@ -14,57 +14,56 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.mongo;
+package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
-import static com.google.common.collect.Sets.difference;
+import static com.google.common.base.Predicates.in;
+import static com.google.common.collect.ImmutableSet.of;
+import static com.google.common.collect.Iterables.transform;
+import static com.google.common.collect.Maps.filterKeys;
+import static com.google.common.collect.Sets.union;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.TimestampedRevisionVector.EXTRACT;
 
-import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.Set;
 
 import javax.annotation.Nullable;
 
-import org.apache.jackrabbit.oak.plugins.document.Collection;
-import org.apache.jackrabbit.oak.plugins.document.Document;
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
 import org.bson.BasicBSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mongodb.BasicDBObject;
 import com.mongodb.CommandResult;
 import com.mongodb.DB;
-import com.mongodb.DBCollection;
-import com.mongodb.DBObject;
-import com.mongodb.MongoClient;
-import com.mongodb.MongoClientException;
-import com.mongodb.MongoClientURI;
 import com.mongodb.ReadPreference;
 
 public class ReplicaSetInfo implements Runnable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicaSetInfo.class);
 
-    private final Map<String, DBCollection> collections = new HashMap<String, DBCollection>();
-
     private final DB adminDb;
-
-    private final String dbName;
 
     private final long pullFrequencyMillis;
 
-    private final String credentials;
+    private final long maxReplicationLagMillis;
+
+    private final ExecutorService executors = Executors.newFixedThreadPool(5);
+
+    private final NodeCollectionProvider nodeCollections;
 
     private volatile RevisionVector rootRevisions;
+
+    private volatile long oldestNotReplicated;
 
     private volatile boolean stop;
 
@@ -72,23 +71,31 @@ public class ReplicaSetInfo implements Runnable {
 
     private final List<ReplicaSetInfoListener> listeners = new CopyOnWriteArrayList<ReplicaSetInfoListener>();
 
-    public ReplicaSetInfo(DB db, String credentials, long pullFrequencyMillis) {
+    public ReplicaSetInfo(DB db, String credentials, long pullFrequencyMillis, long maxReplicationLagMillis) {
         this.adminDb = db.getSisterDB("admin");
-        this.dbName = db.getName();
         this.pullFrequencyMillis = pullFrequencyMillis;
-        this.credentials = credentials;
+        this.maxReplicationLagMillis = maxReplicationLagMillis;
+        this.nodeCollections = new NodeCollectionProvider(credentials, db.getName());
     }
 
     public void addListener(ReplicaSetInfoListener listener) {
         listeners.add(listener);
     }
 
-    boolean isMoreRecentThan(RevisionVector revisions) {
+    public boolean isMoreRecentThan(RevisionVector revisions) {
         RevisionVector localRootRevisions = rootRevisions;
         if (localRootRevisions == null) {
             return false;
         } else {
             return revisions.compareTo(localRootRevisions) <= 0;
+        }
+    }
+
+    public long getLag() {
+        if (oldestNotReplicated == 0) {
+            return maxReplicationLagMillis;
+        } else {
+            return System.currentTimeMillis() - oldestNotReplicated;
         }
     }
 
@@ -101,6 +108,7 @@ public class ReplicaSetInfo implements Runnable {
         synchronized (stopMonitor) {
             stop = true;
             stopMonitor.notify();
+            executors.shutdown();
         }
     }
 
@@ -131,8 +139,7 @@ public class ReplicaSetInfo implements Runnable {
                 }
             }
             LOG.debug("Stopping the replica set info");
-            closeConnections(collections.keySet());
-            collections.clear();
+            nodeCollections.close();
         } catch (Exception e) {
             LOG.error("Exception in the ReplicaSetInfo thread", e);
         }
@@ -141,6 +148,8 @@ public class ReplicaSetInfo implements Runnable {
     void updateRevisions(Iterable<BasicBSONObject> members) {
         Set<String> secondaries = new HashSet<String>();
         boolean unknownState = false;
+        String primary = null;
+
         for (BasicBSONObject member : members) {
             ReplicaSetMemberState state;
             try {
@@ -152,6 +161,7 @@ public class ReplicaSetInfo implements Runnable {
 
             switch (state) {
             case PRIMARY:
+                primary = name;
                 continue;
 
             case SECONDARY:
@@ -169,100 +179,97 @@ public class ReplicaSetInfo implements Runnable {
         }
 
         if (secondaries.isEmpty()) {
-            LOG.debug("No secondaries found");
+            LOG.debug("No secondaries found: {}", members);
+            unknownState = true;
+        }
+
+        if (primary == null) {
+            LOG.debug("No primary found: {}", members);
             unknownState = true;
         }
 
         if (unknownState) {
             rootRevisions = null;
+            oldestNotReplicated = 0;
         } else {
-            rootRevisions = getMinimumRootRevisions(secondaries);
+            Map<String, TimestampedRevisionVector> vectors = getRootRevisions(union(secondaries, of(primary)));
+
+            TimestampedRevisionVector primaryRevision = vectors.get(primary);
+            Iterable<TimestampedRevisionVector> secondaryRevisions = filterKeys(vectors, in(secondaries)).values();
+
+            rootRevisions = getMinimum(transform(secondaryRevisions, EXTRACT));
+            oldestNotReplicated = getOldestNotReplicated(primaryRevision, secondaryRevisions, 0);
         }
 
         LOG.debug("Minimum root revisions: {}", rootRevisions);
-        closeConnections(difference(collections.keySet(), secondaries));
+        nodeCollections.retain(secondaries);
     }
 
-    private RevisionVector getMinimumRootRevisions(Set<String> secondaries) {
-        RevisionVector minRevs = null;
-        for (String name : secondaries) {
+    private long getOldestNotReplicated(TimestampedRevisionVector primary, Iterable<TimestampedRevisionVector> secondaries, long timeDiff) {
+        final RevisionVector priRev = primary.getRevs();
+
+        Long oldestNotReplicated = null;
+        for (TimestampedRevisionVector v : secondaries) {
+            RevisionVector secRev = v.getRevs();
+            if (secRev.compareTo(priRev) == 0) {
+                continue;
+            }
+
+            for (Revision pr : priRev) {
+                Revision sr = secRev.getRevision(pr.getClusterId());
+                if (pr.equals(sr)) {
+                    continue;
+                }
+                long prTimestampInLocalTime = pr.getTimestamp() + timeDiff;
+                if (oldestNotReplicated == null || oldestNotReplicated > prTimestampInLocalTime) {
+                    oldestNotReplicated = prTimestampInLocalTime;
+                }
+            }
+        }
+
+        if (oldestNotReplicated == null) {
+            long minOpTimestamp = primary.getOperationTimestamp();
+            for (TimestampedRevisionVector v : secondaries) {
+                if (v.getOperationTimestamp() < minOpTimestamp) {
+                    minOpTimestamp = v.getOperationTimestamp();
+                }
+            }
+            return minOpTimestamp;
+        } else {
+            return oldestNotReplicated;
+        }
+    }
+
+    private Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
+        Map<String, Future<TimestampedRevisionVector>> futures = new HashMap<String, Future<TimestampedRevisionVector>>();
+        for (final String hostName : hosts) {
+            futures.put(hostName, executors.submit(new GetRootRevisionsCallable(hostName, nodeCollections)));
+        }
+
+        Map<String, TimestampedRevisionVector> result = new HashMap<String, TimestampedRevisionVector>();
+        for (Entry<String, Future<TimestampedRevisionVector>> entry : futures.entrySet()) {
             try {
-                RevisionVector revs = getRootRevisions(name);
-                if (revs == null) {
-                    LOG.warn("Can't get the root document on {}", name);
-                    return null;
-                }
-                if (minRevs == null) {
-                    minRevs = revs;
-                } else {
-                    minRevs = revs.pmin(minRevs);
-                }
-            } catch (UnknownHostException e) {
-                LOG.error("Can't connect to {}", name, e);
+                result.put(entry.getKey(), entry.getValue().get());
+            } catch (Exception e) {
+                LOG.error("Can't connect to the Mongo instance", e);
+            }
+        }
+        return result;
+    }
+
+    private static RevisionVector getMinimum(Iterable<RevisionVector> vectors) {
+        RevisionVector minimum = null;
+        for (RevisionVector v : vectors) {
+            if (v == null) {
                 return null;
+            } else if (minimum == null || minimum.compareTo(v) > 0) {
+                minimum = v;
             }
         }
-        return minRevs;
-    }
-
-    protected RevisionVector getRootRevisions(String hostName) throws UnknownHostException {
-        List<Revision> revisions = new ArrayList<Revision>();
-        DBCollection collection = getNodeCollection(hostName);
-        DBObject root = collection.findOne(new BasicDBObject(Document.ID, "0:/"));
-        if (root == null) {
-            return null;
-        }
-        DBObject lastRev = (DBObject) root.get("_lastRev");
-        for (String clusterId : lastRev.keySet()) {
-            String rev = (String) lastRev.get(clusterId);
-            revisions.add(Revision.fromString(rev));
-        }
-        LOG.debug("Got /_lastRev from {}: {}", hostName, lastRev);
-        return new RevisionVector(revisions);
-    }
-
-    private void closeConnections(Set<String> hostNames) {
-        Iterator<Entry<String, DBCollection>> it = collections.entrySet().iterator();
-        while (it.hasNext()) {
-            Entry<String, DBCollection> entry = it.next();
-            if (hostNames.contains(entry.getKey())) {
-                try {
-                    entry.getValue().getDB().getMongo().close();
-                    it.remove();
-                } catch (MongoClientException e) {
-                    LOG.error("Can't close Mongo client", e);
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private DBCollection getNodeCollection(String hostName) throws UnknownHostException {
-        if (collections.containsKey(hostName)) {
-            return collections.get(hostName);
-        }
-
-        StringBuilder uriBuilder = new StringBuilder("mongodb://");
-        if (credentials != null) {
-            uriBuilder.append(credentials).append('@');
-        }
-        uriBuilder.append(hostName);
-
-        MongoClientURI uri = new MongoClientURI(uriBuilder.toString());
-        MongoClient client = new MongoClient(uri);
-
-        DB db = client.getDB(dbName);
-        db.getMongo().slaveOk();
-        DBCollection collection = db.getCollection(Collection.NODES.toString());
-        collections.put(hostName, collection);
-        return collection;
+        return minimum;
     }
 
     enum ReplicaSetMemberState {
         STARTUP, PRIMARY, SECONDARY, RECOVERING, STARTUP2, UNKNOWN, ARBITER, DOWN, ROLLBACK, REMOVED
-    }
-
-    public static interface ReplicaSetInfoListener {
-        void gotRootRevisions(RevisionVector rootRevision);
     }
 }

@@ -65,6 +65,8 @@ import org.apache.jackrabbit.oak.plugins.document.UpdateUtils;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheInvalidationStats;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
 import org.apache.jackrabbit.oak.plugins.document.locks.TreeNodeDocumentLocks;
+import org.apache.jackrabbit.oak.plugins.document.mongo.replica.LocalChanges;
+import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo;
 import org.apache.jackrabbit.oak.plugins.document.util.Utils;
 import org.apache.jackrabbit.oak.stats.Clock;
 import org.apache.jackrabbit.oak.util.PerfLogger;
@@ -193,12 +195,12 @@ public class MongoDocumentStore implements DocumentStore {
         settings = db.getCollection(Collection.SETTINGS.toString());
         journal = db.getCollection(Collection.JOURNAL.toString());
 
-        replicaInfo = new ReplicaSetInfo(db, builder.getMongoSecondaryCredentials(), estimationPullFrequencyMS);
+        maxReplicationLagMillis = builder.getMaxReplicationLagMillis();
+
+        replicaInfo = new ReplicaSetInfo(db, builder.getMongoSecondaryCredentials(), estimationPullFrequencyMS, maxReplicationLagMillis);
         new Thread(replicaInfo, "MongoDocumentStore replica set info provider (" + builder.getClusterId() + ")").start();
         localChanges = new LocalChanges();
         replicaInfo.addListener(localChanges);
-
-        maxReplicationLagMillis = builder.getMaxReplicationLagMillis();
 
         // indexes:
         // the _id field is the primary key, so we don't need to define it
@@ -1021,8 +1023,8 @@ public class MongoDocumentStore implements DocumentStore {
 
                 boolean secondarySafe = true;
                 secondarySafe &= collection == Collection.NODES;
-                secondarySafe &= documentId == null || !localChanges.contains(documentId);
-                secondarySafe &= parentId == null || !localChanges.containsChildrenOf(parentId);
+                secondarySafe &= documentId == null || !localChanges.mayContain(documentId);
+                secondarySafe &= parentId == null || !localChanges.mayContainChildrenOf(parentId);
                 secondarySafe &= mostRecentAccessedRevisions == null || replicaInfo.isMoreRecentThan(mostRecentAccessedRevisions);
 
                 ReadPreference readPreference;

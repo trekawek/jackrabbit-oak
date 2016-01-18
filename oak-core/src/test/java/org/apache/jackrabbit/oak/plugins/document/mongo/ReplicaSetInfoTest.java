@@ -18,9 +18,9 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.mongo;
 
-import static org.apache.jackrabbit.oak.plugins.document.mongo.ReplicaSetInfo.ReplicaSetMemberState.PRIMARY;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.ReplicaSetInfo.ReplicaSetMemberState.RECOVERING;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.ReplicaSetInfo.ReplicaSetMemberState.SECONDARY;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState.PRIMARY;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState.RECOVERING;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState.SECONDARY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -36,7 +36,8 @@ import java.util.Map;
 
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
-import org.apache.jackrabbit.oak.plugins.document.mongo.ReplicaSetInfo.ReplicaSetMemberState;
+import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo;
+import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.ReplicaSetMemberState;
 import org.bson.BasicBSONObject;
 import org.junit.Before;
 import org.junit.Test;
