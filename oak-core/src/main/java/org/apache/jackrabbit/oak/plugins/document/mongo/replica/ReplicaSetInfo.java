@@ -247,7 +247,7 @@ public class ReplicaSetInfo implements Runnable {
         }
     }
 
-    private Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
+    protected Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
         Map<String, Future<TimestampedRevisionVector>> futures = new HashMap<String, Future<TimestampedRevisionVector>>();
         for (final String hostName : hosts) {
             futures.put(hostName, executors.submit(new GetRootRevisionsCallable(hostName, nodeCollections)));
@@ -274,9 +274,5 @@ public class ReplicaSetInfo implements Runnable {
             }
         }
         return minimum;
-    }
-
-    enum ReplicaSetMemberState {
-        STARTUP, PRIMARY, SECONDARY, RECOVERING, STARTUP2, UNKNOWN, ARBITER, DOWN, ROLLBACK, REMOVED
     }
 }
