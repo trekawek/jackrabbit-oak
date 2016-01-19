@@ -45,8 +45,14 @@ import org.slf4j.LoggerFactory;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
+import com.mongodb.MongoException;
 import com.mongodb.ReadPreference;
 
+/**
+ * This class analyses the replica set info provided by MongoDB to find out two
+ * what's the current synchronization state of secondary instances in terms of
+ * revision values and timestamp.
+ */
 public class ReplicaSetInfo implements Runnable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicaSetInfo.class);
@@ -147,7 +153,16 @@ public class ReplicaSetInfo implements Runnable {
 
     void updateReplicaStatus() {
         long start = clock.getTime();
-        BasicDBObject result = getReplicaStatus();
+        BasicDBObject result = null;
+        try {
+            result = getReplicaStatus();
+        } catch (MongoException e) {
+            LOG.error("Can't get replica status", e);
+            timeDiff = 0;
+            rootRevisions = null;
+            secondariesSafeTimestamp = 0;
+            return;
+        }
         long end = clock.getTime();
         long midPoint = (start + end) / 2;
         timeDiff = midPoint - result.getDate("date").getTime();
