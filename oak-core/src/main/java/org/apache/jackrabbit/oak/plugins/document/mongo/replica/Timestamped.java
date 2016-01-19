@@ -16,37 +16,48 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
-import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
-
 import com.google.common.base.Function;
 
-public class TimestampedRevisionVector {
+/**
+ * A value with a timestamp.
+ *
+ * @param <T> the value type
+ */
+public class Timestamped<T> {
 
-    public static final Function<TimestampedRevisionVector, RevisionVector> EXTRACT = new Function<TimestampedRevisionVector, RevisionVector>() {
-        @Override
-        public RevisionVector apply(TimestampedRevisionVector input) {
-            if (input == null) {
-                return null;
-            } else {
-                return input.revs;
-            }
-        }
-    };
-
-    private final RevisionVector revs;
+    private final T value;
 
     private final long operationTimestamp;
 
-    public TimestampedRevisionVector(RevisionVector revs, long operationTimestamp) {
-        this.revs = revs;
+    public Timestamped(T value, long operationTimestamp) {
+        this.value = value;
         this.operationTimestamp = operationTimestamp;
     }
 
-    public RevisionVector getRevs() {
-        return revs;
+    public T getValue() {
+        return value;
     }
 
     public long getOperationTimestamp() {
         return operationTimestamp;
+    }
+
+    public static <T> Function<Timestamped<T>, T> getExtractFunction() {
+        return new Function<Timestamped<T>, T>() {
+            @Override
+            public T apply(Timestamped<T> input) {
+                if (input == null) {
+                    return null;
+                } else {
+                    return input.value;
+                }
+            }
+        };
+    }
+
+    @Override
+    public String toString() {
+        return new StringBuilder("Timestamped[").append(value).append('(').append(operationTimestamp).append(")]")
+                .toString();
     }
 }

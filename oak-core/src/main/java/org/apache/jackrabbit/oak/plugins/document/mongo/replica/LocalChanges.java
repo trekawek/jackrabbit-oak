@@ -26,6 +26,12 @@ import org.apache.jackrabbit.oak.plugins.document.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * This class maintains a list of local changes (paths+revisions), which
+ * shouldn't be read from the secondary Mongo, as we are not sure if they have
+ * been already replicated from primary. Once we get this confidence, the entry
+ * will be removed from the map.
+ */
 public class LocalChanges implements ReplicaSetInfoListener {
 
     private static final Logger LOG = LoggerFactory.getLogger(LocalChanges.class);

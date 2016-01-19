@@ -19,9 +19,9 @@
 package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
 import static com.google.common.collect.Maps.transformValues;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.PRIMARY;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.RECOVERING;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState.SECONDARY;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.MemberState.PRIMARY;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.MemberState.RECOVERING;
+import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.MemberState.SECONDARY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -37,13 +37,15 @@ import java.util.Map;
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
 import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo;
-import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetMemberState;
+import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.MemberState;
+import org.apache.jackrabbit.oak.stats.Clock;
 import org.bson.BasicBSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import com.google.common.base.Function;
+import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 
 public class ReplicaSetInfoTest {
@@ -52,19 +54,34 @@ public class ReplicaSetInfoTest {
 
     private ReplicationSetStatusMock replicationSet;
 
+    private Clock.Virtual clock;
+
+    private Clock.Virtual mongoClock;
+
     @Before
     public void resetEstimator() {
+        clock = mongoClock = new Clock.Virtual();
+
         DB db = mock(DB.class);
         when(db.getName()).thenReturn("oak-db");
         when(db.getSisterDB(Mockito.anyString())).thenReturn(db);
-        replica = new ReplicaSetInfo(db, null, 0l, 0l) {
+        replica = new ReplicaSetInfo(clock, db, null, 0l, 0l) {
+
             @Override
-            protected Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
+            protected BasicDBObject getReplicaStatus() {
+                BasicDBObject obj = new BasicDBObject();
+                obj.put("date", mongoClock.getDate());
+                obj.put("members", replicationSet.members);
+                return obj;
+            }
+
+            @Override
+            protected Map<String, Timestamped<RevisionVector>> getRootRevisions(Iterable<String> hosts) {
                 return transformValues(replicationSet.memberRevisions,
-                        new Function<RevisionBuilder, TimestampedRevisionVector>() {
+                        new Function<RevisionBuilder, Timestamped<RevisionVector>>() {
                     @Override
-                    public TimestampedRevisionVector apply(RevisionBuilder input) {
-                        return new TimestampedRevisionVector(input.revs, System.currentTimeMillis());
+                    public Timestamped<RevisionVector> apply(RevisionBuilder input) {
+                        return new Timestamped<RevisionVector>(input.revs, clock.getTime());
                     }
                 });
             }
@@ -84,7 +101,7 @@ public class ReplicaSetInfoTest {
     }
 
     @Test
-    public void testIsSafeRevision() {
+    public void testIsMoreRecentThan() {
         addInstance(PRIMARY, "mp").addRevisions(15, 21, 22);
         addInstance(SECONDARY, "m1").addRevisions(10, 21, 11);
         addInstance(SECONDARY, "m2").addRevisions(15, 14, 13);
@@ -97,6 +114,7 @@ public class ReplicaSetInfoTest {
 
     @Test
     public void testUnknownStateIsNotSafe() {
+        addInstance(PRIMARY, "mp");
         addInstance(SECONDARY, "m1").addRevisions(10, 21, 11);
         addInstance(RECOVERING, "m2");
         updateRevisions();
@@ -114,7 +132,64 @@ public class ReplicaSetInfoTest {
         assertFalse(replica.isMoreRecentThan(lastRev(1, 1, 1)));
     }
 
-    private RevisionBuilder addInstance(ReplicaSetMemberState state, String name) {
+    @Test
+    public void testOldestNotReplicated() {
+        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
+        addInstance(SECONDARY, "m1").addRevisions(10, 5, 30);
+        addInstance(SECONDARY, "m2").addRevisions(2, 30, 30);
+        updateRevisions();
+
+        assertEquals(10, replica.secondariesSafeTimestamp);
+    }
+
+    @Test
+    public void testAllSecondariesUpToDate() {
+        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
+        addInstance(SECONDARY, "m1").addRevisions(10, 30, 30);
+        addInstance(SECONDARY, "m2").addRevisions(10, 30, 30);
+
+        long before = clock.getTime();
+        updateRevisions();
+        long after = clock.getTime();
+
+        assertBetween(before, after, replica.secondariesSafeTimestamp);
+    }
+
+    @Test
+    public void testAllSecondariesUpToDateWithTimediff() {
+        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
+        addInstance(SECONDARY, "m1").addRevisions(10, 30, 30);
+        addInstance(SECONDARY, "m2").addRevisions(10, 30, 30);
+
+        mongoClock = new Clock.Virtual();
+        mongoClock.waitUntil(100);
+
+        long before = clock.getTime();
+        updateRevisions();
+        long after = clock.getTime();
+
+        assertBetween(before, after, replica.secondariesSafeTimestamp);
+    }
+
+    @Test
+    public void testTimeDiff() {
+        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
+        mongoClock = new Clock.Virtual();
+
+        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
+        clock.waitUntil(50);      // local behind, mongo ahead
+        mongoClock.waitUntil(100);
+        updateRevisions();
+        assertEquals(-50, replica.timeDiff);
+
+        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
+        clock.waitUntil(200);      // mongo behind, local ahead
+        mongoClock.waitUntil(150);
+        updateRevisions();
+        assertEquals(50, replica.timeDiff);
+    }
+
+    private RevisionBuilder addInstance(MemberState state, String name) {
         if (replicationSet == null) {
             replicationSet = new ReplicationSetStatusMock();
         }
@@ -122,7 +197,7 @@ public class ReplicaSetInfoTest {
     }
 
     private void updateRevisions() {
-        replica.updateRevisions(replicationSet.getMembers());
+        replica.updateReplicaStatus();
         replicationSet = null;
     }
 
@@ -130,13 +205,19 @@ public class ReplicaSetInfoTest {
         return new RevisionBuilder().addRevisions(timestamps).revs;
     }
 
+    private static void assertBetween(long from, long to, long actual) {
+        final String msg = String.format("%d <= %d <= %d", from, actual, to);
+        assertTrue(msg, from <= actual);
+        assertTrue(msg, actual <= to);
+    }
+    
     private class ReplicationSetStatusMock {
 
         private List<BasicBSONObject> members = new ArrayList<BasicBSONObject>();
 
         private Map<String, RevisionBuilder> memberRevisions = new HashMap<String, RevisionBuilder>();
 
-        private RevisionBuilder addInstance(ReplicaSetMemberState state, String name) {
+        private RevisionBuilder addInstance(MemberState state, String name) {
             BasicBSONObject member = new BasicBSONObject();
             member.put("stateStr", state.name());
             member.put("name", name);
@@ -145,14 +226,6 @@ public class ReplicaSetInfoTest {
             RevisionBuilder builder = new RevisionBuilder();
             memberRevisions.put(name, builder);
             return builder;
-        }
-
-        private List<BasicBSONObject> getMembers() {
-            return members;
-        }
-
-        private RevisionVector revisions(String name) {
-            return memberRevisions.get(name).revs;
         }
     }
 

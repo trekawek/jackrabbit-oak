@@ -35,6 +35,10 @@ import com.mongodb.MongoClient;
 import com.mongodb.MongoClientException;
 import com.mongodb.MongoClientURI;
 
+/**
+ * This class connects to Mongo instances and returns the NODES collection.
+ * Connections are cached.
+ */
 public class NodeCollectionProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(NodeCollectionProvider.class);

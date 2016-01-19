@@ -21,7 +21,6 @@ import static com.google.common.collect.ImmutableSet.of;
 import static com.google.common.collect.Iterables.transform;
 import static com.google.common.collect.Maps.filterKeys;
 import static com.google.common.collect.Sets.union;
-import static org.apache.jackrabbit.oak.plugins.document.mongo.replica.TimestampedRevisionVector.EXTRACT;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,11 +38,12 @@ import javax.annotation.Nullable;
 
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
+import org.apache.jackrabbit.oak.stats.Clock;
 import org.bson.BasicBSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mongodb.CommandResult;
+import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.ReadPreference;
 
@@ -61,19 +61,22 @@ public class ReplicaSetInfo implements Runnable {
 
     private final NodeCollectionProvider nodeCollections;
 
-    private volatile RevisionVector rootRevisions;
-
-    private volatile long oldestNotReplicated;
-
-    private volatile boolean stop;
-
-    private long timeDiff;
+    private final Clock clock;
 
     private final Object stopMonitor = new Object();
 
     private final List<ReplicaSetInfoListener> listeners = new CopyOnWriteArrayList<ReplicaSetInfoListener>();
 
-    public ReplicaSetInfo(DB db, String credentials, long pullFrequencyMillis, long maxReplicationLagMillis) {
+    private volatile RevisionVector rootRevisions;
+
+    volatile long secondariesSafeTimestamp;
+
+    long timeDiff;
+
+    private volatile boolean stop;
+
+    public ReplicaSetInfo(Clock clock, DB db, String credentials, long pullFrequencyMillis, long maxReplicationLagMillis) {
+        this.clock = clock;
         this.adminDb = db.getSisterDB("admin");
         this.pullFrequencyMillis = pullFrequencyMillis;
         this.maxReplicationLagMillis = maxReplicationLagMillis;
@@ -94,11 +97,11 @@ public class ReplicaSetInfo implements Runnable {
     }
 
     public long getLag() {
-        long localOldestNotReplicated = oldestNotReplicated;
-        if (localOldestNotReplicated == 0) {
+        long localTS = secondariesSafeTimestamp;
+        if (localTS == 0) {
             return maxReplicationLagMillis;
         } else {
-            return System.currentTimeMillis() - localOldestNotReplicated;
+            return clock.getTime() - localTS;
         }
     }
 
@@ -115,22 +118,11 @@ public class ReplicaSetInfo implements Runnable {
         }
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public void run() {
         try {
             while (!stop) {
-                long start = System.currentTimeMillis();
-                CommandResult result = adminDb.command("replSetGetStatus", ReadPreference.primary());
-                long end = System.currentTimeMillis();
-                long midPoint = (start + end) / 2;
-                timeDiff = midPoint - result.getDate("date").getTime();
-
-                Iterable<BasicBSONObject> members = (Iterable<BasicBSONObject>) result.get("members");
-                if (members == null) {
-                    members = Collections.emptyList();
-                }
-                updateRevisions(members);
+                updateReplicaStatus();
 
                 for (ReplicaSetInfoListener listener : listeners) {
                     listener.gotRootRevisions(rootRevisions);
@@ -153,17 +145,36 @@ public class ReplicaSetInfo implements Runnable {
         }
     }
 
-    void updateRevisions(Iterable<BasicBSONObject> members) {
+    void updateReplicaStatus() {
+        long start = clock.getTime();
+        BasicDBObject result = getReplicaStatus();
+        long end = clock.getTime();
+        long midPoint = (start + end) / 2;
+        timeDiff = midPoint - result.getDate("date").getTime();
+
+        @SuppressWarnings("unchecked")
+        Iterable<BasicBSONObject> members = (Iterable<BasicBSONObject>) result.get("members");
+        if (members == null) {
+            members = Collections.emptyList();
+        }
+        updateRevisions(members);
+    }
+
+    protected BasicDBObject getReplicaStatus() {
+        return adminDb.command("replSetGetStatus", ReadPreference.primary());
+    }
+
+    private void updateRevisions(Iterable<BasicBSONObject> members) {
         Set<String> secondaries = new HashSet<String>();
         boolean unknownState = false;
         String primary = null;
 
         for (BasicBSONObject member : members) {
-            ReplicaSetMemberState state;
+            MemberState state;
             try {
-                state = ReplicaSetMemberState.valueOf(member.getString("stateStr"));
+                state = MemberState.valueOf(member.getString("stateStr"));
             } catch (IllegalArgumentException e) {
-                state = ReplicaSetMemberState.UNKNOWN;
+                state = MemberState.UNKNOWN;
             }
             String name = member.getString("name");
 
@@ -196,36 +207,41 @@ public class ReplicaSetInfo implements Runnable {
             unknownState = true;
         }
 
+        Map<String, Timestamped<RevisionVector>> vectors = null;
+        if (!unknownState) {
+            vectors = getRootRevisions(union(secondaries, of(primary)));
+            if (vectors.containsValue(null)) {
+                unknownState = true;
+            }
+        }
+
         if (unknownState) {
             rootRevisions = null;
-            oldestNotReplicated = 0;
+            secondariesSafeTimestamp = 0;
         } else {
-            Map<String, TimestampedRevisionVector> vectors = getRootRevisions(union(secondaries, of(primary)));
+            Timestamped<RevisionVector> primaryRevision = vectors.get(primary);
+            Iterable<Timestamped<RevisionVector>> secondaryRevisions = filterKeys(vectors, in(secondaries)).values();
 
-            TimestampedRevisionVector primaryRevision = vectors.get(primary);
-            Iterable<TimestampedRevisionVector> secondaryRevisions = filterKeys(vectors, in(secondaries)).values();
-
-            rootRevisions = getMinimum(transform(secondaryRevisions, EXTRACT));
-            oldestNotReplicated = getOldestNotReplicated(primaryRevision, secondaryRevisions);
+            rootRevisions = pmin(transform(secondaryRevisions, Timestamped.<RevisionVector>getExtractFunction()));
+            secondariesSafeTimestamp = getSecondariesSafeTimestamp(primaryRevision, secondaryRevisions);
         }
 
         LOG.debug("Minimum root revisions: {}. Current lag: {}", rootRevisions, getLag());
         nodeCollections.retain(secondaries);
     }
 
-    private long getOldestNotReplicated(TimestampedRevisionVector primary, Iterable<TimestampedRevisionVector> secondaries) {
-        if (primary == null) {
-            return 0;
-        }
-
-        final RevisionVector priRev = primary.getRevs();
+    /**
+     * Find the oldest revision which hasn't been replicated from primary to
+     * secondary yet and return its timestamp. If all revisions has been already
+     * replicated, return the date of the measurement.
+     *
+     * @return the point in time to which the secondary instances has been synchronized
+     */
+    private long getSecondariesSafeTimestamp(Timestamped<RevisionVector> primary, Iterable<Timestamped<RevisionVector>> secondaries) {
+        final RevisionVector priRev = primary.getValue();
         Long oldestNotReplicated = null;
-        for (TimestampedRevisionVector v : secondaries) {
-            if (v == null) {
-                return 0;
-            }
-
-            RevisionVector secRev = v.getRevs();
+        for (Timestamped<RevisionVector> v : secondaries) {
+            RevisionVector secRev = v.getValue();
             if (secRev.compareTo(priRev) == 0) {
                 continue;
             }
@@ -244,7 +260,7 @@ public class ReplicaSetInfo implements Runnable {
 
         if (oldestNotReplicated == null) {
             long minOpTimestamp = primary.getOperationTimestamp();
-            for (TimestampedRevisionVector v : secondaries) {
+            for (Timestamped<RevisionVector> v : secondaries) {
                 if (v.getOperationTimestamp() < minOpTimestamp) {
                     minOpTimestamp = v.getOperationTimestamp();
                 }
@@ -255,14 +271,14 @@ public class ReplicaSetInfo implements Runnable {
         }
     }
 
-    protected Map<String, TimestampedRevisionVector> getRootRevisions(Iterable<String> hosts) {
-        Map<String, Future<TimestampedRevisionVector>> futures = new HashMap<String, Future<TimestampedRevisionVector>>();
+    protected Map<String, Timestamped<RevisionVector>> getRootRevisions(Iterable<String> hosts) {
+        Map<String, Future<Timestamped<RevisionVector>>> futures = new HashMap<String, Future<Timestamped<RevisionVector>>>();
         for (final String hostName : hosts) {
-            futures.put(hostName, executors.submit(new GetRootRevisionsCallable(hostName, nodeCollections)));
+            futures.put(hostName, executors.submit(new GetRootRevisionsCallable(clock, hostName, nodeCollections)));
         }
 
-        Map<String, TimestampedRevisionVector> result = new HashMap<String, TimestampedRevisionVector>();
-        for (Entry<String, Future<TimestampedRevisionVector>> entry : futures.entrySet()) {
+        Map<String, Timestamped<RevisionVector>> result = new HashMap<String, Timestamped<RevisionVector>>();
+        for (Entry<String, Future<Timestamped<RevisionVector>>> entry : futures.entrySet()) {
             try {
                 result.put(entry.getKey(), entry.getValue().get());
             } catch (Exception e) {
@@ -272,7 +288,7 @@ public class ReplicaSetInfo implements Runnable {
         return result;
     }
 
-    private static RevisionVector getMinimum(Iterable<RevisionVector> vectors) {
+    private static RevisionVector pmin(Iterable<RevisionVector> vectors) {
         RevisionVector minimum = null;
         for (RevisionVector v : vectors) {
             if (v == null) {
@@ -284,5 +300,9 @@ public class ReplicaSetInfo implements Runnable {
             }
         }
         return minimum;
+    }
+
+    enum MemberState {
+        STARTUP, PRIMARY, SECONDARY, RECOVERING, STARTUP2, UNKNOWN, ARBITER, DOWN, ROLLBACK, REMOVED
     }
 }

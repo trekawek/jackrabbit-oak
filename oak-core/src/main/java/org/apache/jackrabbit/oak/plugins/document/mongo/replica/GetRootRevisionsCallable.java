@@ -23,6 +23,7 @@ import java.util.concurrent.Callable;
 import org.apache.jackrabbit.oak.plugins.document.Document;
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
+import org.apache.jackrabbit.oak.stats.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +31,7 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 
-public class GetRootRevisionsCallable implements Callable<TimestampedRevisionVector> {
+public class GetRootRevisionsCallable implements Callable<Timestamped<RevisionVector>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(GetRootRevisionsCallable.class);
 
@@ -38,31 +39,35 @@ public class GetRootRevisionsCallable implements Callable<TimestampedRevisionVec
 
     private final NodeCollectionProvider nodeCollections;
 
-    public GetRootRevisionsCallable(String hostName, NodeCollectionProvider nodeCollections) {
+    private final Clock clock;
+
+    public GetRootRevisionsCallable(Clock clock, String hostName, NodeCollectionProvider nodeCollections) {
         this.hostName = hostName;
         this.nodeCollections = nodeCollections;
+        this.clock = clock;
     }
 
     @Override
-    public TimestampedRevisionVector call() throws Exception {
+    public Timestamped<RevisionVector> call() throws Exception {
         List<Revision> revisions = new ArrayList<Revision>();
         DBCollection collection = nodeCollections.get(hostName);
 
-        long start = System.currentTimeMillis();
+        long start = clock.getTime();
         DBObject root = collection.findOne(new BasicDBObject(Document.ID, "0:/"));
-        long duration = System.currentTimeMillis() - start;
-        long mid = start + duration / 2;
+        long end = clock.getTime();
+        long mid = (start + end) / 2;
 
         if (root == null) {
             LOG.warn("Can't get the root document on {}", hostName);
             return null;
         }
+
         DBObject lastRev = (DBObject) root.get("_lastRev");
         for (String clusterId : lastRev.keySet()) {
             String rev = (String) lastRev.get(clusterId);
             revisions.add(Revision.fromString(rev));
         }
         LOG.debug("Got /_lastRev from {}: {}", hostName, lastRev);
-        return new TimestampedRevisionVector(new RevisionVector(revisions), mid);
+        return new Timestamped<RevisionVector>(new RevisionVector(revisions), mid);
     }
 }

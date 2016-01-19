@@ -18,6 +18,10 @@ package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
 
+/**
+ * Classes implementing this interface will be informed about the current root
+ * revision states on secondary instances by {@link ReplicaSetInfo}.
+ */
 public interface ReplicaSetInfoListener {
 
     void gotRootRevisions(RevisionVector rootRevision);
