@@ -50,7 +50,7 @@ public class LocalChanges implements ReplicaSetInfoListener {
      * changed. Paths in this collection hasn't been replicated to secondary
      * instances yet.
      */
-    private Map<String, RevisionVector> localChanges = new HashMap<String, RevisionVector>();
+    final Map<String, RevisionVector> localChanges = new HashMap<String, RevisionVector>();
 
     /**
      * If there's more than {@link #SIZE_LIMIT} paths in the
@@ -69,17 +69,27 @@ public class LocalChanges implements ReplicaSetInfoListener {
      */
     private volatile boolean replicaActive;
 
+    private volatile RevisionVector rootRevision;
+
     public void add(String id, Collection<Revision> revs) {
         RevisionVector revsV = new RevisionVector(revs);
+        RevisionVector localRootRev = rootRevision;
+        if (localRootRev != null && localRootRev.compareTo(revsV) >= 0) {
+            return;
+        }
 
         synchronized (this) {
+            if (latestChange != null && latestChange.compareTo(revsV) >= 0) {
+                return;
+            }
+
             if (replicaActive) {
                 localChanges.put(id, revsV);
-                if (localChanges.size() > SIZE_LIMIT) {
+                if (localChanges.size() >= SIZE_LIMIT) {
                     localChanges.clear();
                     latestChange = revsV;
                     LOG.debug(
-                            "The local changes count > {}. Clearing the list and switching to the 'latest change' mode: {}",
+                            "The local changes count == {}. Clearing the list and switching to the 'latest change' mode: {}",
                             SIZE_LIMIT, latestChange);
                 }
             } else {
@@ -134,6 +144,8 @@ public class LocalChanges implements ReplicaSetInfoListener {
         if (rootRevision == null) {
             return;
         }
+
+        this.rootRevision = rootRevision;
 
         if (!replicaActive) {
             replicaActive = true;
