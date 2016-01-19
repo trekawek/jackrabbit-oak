@@ -16,11 +16,12 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
+import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
 import org.apache.jackrabbit.oak.plugins.document.util.Utils;
 import org.slf4j.Logger;
@@ -68,21 +69,21 @@ public class LocalChanges implements ReplicaSetInfoListener {
      */
     private volatile boolean replicaActive;
 
-    public void add(NodeDocument doc) {
-        RevisionVector docRevisions = new RevisionVector(doc.getLastRev().values());
+    public void add(String id, Collection<Revision> revs) {
+        RevisionVector revsV = new RevisionVector(revs);
 
         synchronized (this) {
             if (replicaActive) {
-                localChanges.put(doc.getId(), docRevisions);
+                localChanges.put(id, revsV);
                 if (localChanges.size() > SIZE_LIMIT) {
                     localChanges.clear();
-                    latestChange = docRevisions;
+                    latestChange = revsV;
                     LOG.debug(
                             "The local changes count > {}. Clearing the list and switching to the 'latest change' mode: {}",
                             SIZE_LIMIT, latestChange);
                 }
             } else {
-                latestChange = docRevisions;
+                latestChange = revsV;
             }
         }
     }

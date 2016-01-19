@@ -788,7 +788,7 @@ public class MongoDocumentStore implements DocumentStore {
                 if (collection == Collection.NODES) {
                     NodeDocument newDoc = (NodeDocument) applyChanges(collection, oldDoc, updateOp);
                     nodesCache.put(newDoc);
-                    localChanges.add(newDoc);
+                    localChanges.add(newDoc.getId(), newDoc.getLastRev().values());
                 }
                 oldDoc.seal();
             } else if (upsert) {
@@ -796,7 +796,7 @@ public class MongoDocumentStore implements DocumentStore {
                     NodeDocument doc = (NodeDocument) collection.newDocument(this);
                     UpdateUtils.applyChanges(doc, updateOp);
                     nodesCache.putIfAbsent(doc);
-                    localChanges.add(doc);
+                    localChanges.add(doc.getId(), doc.getLastRev().values());
                 }
             } else {
                 // updateOp without conditions and not an upsert
@@ -909,7 +909,7 @@ public class MongoDocumentStore implements DocumentStore {
                 if (collection == Collection.NODES) {
                     for (T doc : docs) {
                         nodesCache.putIfAbsent((NodeDocument) doc);
-                        localChanges.add((NodeDocument) doc);
+                        localChanges.add(doc.getId(), ((NodeDocument) doc).getLastRev().values());
                     }
                 }
                 insertSuccess = true;
@@ -1363,13 +1363,16 @@ public class MongoDocumentStore implements DocumentStore {
     private synchronized <T extends Document> void updateLatestAccessedRevs(T doc) {
         if (doc instanceof NodeDocument) {
             RevisionVector accessedRevs = new RevisionVector(((NodeDocument) doc).getLastRev().values());
+            RevisionVector previousValue = mostRecentAccessedRevisions;
             if (mostRecentAccessedRevisions == null) {
                 mostRecentAccessedRevisions = accessedRevs;
             } else {
                 mostRecentAccessedRevisions = mostRecentAccessedRevisions.pmax(accessedRevs);
             }
+            if (LOG.isDebugEnabled() && !mostRecentAccessedRevisions.equals(previousValue)) {
+                LOG.debug("Most recent accessed revisions: {}", mostRecentAccessedRevisions);
+            }
         }
-        LOG.debug("Last accessed revs: {}", mostRecentAccessedRevisions);
     }
 
     private static class InvalidationResult implements CacheInvalidationStats {
