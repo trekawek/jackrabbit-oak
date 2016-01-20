@@ -171,24 +171,6 @@ public class ReplicaSetInfoTest {
         assertBetween(before, after, replica.secondariesSafeTimestamp);
     }
 
-    @Test
-    public void testTimeDiff() {
-        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
-        mongoClock = new Clock.Virtual();
-
-        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
-        clock.waitUntil(50);      // local behind, mongo ahead
-        mongoClock.waitUntil(100);
-        updateRevisions();
-        assertEquals(-50, replica.timeDiff);
-
-        addInstance(PRIMARY, "mp").addRevisions(10, 30, 30);
-        clock.waitUntil(200);      // mongo behind, local ahead
-        mongoClock.waitUntil(150);
-        updateRevisions();
-        assertEquals(50, replica.timeDiff);
-    }
-
     private RevisionBuilder addInstance(MemberState state, String name) {
         if (replicationSet == null) {
             replicationSet = new ReplicationSetStatusMock();

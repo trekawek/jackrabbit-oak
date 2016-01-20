@@ -77,8 +77,6 @@ public class ReplicaSetInfo implements Runnable {
 
     volatile long secondariesSafeTimestamp;
 
-    long timeDiff;
-
     private volatile boolean stop;
 
     public ReplicaSetInfo(Clock clock, DB db, String credentials, long pullFrequencyMillis, long maxReplicationLagMillis) {
@@ -152,20 +150,15 @@ public class ReplicaSetInfo implements Runnable {
     }
 
     void updateReplicaStatus() {
-        long start = clock.getTime();
         BasicDBObject result = null;
         try {
             result = getReplicaStatus();
         } catch (MongoException e) {
             LOG.error("Can't get replica status", e);
-            timeDiff = 0;
             rootRevisions = null;
             secondariesSafeTimestamp = 0;
             return;
         }
-        long end = clock.getTime();
-        long midPoint = (start + end) / 2;
-        timeDiff = midPoint - result.getDate("date").getTime();
 
         @SuppressWarnings("unchecked")
         Iterable<BasicBSONObject> members = (Iterable<BasicBSONObject>) result.get("members");
@@ -266,9 +259,8 @@ public class ReplicaSetInfo implements Runnable {
                 if (pr.equals(sr)) {
                     continue;
                 }
-                long prTimestampInLocalTime = pr.getTimestamp() + timeDiff;
-                if (oldestNotReplicated == null || oldestNotReplicated > prTimestampInLocalTime) {
-                    oldestNotReplicated = prTimestampInLocalTime;
+                if (oldestNotReplicated == null || oldestNotReplicated > pr.getTimestamp()) {
+                    oldestNotReplicated = pr.getTimestamp();
                 }
             }
         }
