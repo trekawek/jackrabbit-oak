@@ -39,4 +39,8 @@ public class InvalidateAllAction implements CacheAction {
         return keys;
     }
 
+    @Override
+    public String toString() {
+        return new StringBuilder("InvalidateAllAction[").append(keys).append("]").toString();
+    }
 }

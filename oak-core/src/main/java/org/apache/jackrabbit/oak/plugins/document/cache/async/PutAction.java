@@ -41,4 +41,9 @@ public class PutAction implements CacheAction {
     public Iterable<String> affectedKeys() {
         return asList(doc.getId());
     }
+
+    @Override
+    public String toString() {
+        return new StringBuilder("PutAction[").append(doc).append("]").toString();
+    }
 }

@@ -58,4 +58,9 @@ public class ReplaceAction implements CacheAction {
     public Iterable<String> affectedKeys() {
         return asList(oldDoc.getId());
     }
+
+    @Override
+    public String toString() {
+        return new StringBuilder("ReplaceAction[").append(oldDoc).append(" -> ").append(newDoc).append("]").toString();
+    }
 }

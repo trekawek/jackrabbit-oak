@@ -40,4 +40,9 @@ public class InvalidateAction implements CacheAction {
     public Iterable<String> affectedKeys() {
         return asList(key);
     }
+
+    @Override
+    public String toString() {
+        return new StringBuilder("InvalidateAction[").append(key).append("]").toString();
+    }
 }

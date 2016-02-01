@@ -53,4 +53,9 @@ public class InvalidateOutdatedAction implements CacheAction {
     public Iterable<String> affectedKeys() {
         return modCounts.keySet();
     }
+
+    @Override
+    public String toString() {
+        return new StringBuilder("InvalidateOutdatedAction[").append(affectedKeys()).append("]").toString();
+    }
 }
