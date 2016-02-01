@@ -49,9 +49,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.zip.Deflater;
@@ -1081,48 +1079,45 @@ public class RDBDocumentStore implements DocumentStore {
                     }
                 }
             }
+
+            Lock lock = locks.acquire(id);
             try {
-                Lock lock = locks.acquire(id);
-                try {
-                    // caller really wants the cache to be cleared
-                    if (maxCacheAge == 0) {
-                        invalidateNodesCache(id, true);
-                        doc = null;
-                    }
-                    final NodeDocument cachedDoc = doc;
-                    doc = nodesCache.get(id, new Callable<NodeDocument>() {
-                        @Override
-                        public NodeDocument call() throws Exception {
-                            NodeDocument doc = (NodeDocument) readDocumentUncached(collection, id, cachedDoc);
-                            if (doc != null) {
-                                doc.seal();
-                            }
-                            return wrap(doc);
-                        }
-                    });
-                    // inspect the doc whether it can be used
-                    long lastCheckTime = doc.getLastCheckTime();
-                    if (lastCheckTime != 0 && (maxCacheAge == 0 || maxCacheAge == Integer.MAX_VALUE)) {
-                        // we either just cleared the cache or the caller does
-                        // not care;
-                    } else if (lastCheckTime != 0 && (System.currentTimeMillis() - lastCheckTime < maxCacheAge)) {
-                        // is new enough
-                    } else {
-                        // need to at least revalidate
-                        NodeDocument ndoc = (NodeDocument) readDocumentUncached(collection, id, cachedDoc);
-                        if (ndoc != null) {
-                            ndoc.seal();
-                        }
-                        doc = wrap(ndoc);
-                        nodesCache.put(doc);
-                    }
-                } finally {
-                    lock.unlock();
+                // caller really wants the cache to be cleared
+                if (maxCacheAge == 0) {
+                    invalidateNodesCache(id, true);
+                    doc = null;
                 }
-                return castAsT(unwrap(doc));
-            } catch (ExecutionException e) {
-                throw new IllegalStateException("Failed to load document with " + id, e);
+                final NodeDocument cachedDoc = doc;
+                if (doc == null) {
+                    doc = (NodeDocument) readDocumentUncached(collection, id, cachedDoc);
+                    if (doc != null) {
+                        doc.seal();
+                    }
+                    doc = wrap(doc);
+                    nodesCache.put(doc);
+                }
+
+                // inspect the doc whether it can be used
+                long lastCheckTime = doc.getLastCheckTime();
+                if (lastCheckTime != 0 && (maxCacheAge == 0 || maxCacheAge == Integer.MAX_VALUE)) {
+                    // we either just cleared the cache or the caller does
+                    // not care;
+                } else if (lastCheckTime != 0 && (System.currentTimeMillis() - lastCheckTime < maxCacheAge)) {
+                    // is new enough
+                } else {
+                    // need to at least revalidate
+                    NodeDocument ndoc = (NodeDocument) readDocumentUncached(collection, id, cachedDoc);
+                    if (ndoc != null) {
+                        ndoc.seal();
+                    }
+                    doc = wrap(ndoc);
+                    nodesCache.put(doc);
+                }
+            } finally {
+                lock.unlock();
             }
+            return castAsT(unwrap(doc));
+
         }
     }
 

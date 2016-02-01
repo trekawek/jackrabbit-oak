@@ -51,6 +51,7 @@ import org.apache.jackrabbit.oak.plugins.blob.CachingBlobStore;
 import org.apache.jackrabbit.oak.plugins.blob.ReferencedBlob;
 import org.apache.jackrabbit.oak.plugins.document.DocumentNodeState.Children;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
+import org.apache.jackrabbit.oak.plugins.document.cache.SynchronousNodeDocumentCache;
 import org.apache.jackrabbit.oak.plugins.document.locks.NodeDocumentLocks;
 import org.apache.jackrabbit.oak.plugins.document.memory.MemoryDocumentStore;
 import org.apache.jackrabbit.oak.plugins.document.mongo.MongoBlobReferenceIterator;
@@ -994,7 +995,7 @@ public class DocumentMK {
             return buildCache(CacheType.DOCUMENT, getDocumentCacheSize(), null, docStore);
         }
 
-        public Cache<StringValue, NodeDocument> buildPrevDocumentsCache(DocumentStore docStore) {
+        public Cache<CacheValue, NodeDocument> buildPrevDocumentsCache(DocumentStore docStore) {
             return buildCache(CacheType.PREV_DOCUMENT, getPrevDocumentCacheSize(), null, docStore);
         }
 
@@ -1002,10 +1003,10 @@ public class DocumentMK {
             Cache<CacheValue, NodeDocument> nodeDocumentsCache = buildDocumentCache(docStore);
             CacheStats nodeDocumentsCacheStats = new CacheStats(nodeDocumentsCache, "Document-Documents", getWeigher(), getDocumentCacheSize());
 
-            Cache<StringValue, NodeDocument> prevDocumentsCache = buildPrevDocumentsCache(docStore);
+            Cache<CacheValue, NodeDocument> prevDocumentsCache = buildPrevDocumentsCache(docStore);
             CacheStats prevDocumentsCacheStats = new CacheStats(prevDocumentsCache, "Document-PrevDocuments", getWeigher(), getPrevDocumentCacheSize());
 
-            return new NodeDocumentCache(nodeDocumentsCache, nodeDocumentsCacheStats, prevDocumentsCache, prevDocumentsCacheStats, locks);
+            return new SynchronousNodeDocumentCache(nodeDocumentsCache, nodeDocumentsCacheStats, prevDocumentsCache, prevDocumentsCacheStats, locks);
         }
 
         private <K extends CacheValue, V extends CacheValue> Cache<K, V> buildCache(

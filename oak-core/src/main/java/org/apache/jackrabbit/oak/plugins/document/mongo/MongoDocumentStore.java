@@ -30,8 +30,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.regex.Matcher;
@@ -404,13 +402,8 @@ public class MongoDocumentStore implements DocumentStore {
                 final NodeDocument d = (NodeDocument) findUncachedWithRetry(
                         collection, key,
                         getReadPreference(maxCacheAge), 2);
-                invalidateCache(collection, key);
-                doc = nodesCache.get(key, new Callable<NodeDocument>() {
-                    @Override
-                    public NodeDocument call() throws Exception {
-                        return d == null ? NodeDocument.NULL : d;
-                    }
-                });
+                doc = d == null ? NodeDocument.NULL : d;
+                nodesCache.put(doc);
             } finally {
                 lock.unlock();
             }
@@ -420,8 +413,6 @@ public class MongoDocumentStore implements DocumentStore {
                 return (T) doc;
             }
         } catch (UncheckedExecutionException e) {
-            t = e.getCause();
-        } catch (ExecutionException e) {
             t = e.getCause();
         } catch (RuntimeException e) {
             t = e;
