@@ -88,7 +88,8 @@ public class CacheActionQueue implements Runnable {
 
     private void incrementCounters(Iterable<String> keys) {
         for (String key : keys) {
-            counters.getOrDefault(key, new AtomicInteger()).incrementAndGet();
+            counters.putIfAbsent(key, new AtomicInteger());
+            counters.get(key).incrementAndGet();
         }
     }
 
