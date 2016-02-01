@@ -50,8 +50,8 @@ import org.apache.jackrabbit.oak.plugins.blob.BlobStoreStats;
 import org.apache.jackrabbit.oak.plugins.blob.CachingBlobStore;
 import org.apache.jackrabbit.oak.plugins.blob.ReferencedBlob;
 import org.apache.jackrabbit.oak.plugins.document.DocumentNodeState.Children;
+import org.apache.jackrabbit.oak.plugins.document.cache.AsynchronousNodeDocumentCache;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
-import org.apache.jackrabbit.oak.plugins.document.cache.SynchronousNodeDocumentCache;
 import org.apache.jackrabbit.oak.plugins.document.locks.NodeDocumentLocks;
 import org.apache.jackrabbit.oak.plugins.document.memory.MemoryDocumentStore;
 import org.apache.jackrabbit.oak.plugins.document.mongo.MongoBlobReferenceIterator;
@@ -1006,7 +1006,7 @@ public class DocumentMK {
             Cache<CacheValue, NodeDocument> prevDocumentsCache = buildPrevDocumentsCache(docStore);
             CacheStats prevDocumentsCacheStats = new CacheStats(prevDocumentsCache, "Document-PrevDocuments", getWeigher(), getPrevDocumentCacheSize());
 
-            return new SynchronousNodeDocumentCache(nodeDocumentsCache, nodeDocumentsCacheStats, prevDocumentsCache, prevDocumentsCacheStats, locks);
+            return new AsynchronousNodeDocumentCache(nodeDocumentsCache, nodeDocumentsCacheStats, prevDocumentsCache, prevDocumentsCacheStats, locks);
         }
 
         private <K extends CacheValue, V extends CacheValue> Cache<K, V> buildCache(
