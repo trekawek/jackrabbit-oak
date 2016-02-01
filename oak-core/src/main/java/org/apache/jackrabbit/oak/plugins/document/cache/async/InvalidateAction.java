@@ -20,6 +20,7 @@ import static java.util.Arrays.asList;
 
 import org.apache.jackrabbit.oak.cache.CacheValue;
 import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
+import org.apache.jackrabbit.oak.plugins.document.util.StringValue;
 
 import com.google.common.cache.Cache;
 
@@ -33,7 +34,7 @@ public class InvalidateAction implements CacheAction {
 
     @Override
     public void execute(Cache<CacheValue, NodeDocument> target) {
-        target.invalidate(key);
+        target.invalidate(new StringValue(key));
     }
 
     @Override

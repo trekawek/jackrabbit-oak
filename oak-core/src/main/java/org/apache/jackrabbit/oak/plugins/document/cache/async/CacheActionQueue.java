@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.jackrabbit.oak.cache.CacheValue;
 import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
+import org.apache.jackrabbit.oak.plugins.document.util.StringValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +64,7 @@ public class CacheActionQueue implements Runnable {
         if (counters.containsKey(key)) {
             return null;
         } else {
-            return cache.getIfPresent(key);
+            return cache.getIfPresent(new StringValue(key));
         }
     }
 

@@ -18,8 +18,11 @@ package org.apache.jackrabbit.oak.plugins.document.cache.async;
 
 import org.apache.jackrabbit.oak.cache.CacheValue;
 import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
+import org.apache.jackrabbit.oak.plugins.document.util.StringValue;
 
+import com.google.common.base.Function;
 import com.google.common.cache.Cache;
+import com.google.common.collect.Iterables;
 
 public class InvalidateAllAction implements CacheAction {
 
@@ -31,7 +34,12 @@ public class InvalidateAllAction implements CacheAction {
 
     @Override
     public void execute(Cache<CacheValue, NodeDocument> target) {
-        target.invalidateAll(keys);
+        target.invalidateAll(Iterables.transform(keys, new Function<String, StringValue>() {
+            @Override
+            public StringValue apply(String input) {
+                return new StringValue(input);
+            }
+        }));
     }
 
     @Override
