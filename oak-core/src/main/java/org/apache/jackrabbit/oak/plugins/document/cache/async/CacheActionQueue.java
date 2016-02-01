@@ -16,8 +16,8 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.cache.async;
 
-import static org.apache.jackrabbit.oak.plugins.document.cache.async.InvalidateAllAction.INVALIDATE_ALL_KEY;
-
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,13 +53,14 @@ public class CacheActionQueue implements Runnable {
         incrementCounters(action.affectedKeys());
         if (!queue.offer(action)) {
             queue.clear();
+            Set<String> waitingKeys = new HashSet<String>(counters.keySet());
             counters.clear();
-            addAction(new InvalidateAllAction());
+            addAction(new InvalidateAllAction(waitingKeys));
         }
     }
 
     public synchronized NodeDocument get(String key) {
-        if (counters.containsKey(key) || counters.containsKey(INVALIDATE_ALL_KEY)) {
+        if (counters.containsKey(key)) {
             return null;
         } else {
             return cache.getIfPresent(key);
@@ -73,7 +74,7 @@ public class CacheActionQueue implements Runnable {
                 CacheAction action = queue.poll(10, TimeUnit.MILLISECONDS);
                 if (action != null) {
                     action.execute(cache);
-                    decrementCounter(action.affectedKeys());
+                    decrementCounters(action.affectedKeys());
                 }
             } catch (InterruptedException e) {
                 LOG.debug("Interrupted the queue.poll()", e);
@@ -91,7 +92,7 @@ public class CacheActionQueue implements Runnable {
         }
     }
 
-    private void decrementCounter(Iterable<String> keys) {
+    private void decrementCounters(Iterable<String> keys) {
         for (String key : keys) {
             if (counters.get(key).decrementAndGet() == 0) {
                 counters.remove(key);

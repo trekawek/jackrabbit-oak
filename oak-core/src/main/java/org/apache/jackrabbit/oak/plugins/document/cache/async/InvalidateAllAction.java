@@ -16,8 +16,6 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.cache.async;
 
-import java.util.Arrays;
-
 import org.apache.jackrabbit.oak.cache.CacheValue;
 import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
 
@@ -25,16 +23,20 @@ import com.google.common.cache.Cache;
 
 public class InvalidateAllAction implements CacheAction {
 
-    static final String INVALIDATE_ALL_KEY = InvalidateAllAction.class.getName() + "_key";
+    private final Iterable<String> keys;
+
+    public InvalidateAllAction(Iterable<String> keys) {
+        this.keys = keys;
+    }
 
     @Override
     public void execute(Cache<CacheValue, NodeDocument> target) {
-        target.invalidateAll();
+        target.invalidateAll(keys);
     }
 
     @Override
     public Iterable<String> affectedKeys() {
-        return Arrays.asList(INVALIDATE_ALL_KEY);
+        return keys;
     }
 
 }
