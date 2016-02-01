@@ -24,6 +24,7 @@ import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -35,6 +36,15 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 
 public class PreviousDocCacheTest extends AbstractMongoConnectionTest {
+
+    @Override
+    @Before
+    public void setUpConnection() throws Exception {
+        mongoConnection = connectionFactory.getConnection();
+        MongoUtils.dropCollections(mongoConnection.getDB());
+        Revision.setClock(getTestClock());
+        mk = newBuilder(mongoConnection.getDB()).setAsyncDelay(0).open();
+    }
 
     @Test
     public void cacheTestPrevDocs() throws Exception {
@@ -69,18 +79,21 @@ public class PreviousDocCacheTest extends AbstractMongoConnectionTest {
         validateFullyLoadedCache(docStore, SPLIT_THRESHOLD, nodesCache, prevDocsCache);
 
         docStore.invalidateCache();
+        Thread.sleep(50);
         assertEquals("No entries expected in nodes cache", 0, nodesCache.getElementCount());
         assertEquals("No entries expected in prev docs cache", 0, prevDocsCache.getElementCount());
 
         NodeDocument doc = docStore.find(NODES, "0:/");
+        Thread.sleep(50);
         assertEquals("Only main doc entry expected in nodes cache", 1, nodesCache.getElementCount());
         assertEquals("No entries expected in prev docs cache", 0, prevDocsCache.getElementCount());
 
         Iterators.size(doc.getAllPreviousDocs());
+        Thread.sleep(50);
         validateFullyLoadedCache(docStore, SPLIT_THRESHOLD, nodesCache, prevDocsCache);
     }
 
-    private void validateFullyLoadedCache(DocumentStore docStore, int splitThreshold, CacheStats nodesCache, CacheStats prevDocsCache) {
+    private void validateFullyLoadedCache(DocumentStore docStore, int splitThreshold, CacheStats nodesCache, CacheStats prevDocsCache) throws InterruptedException {
         assertEquals("Nodes cache must have 2 elements - '/' and intermediate split doc",
                 2, nodesCache.getElementCount());
         assertEquals("Unexpected number of leaf prev docs", splitThreshold + 1, prevDocsCache.getElementCount());
