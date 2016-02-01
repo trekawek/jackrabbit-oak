@@ -44,7 +44,7 @@ public class TestBase {
 
     final static String LOCALHOST = "127.0.0.1";
 
-    static final int timeout = Integer.getInteger("standby.test.timeout", 150);
+    static final int timeout = Integer.getInteger("standby.test.timeout", 500);
 
     private static final Set<Fixture> FIXTURES = FixturesHelper.getFixtures();
 
@@ -71,11 +71,11 @@ public class TestBase {
 
     public void setUpServerAndClient() throws IOException {
         // server
-        directoryS = createTmpTargetDir("FailoverServerTest");
+        directoryS = createTmpTargetDir(getClass().getSimpleName()+"-Server");
         storeS = setupPrimary(directoryS);
 
         // client
-        directoryC = createTmpTargetDir("FailoverClientTest");
+        directoryC = createTmpTargetDir(getClass().getSimpleName()+"-Client");
         storeC = setupSecondary(directoryC);
     }
 
@@ -106,7 +106,7 @@ public class TestBase {
     public void setUpServerAndTwoClients() throws Exception {
         setUpServerAndClient();
 
-        directoryC2 = createTmpTargetDir("FailoverClient2Test");
+        directoryC2 = createTmpTargetDir(getClass().getSimpleName()+"-Client2");
         storeC2 = newFileStore(directoryC2);
     }
 
