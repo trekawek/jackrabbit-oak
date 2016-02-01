@@ -56,6 +56,8 @@ public class PutIfAbsentAction implements CacheAction {
             }
             if (cached == NodeDocument.NULL) {
                 target.invalidate(key);
+            } else {
+                break;
             }
         }
     }

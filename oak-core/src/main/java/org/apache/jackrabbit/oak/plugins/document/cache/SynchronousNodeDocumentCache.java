@@ -240,6 +240,8 @@ public class SynchronousNodeDocumentCache implements NodeDocumentCache {
                 });
                 if (cached == NodeDocument.NULL) {
                     invalidate(id);
+                } else {
+                    break;
                 }
             }
         } catch (ExecutionException e) {
