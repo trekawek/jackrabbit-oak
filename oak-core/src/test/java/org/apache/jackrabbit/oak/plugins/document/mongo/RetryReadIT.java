@@ -51,13 +51,14 @@ public class RetryReadIT extends AbstractMongoConnectionTest {
     }
 
     @Test
-    public void retry() {
+    public void retry() throws InterruptedException {
         // must survive two consecutive failures. -> 2 retries
         store.failRead = 2;
         NodeDocument doc = store.find(NODES, Utils.getIdFromPath("/foo"));
         assertNull(doc);
         // previous result is cached and will not fail
         store.failRead = 3;
+        Thread.sleep(100); // wait until cache is populated
         doc = store.find(NODES, Utils.getIdFromPath("/foo"));
         assertNull(doc);
         // must fail with three consecutive failures on unknown path
