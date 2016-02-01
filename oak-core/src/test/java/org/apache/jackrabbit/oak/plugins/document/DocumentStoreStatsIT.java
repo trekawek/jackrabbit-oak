@@ -78,6 +78,7 @@ public class DocumentStoreStatsIT extends AbstractDocumentStoreTest {
         ds.create(Collection.NODES, singletonList(up));
         removeMe.add(id);
 
+        Thread.sleep(100); // wait until cache is populated
         ds.find(Collection.NODES, id);
         verify(stats).doneFindCached(eq(Collection.NODES), eq(id));
 
