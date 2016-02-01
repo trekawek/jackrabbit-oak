@@ -93,9 +93,17 @@ public abstract class AbstractJournalTest {
         return sb.toString();
     }
 
-    protected void assertDocCache(DocumentNodeStore ns, boolean expected, String path) {
+    protected void assertDocCache(DocumentNodeStore ns, boolean expected, String path) throws InterruptedException {
         String id = Utils.getIdFromPath(path);
-        boolean exists = ns.getDocumentStore().getIfCached(Collection.NODES, id)!=null;
+        boolean exists = false;
+        for (int i = 0; i < 10; i++) {
+            exists = ns.getDocumentStore().getIfCached(Collection.NODES, id)!=null;
+            if (!exists && expected) {
+                Thread.sleep(10);
+            } else {
+                break;
+            }
+        }
         if (exists!=expected) {
             if (expected) {
                 fail("assertDocCache: did not find in cache even though expected: "+path);
