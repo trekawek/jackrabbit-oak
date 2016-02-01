@@ -53,6 +53,7 @@ public class CacheActionQueue implements Runnable {
     public synchronized void addAction(CacheAction action) {
         incrementCounters(action.affectedKeys());
         if (!queue.offer(action)) {
+            LOG.warn("Cache queue is too large and will be cleared.");
             queue.clear();
             Set<String> waitingKeys = new HashSet<String>(counters.keySet());
             counters.clear();
@@ -75,8 +76,8 @@ public class CacheActionQueue implements Runnable {
                 CacheAction action = queue.poll(10, TimeUnit.MILLISECONDS);
                 if (action != null) {
                     action.execute(cache);
-                    decrementCounters(action.affectedKeys());
-                }
+                    decrementCounters(action.affectedKeys()); // TODO we may have a race condition
+                }                                             // with the queue.clear() operation here
             } catch (InterruptedException e) {
                 LOG.debug("Interrupted the queue.poll()", e);
             }
@@ -96,7 +97,8 @@ public class CacheActionQueue implements Runnable {
 
     private void decrementCounters(Iterable<String> keys) {
         for (String key : keys) {
-            if (counters.get(key).decrementAndGet() == 0) {
+            AtomicInteger counter = counters.get(key);
+            if (counter != null && counter.decrementAndGet() == 0) {
                 counters.remove(key);
             }
         }
