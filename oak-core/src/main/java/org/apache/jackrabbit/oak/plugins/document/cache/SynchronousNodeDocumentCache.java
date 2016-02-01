@@ -170,6 +170,20 @@ public class SynchronousNodeDocumentCache implements NodeDocumentCache {
         }
     }
 
+    @Override
+    public void putNull(@Nonnull String key) {
+        Lock lock = locks.acquire(key);
+        try {
+            if (isLeafPreviousDocId(key)) {
+                prevDocumentsCache.put(new StringValue(key), NodeDocument.NULL);
+            } else {
+                nodeDocumentsCache.put(new StringValue(key), NodeDocument.NULL);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * Puts document into cache iff no entry with the given key is cached
      * already or the cached document is older (has smaller {@link Document#MOD_COUNT}).
@@ -177,7 +191,6 @@ public class SynchronousNodeDocumentCache implements NodeDocumentCache {
      * @param doc the document to add to the cache
      */
     @Override
-    @Nonnull
     public void putIfNewer(@Nonnull final NodeDocument doc) {
         if (doc == NodeDocument.NULL) {
             throw new IllegalArgumentException("doc must not be NULL document");
@@ -212,11 +225,8 @@ public class SynchronousNodeDocumentCache implements NodeDocumentCache {
      * already. This operation is atomic.
      *
      * @param doc the document to add to the cache.
-     * @return either the given <code>doc</code> or the document already present
-     *         in the cache.
      */
     @Override
-    @Nonnull
     public void putIfAbsent(@Nonnull final NodeDocument doc) {
         if (doc == NodeDocument.NULL) {
             throw new IllegalArgumentException("doc must not be NULL document");

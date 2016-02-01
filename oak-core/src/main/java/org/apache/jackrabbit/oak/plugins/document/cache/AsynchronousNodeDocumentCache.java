@@ -38,6 +38,7 @@ import org.apache.jackrabbit.oak.plugins.document.cache.async.InvalidateOutdated
 import org.apache.jackrabbit.oak.plugins.document.cache.async.PutAction;
 import org.apache.jackrabbit.oak.plugins.document.cache.async.PutIfAbsentAction;
 import org.apache.jackrabbit.oak.plugins.document.cache.async.PutIfNewerAction;
+import org.apache.jackrabbit.oak.plugins.document.cache.async.PutNullAction;
 import org.apache.jackrabbit.oak.plugins.document.cache.async.ReplaceAction;
 import org.apache.jackrabbit.oak.plugins.document.locks.NodeDocumentLocks;
 import org.slf4j.Logger;
@@ -156,13 +157,21 @@ public class AsynchronousNodeDocumentCache implements NodeDocumentCache {
         }
     }
 
+    @Override
+    public void putNull(@Nonnull String key) {
+        Lock lock = locks.acquire(key);
+        try {
+            getQueue(key).addAction(new PutNullAction(key));
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * Puts document into cache iff no entry with the given key is cached
      * already or the cached document is older (has smaller {@link Document#MOD_COUNT}).
      *
      * @param doc the document to add to the cache
-     * @return either the given <code>doc</code> or the document already present
-     *         in the cache if it's newer
      */
     @Override
     public void putIfNewer(@Nonnull final NodeDocument doc) {
@@ -185,8 +194,6 @@ public class AsynchronousNodeDocumentCache implements NodeDocumentCache {
      * already. This operation is atomic.
      *
      * @param doc the document to add to the cache.
-     * @return either the given <code>doc</code> or the document already present
-     *         in the cache.
      */
     @Override
     public void putIfAbsent(@Nonnull final NodeDocument doc) {

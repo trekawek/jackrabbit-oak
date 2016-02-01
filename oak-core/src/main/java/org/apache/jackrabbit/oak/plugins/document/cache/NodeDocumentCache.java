@@ -67,14 +67,18 @@ public interface NodeDocumentCache extends Closeable {
     void put(@Nonnull NodeDocument doc);
 
     /**
+     * Puts an empty document into cache.
+     *
+     * @param key key of the null document
+     */
+    void putNull(@Nonnull String key);
+
+    /**
      * Puts document into cache iff no entry with the given key is cached
      * already or the cached document is older (has smaller {@link Document#MOD_COUNT}).
      *
      * @param doc the document to add to the cache
-     * @return either the given <code>doc</code> or the document already present
-     *         in the cache if it's newer
      */
-    @Nonnull
     void putIfNewer(@Nonnull final NodeDocument doc);
 
     /**
@@ -82,10 +86,7 @@ public interface NodeDocumentCache extends Closeable {
      * already. This operation is atomic.
      *
      * @param doc the document to add to the cache.
-     * @return either the given <code>doc</code> or the document already present
-     *         in the cache.
      */
-    @Nonnull
     void putIfAbsent(@Nonnull final NodeDocument doc);
 
     /**

@@ -399,11 +399,14 @@ public class MongoDocumentStore implements DocumentStore {
                         }
                     }
                 }
-                final NodeDocument d = (NodeDocument) findUncachedWithRetry(
+                doc = (NodeDocument) findUncachedWithRetry(
                         collection, key,
                         getReadPreference(maxCacheAge), 2);
-                doc = d == null ? NodeDocument.NULL : d;
-                nodesCache.put(doc);
+                if (doc == null) {
+                    nodesCache.putNull(key);
+                } else {
+                    nodesCache.put(doc);
+                }
             } finally {
                 lock.unlock();
             }

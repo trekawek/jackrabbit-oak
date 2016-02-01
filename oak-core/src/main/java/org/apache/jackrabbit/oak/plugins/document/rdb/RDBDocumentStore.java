@@ -1089,12 +1089,13 @@ public class RDBDocumentStore implements DocumentStore {
                 }
                 final NodeDocument cachedDoc = doc;
                 if (doc == null) {
-                    doc = (NodeDocument) readDocumentUncached(collection, id, cachedDoc);
-                    if (doc != null) {
+                    doc = wrap((NodeDocument) readDocumentUncached(collection, id, cachedDoc));
+                    if (doc == NodeDocument.NULL) {
+                        nodesCache.putNull(id);
+                    } else {
                         doc.seal();
+                        nodesCache.put(doc);
                     }
-                    doc = wrap(doc);
-                    nodesCache.put(doc);
                 }
 
                 // inspect the doc whether it can be used
