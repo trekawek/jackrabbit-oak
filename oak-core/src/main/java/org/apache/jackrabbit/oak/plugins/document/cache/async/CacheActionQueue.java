@@ -16,11 +16,12 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.cache.async;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -42,7 +43,7 @@ public class CacheActionQueue implements Runnable {
 
     private final Cache<CacheValue, NodeDocument> cache;
 
-    private final ConcurrentHashMap<String, AtomicInteger> counters = new ConcurrentHashMap<String, AtomicInteger>();
+    private final Map<String, AtomicInteger> counters = new HashMap<String, AtomicInteger>();
 
     private volatile boolean isRunning = true;
 
@@ -55,14 +56,22 @@ public class CacheActionQueue implements Runnable {
         if (!queue.offer(action)) {
             LOG.warn("Cache queue is too large and will be cleared.");
             queue.clear();
-            Set<String> waitingKeys = new HashSet<String>(counters.keySet());
-            counters.clear();
+
+            Set<String> waitingKeys;
+            synchronized (counters) {
+                waitingKeys = new HashSet<String>(counters.keySet());
+                counters.clear();
+            }
             addAction(new InvalidateAllAction(waitingKeys));
         }
     }
 
-    public synchronized NodeDocument get(String key) {
-        if (counters.containsKey(key)) {
+    public NodeDocument get(String key) {
+        boolean keyBeingProcessed;
+        synchronized (counters) {
+            keyBeingProcessed = counters.containsKey(key);
+        }
+        if (keyBeingProcessed) {
             return null;
         } else {
             return cache.getIfPresent(new StringValue(key));
@@ -76,8 +85,10 @@ public class CacheActionQueue implements Runnable {
                 CacheAction action = queue.poll(10, TimeUnit.MILLISECONDS);
                 if (action != null) {
                     action.execute(cache);
-                    decrementCounters(action.affectedKeys()); // TODO we may have a race condition
-                }                                             // with the queue.clear() operation here
+                    decrementCounters(action.affectedKeys()); // TODO we may
+                                                              // have a race
+                                                              // condition
+                } // with the queue.clear() operation here
             } catch (InterruptedException e) {
                 LOG.debug("Interrupted the queue.poll()", e);
             }
@@ -88,18 +99,22 @@ public class CacheActionQueue implements Runnable {
         isRunning = false;
     }
 
-    private void incrementCounters(Iterable<String> keys) {
-        for (String key : keys) {
-            counters.putIfAbsent(key, new AtomicInteger());
-            counters.get(key).incrementAndGet();
+    private synchronized void incrementCounters(Iterable<String> keys) {
+        synchronized (counters) {
+            for (String key : keys) {
+                counters.putIfAbsent(key, new AtomicInteger(0));
+                counters.get(key).incrementAndGet();
+            }
         }
     }
 
-    private void decrementCounters(Iterable<String> keys) {
-        for (String key : keys) {
-            AtomicInteger counter = counters.get(key);
-            if (counter != null && counter.decrementAndGet() == 0) {
-                counters.remove(key);
+    private synchronized void decrementCounters(Iterable<String> keys) {
+        synchronized (counters) {
+            for (String key : keys) {
+                AtomicInteger counter = counters.get(key);
+                if (counter != null && counter.decrementAndGet() == 0) {
+                    counters.remove(key);
+                }
             }
         }
     }
