@@ -59,6 +59,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import javax.sql.DataSource;
 
+import com.google.common.base.Function;
 import com.google.common.base.Stopwatch;
 import org.apache.jackrabbit.oak.cache.CacheStats;
 import org.apache.jackrabbit.oak.plugins.document.Collection;
@@ -295,7 +296,8 @@ public class RDBDocumentStore implements DocumentStore {
 
     @Override
     public <T extends Document> List<T> createOrUpdate(Collection<T> collection, List<UpdateOp> updateOps) {
-        if (!BATCHUPDATES) {
+        if (!BATCHUPDATES
+                || dbInfo == RDBDocumentStoreDB.ORACLE /* see OAK-3938 */) {
             List<T> results = new ArrayList<T>(updateOps.size());
             for (UpdateOp update : updateOps) {
                 results.add(createOrUpdate(collection, update));
@@ -303,6 +305,7 @@ public class RDBDocumentStore implements DocumentStore {
             return results;
         }
 
+        final Stopwatch watch = startWatch();
         Map<UpdateOp, T> results = new LinkedHashMap<UpdateOp, T>();
         Map<String, UpdateOp> operationsToCover = new LinkedHashMap<String, UpdateOp>();
         Set<UpdateOp> duplicates = new HashSet<UpdateOp>();
@@ -358,7 +361,13 @@ public class RDBDocumentStore implements DocumentStore {
                 results.put(updateOp, createOrUpdate(collection, updateOp));
             }
         }
-
+        stats.doneCreateOrUpdate(watch.elapsed(TimeUnit.NANOSECONDS),
+                collection, Lists.transform(updateOps, new Function<UpdateOp, String>() {
+                    @Override
+                    public String apply(UpdateOp input) {
+                        return input.getId();
+                    }
+                }));
         return new ArrayList<T>(results.values());
     }
 
@@ -1496,7 +1505,7 @@ public class RDBDocumentStore implements DocumentStore {
     }
 
     @Nonnull
-    private <T extends Document> RDBTableMetaData getTable(Collection<T> collection) {
+    protected <T extends Document> RDBTableMetaData getTable(Collection<T> collection) {
         RDBTableMetaData tmd = this.tableMeta.get(collection);
         if (tmd != null) {
             return tmd;

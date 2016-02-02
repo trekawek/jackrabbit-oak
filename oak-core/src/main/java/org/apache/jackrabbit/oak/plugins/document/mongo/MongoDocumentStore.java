@@ -857,7 +857,7 @@ public class MongoDocumentStore implements DocumentStore {
         List<UpdateOp> duplicates = new ArrayList<UpdateOp>();
         Map<UpdateOp, T> results = new LinkedHashMap<UpdateOp, T>();
 
-        final long start = PERFLOG.start();
+        final Stopwatch watch = startWatch();
         try {
             for (UpdateOp updateOp : updateOps) {
                 UpdateUtils.assertUnconditional(updateOp);
@@ -899,7 +899,13 @@ public class MongoDocumentStore implements DocumentStore {
                 }
             }
         } finally {
-            PERFLOG.end(start, 1, "createOrUpdate {}", updateOps);
+            stats.doneCreateOrUpdate(watch.elapsed(TimeUnit.NANOSECONDS),
+                    collection, Lists.transform(updateOps, new Function<UpdateOp, String>() {
+                @Override
+                public String apply(UpdateOp input) {
+                    return input.getId();
+                }
+            }));
         }
         List<T> resultList = new ArrayList<T>(results.values());
         log("createOrUpdate returns", resultList);
