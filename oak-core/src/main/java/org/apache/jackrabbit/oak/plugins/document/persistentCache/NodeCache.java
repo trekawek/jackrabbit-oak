@@ -176,7 +176,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        asyncWrite((K) key, (V) null);
+        syncWrite((K) key, (V) null, true);
     }
 
     @Override
