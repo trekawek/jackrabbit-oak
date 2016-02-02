@@ -44,15 +44,19 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     private final CacheType type;
     private final DataType keyType;
     private final DataType valueType;
-    
+    private final CacheWriteQueue writerQueue;
+
     NodeCache(
             PersistentCache cache,
             Cache<K, V> memCache,
             DocumentNodeStore docNodeStore, 
-            DocumentStore docStore, CacheType type) {
+            DocumentStore docStore,
+            CacheType type,
+            CacheWriteQueue queue) {
         this.cache = cache;
         this.memCache = memCache;
         this.type = type;
+        this.writerQueue = queue;
         PersistentCache.LOG.info("wrapping map " + this.type);
         map = new MultiGenerationMap<K, V>();
         keyType = new KeyDataType(type);
@@ -87,15 +91,20 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
         return v;
     }
     
-    private void write(final K key, final V value) {
-        write(key, value, true);
+    private void asyncWrite(final K key, final V value) {
+        asyncWrite(key, value, true);
     }
 
-    private void writeWithoutBroadcast(final K key, final V value) {
-        write(key, value, false);
+    private void asyncWriteWithoutBroadcast(final K key, final V value) {
+        asyncWrite(key, value, false);
     }
 
-    private void write(final K key, final V value, boolean broadcast) {
+    private void asyncWrite(final K key, final V value, boolean broadcast) {
+        CacheWriteAction<K, V> action = new CacheWriteAction<K, V>(this, key, value, broadcast);
+        writerQueue.addAction(action);
+    }
+
+    void syncWrite(final K key, final V value, boolean broadcast) {
         cache.switchGenerationIfNeeded();
         if (broadcast) {
             cache.broadcast(type, new Function<WriteBuffer, Void>() {
@@ -147,7 +156,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
             return value;
         }
         value = memCache.get(key, valueLoader);
-        write(key, value);
+        asyncWrite(key, value);
         return value;
     }
 
@@ -160,14 +169,14 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     @Override
     public void put(K key, V value) {
         memCache.put(key, value);
-        write(key, value);
+        asyncWrite(key, value);
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        write((K) key, (V) null);
+        asyncWrite((K) key, (V) null);
     }
 
     @Override
@@ -218,7 +227,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
             value = (V) valueType.read(buff);
             memCache.put(key, value);
         }
-        writeWithoutBroadcast(key, value);
+        asyncWriteWithoutBroadcast(key, value);
     }
 
 }

@@ -82,6 +82,8 @@ public class PersistentCache implements Broadcaster.Listener {
     private ThreadLocal<WriteBuffer> writeBuffer = new ThreadLocal<WriteBuffer>();
     private final byte[] broadcastId;
     private DynamicBroadcastConfig broadcastConfig;
+    private CacheWriteQueue writeQueue;
+    private Thread writeQueueThread;
     
     {
         ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
@@ -192,6 +194,11 @@ public class PersistentCache implements Broadcaster.Listener {
         }
         writeStore = createMapFactory(writeGeneration, false);
         initBroadcast(broadcast);
+
+        writeQueue = new CacheWriteQueue();
+        writeQueueThread = new Thread(writeQueue, "Oak CacheWriteQueue");
+        writeQueueThread.setDaemon(true);
+        writeQueueThread.start();
     }
     
     private void initBroadcast(String broadcast) {
@@ -338,6 +345,13 @@ public class PersistentCache implements Broadcaster.Listener {
     }
     
     public void close() {
+        writeQueue.stop();
+        try {
+            writeQueueThread.join();
+        } catch (InterruptedException e) {
+            LOG.error("Can't join the {}", writeQueueThread.getName(), e);
+        }
+
         if (writeStore != null) {
             writeStore.closeStore();
         }
@@ -395,7 +409,7 @@ public class PersistentCache implements Broadcaster.Listener {
         }
         if (wrap) {
             NodeCache<K, V> c = new NodeCache<K, V>(this, 
-                    base, docNodeStore, docStore, type);
+                    base, docNodeStore, docStore, type, writeQueue);
             initGenerationCache(c);
             return c;
         }
