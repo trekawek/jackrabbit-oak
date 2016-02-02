@@ -27,14 +27,11 @@ class CacheWriteQueue implements Runnable {
 
     private static final Logger LOG = LoggerFactory.getLogger(CacheWriteQueue.class);
 
-    private static final int MAX_SIZE = 1024;
+    static final int MAX_SIZE = 1024;
 
-    private final BlockingQueue<CacheWriteAction<?,?>> queue = new ArrayBlockingQueue<CacheWriteAction<?,?>>(MAX_SIZE * 2);
+    final BlockingQueue<CacheWriteAction<?,?>> queue = new ArrayBlockingQueue<CacheWriteAction<?,?>>(MAX_SIZE * 2);
 
     private volatile boolean isRunning = true;
-
-    CacheWriteQueue() {
-    }
 
     public void addAction(CacheWriteAction<?,?> action) {
         while (queue.size() >= MAX_SIZE) {
