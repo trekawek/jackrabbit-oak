@@ -29,7 +29,7 @@ class CacheWriteQueue implements Runnable {
 
     private static final int MAX_SIZE = 1024;
 
-    private final BlockingQueue<CacheWriteAction<?,?>> queue = new ArrayBlockingQueue<CacheWriteAction<?,?>>(MAX_SIZE);
+    private final BlockingQueue<CacheWriteAction<?,?>> queue = new ArrayBlockingQueue<CacheWriteAction<?,?>>(MAX_SIZE * 2);
 
     private volatile boolean isRunning = true;
 
@@ -37,10 +37,10 @@ class CacheWriteQueue implements Runnable {
     }
 
     public void addAction(CacheWriteAction<?,?> action) {
-        if (!queue.offer(action)) {
-            LOG.warn("Cache queue is too large and will be cleared.");
-            queue.clear();
+        while (queue.size() > MAX_SIZE) {
+            queue.poll();
         }
+        queue.offer(action);
     }
 
     @Override
