@@ -48,7 +48,7 @@ class CacheWriteQueue implements Runnable {
         while (isRunning) {
             try {
                 CacheWriteAction<?,?> action = queue.poll(10, TimeUnit.MILLISECONDS);
-                if (action != null) {
+                if (action != null && isRunning) {
                     action.run();
                 }
             } catch (InterruptedException e) {
