@@ -37,7 +37,7 @@ class CacheWriteQueue implements Runnable {
     }
 
     public void addAction(CacheWriteAction<?,?> action) {
-        while (queue.size() > MAX_SIZE) {
+        while (queue.size() >= MAX_SIZE) {
             queue.poll();
         }
         queue.offer(action);
