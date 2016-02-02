@@ -355,7 +355,7 @@ nullCheckEnabled
 
   Refer to [IS NULL support][OAK-2517] for more details
 
-**Property Names**
+<a name="property-names"></a>**Property Names**
 
 Property name can be one of following
 
@@ -369,6 +369,10 @@ Property name can be one of following
    _jcr:content/metadata/dc:.*$_
    which indexes all property names starting with _dc_ from node with
    relative path _jcr:content/metadata_
+4. The string `:nodeName` - this special case indexes node name as if it's a
+   virtual property of the node being indexed. Setting this along with
+   `nodeScopeIndex=true` is akin to setting `indexNodeName=true` on indexing
+   rule. (`@since Oak 1.3.15`)
 
 <a name="path-restrictions"></a>
 ##### Evaluate Path Restrictions
@@ -951,7 +955,11 @@ properties terms to be used for suggestions will be taken.
  
 Once the above configuration has been done, by default, the Lucene suggester is 
 updated every 10 minutes but that can be changed by setting the property 
-`suggestUpdateFrequencyMinutes` in the index definition node to a different value.
+`suggestUpdateFrequencyMinutes` in `suggestion` node under the index definition
+node to a different value.
+_Note that up till Oak 1.3.14, `suggestUpdateFrequencyMinutes` was to be setup at
+index definition node itself. That is is still supported for backward compatibility,
+but having a separate `suggestion` node is preferred._
 
 Sample configuration for suggestions based on terms contained in `jcr:description` 
 property.
@@ -962,7 +970,8 @@ property.
   - compatVersion = 2
   - type = "lucene"
   - async = "async"
-  - suggestUpdateFrequencyMinutes = 60
+  + suggestion
+    - suggestUpdateFrequencyMinutes = 20
   + indexRules
     - jcr:primaryType = "nt:unstructured"
     + nt:base
@@ -984,10 +993,15 @@ Analyzed suggestions can be enabled by setting "suggestAnalyzed" property to tru
   - compatVersion = 2
   - type = "lucene"
   - async = "async"
-  - suggestUpdateFrequencyMinutes = 60
-  - suggestAnalyzed = true
+  + suggestion
+    - suggestUpdateFrequencyMinutes = 20
+    - suggestAnalyzed = true
 ```
+_Note that up till Oak 1.3.14, `suggestAnalyzed` was to be setup at index definition node itself. That is is still
+supported for backward compatibility, but having a separate `suggestion` node is preferred._
 
+Setting up `useInSuggest=true` for a property definition having `name=:nodeName` would add node names to
+suggestion dictionary (See [property name](#property-names) for node name indexing)
 
 #### Spellchecking
 
@@ -1022,6 +1036,45 @@ Since Oak 1.3.11, the each suggestion would be returned per row.
 ```
 
 
+#### Facets
+
+`@since Oak 1.3.14`
+
+Lucene property indexes can also be used for retrieving facets, in order to do so the property _facets_ must be set to 
+ _true_ on the property definition.
+
+```
+/oak:index/lucene-with-facets
+  - jcr:primaryType = "oak:QueryIndexDefinition"
+  - compatVersion = 2
+  - type = "lucene"
+  - async = "async"
+  + indexRules
+    - jcr:primaryType = "nt:unstructured"
+    + nt:base
+      + properties
+        - jcr:primaryType = "nt:unstructured"
+        + jcr:title
+          - facets = true
+          - propertyIndex = true
+``` 
+
+Specific facet related features for Lucene property index can be configured in a separate _facets_ node below the
+ index definition.
+ By default ACL checks are always performed on facets by the Lucene property index however this can be avoided by setting
+ the property _secure_ to _false_ in the _facets_ configuration node.
+```
+    + nt:base
+      + properties
+        - jcr:primaryType = "nt:unstructured"
+        + jcr:title
+          - facets = true
+          - propertyIndex = true
+          + facets
+            - secure = false
+```
+
+
 #### Score Explanation
 
 `@since Oak 1.3.12`
@@ -1030,6 +1083,15 @@ Lucene supports [explanation of scores][score-explanation] which can be selected
 e.g. `select [oak:scoreExplanation], * from [nt:base] where foo='bar'`
 
 _Note that showing explanation score is expensive. So, this feature should be used for debug purposes only_.
+
+
+#### Custom hooks
+
+`@since Oak 1.3.14`
+
+In OSGi enviroment, implementations of `IndexFieldProvider` and `FulltextQueryTermsProvider` under
+`org.apache.jackrabbit.oak.plugins.index.lucene.spi` (see javadoc [here][oak-lucene]) are called during indexing
+and querying as documented in javadocs.
 
 ### Design Considerations
 
@@ -1457,3 +1519,4 @@ such fields
 [jcr-contains]: http://www.day.com/specs/jcr/1.0/6.6.5.2_jcr_contains_Function.html
 [boost-faq]: https://wiki.apache.org/lucene-java/LuceneFAQ#How_do_I_make_sure_that_a_match_in_a_document_title_has_greater_weight_than_a_match_in_a_document_body.3F
 [score-explanation]: https://lucene.apache.org/core/4_6_0/core/org/apache/lucene/search/IndexSearcher.html#explain%28org.apache.lucene.search.Query,%20int%29
+[oak-lucene]: http://www.javadoc.io/doc/org.apache.jackrabbit/oak-lucene/

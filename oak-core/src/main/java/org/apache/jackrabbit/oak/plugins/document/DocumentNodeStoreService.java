@@ -27,6 +27,7 @@ import static org.apache.jackrabbit.oak.plugins.document.DocumentMK.Builder.DEFA
 import static org.apache.jackrabbit.oak.plugins.document.DocumentMK.Builder.DEFAULT_DIFF_CACHE_PERCENTAGE;
 import static org.apache.jackrabbit.oak.plugins.document.DocumentMK.Builder.DEFAULT_DOC_CHILDREN_CACHE_PERCENTAGE;
 import static org.apache.jackrabbit.oak.plugins.document.DocumentMK.Builder.DEFAULT_NODE_CACHE_PERCENTAGE;
+import static org.apache.jackrabbit.oak.plugins.document.DocumentMK.Builder.DEFAULT_PREV_DOC_CACHE_PERCENTAGE;
 import static org.apache.jackrabbit.oak.spi.blob.osgi.SplitBlobStoreService.ONLY_STANDALONE_TARGET;
 import static org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils.registerMBean;
 
@@ -143,13 +144,19 @@ public class DocumentNodeStoreService {
             description = "Cache size in MB. This is distributed among various caches used in DocumentNodeStore"
     )
     private static final String PROP_CACHE = "cache";
-    
+
     @Property(intValue = DEFAULT_NODE_CACHE_PERCENTAGE,
             label = "NodeState Cache",
             description = "Percentage of cache to be allocated towards Node cache"
     )
     private static final String PROP_NODE_CACHE_PERCENTAGE = "nodeCachePercentage";
-    
+
+    @Property(intValue = DEFAULT_PREV_DOC_CACHE_PERCENTAGE,
+            label = "PreviousDocument Cache",
+            description = "Percentage of cache to be allocated towards Previous Document cache"
+    )
+    private static final String PROP_PREV_DOC_CACHE_PERCENTAGE = "prevDocCachePercentage";
+
     @Property(intValue = DocumentMK.Builder.DEFAULT_CHILDREN_CACHE_PERCENTAGE,
             label = "NodeState Children Cache",
             description = "Percentage of cache to be allocated towards Children cache"
@@ -318,6 +325,13 @@ public class DocumentNodeStoreService {
     public static final String PROP_DS_TYPE = "documentStoreType";
     private DocumentStoreType documentStoreType;
 
+    private static final String DEFAULT_SHARED_DS_REPO_ID = "";
+    @Property(value = DEFAULT_SHARED_DS_REPO_ID,
+            label = "SharedDataStore RepositoryID",
+            description = "Custom RepositoryID for SharedDataStore. This overrides any generated value."
+    )
+    public static final String PROP_SHARED_DS_REPO_ID = "sharedDSRepoId";
+
     @Reference
     private StatisticsProvider statisticsProvider;
 
@@ -359,6 +373,7 @@ public class DocumentNodeStoreService {
 
         int cacheSize = toInteger(prop(PROP_CACHE), DEFAULT_CACHE);
         int nodeCachePercentage = toInteger(prop(PROP_NODE_CACHE_PERCENTAGE), DEFAULT_NODE_CACHE_PERCENTAGE);
+        int prevDocCachePercentage = toInteger(prop(PROP_PREV_DOC_CACHE_PERCENTAGE), DEFAULT_NODE_CACHE_PERCENTAGE);
         int childrenCachePercentage = toInteger(prop(PROP_CHILDREN_CACHE_PERCENTAGE), DEFAULT_CHILDREN_CACHE_PERCENTAGE);
         int docChildrenCachePercentage = toInteger(prop(PROP_DOC_CHILDREN_CACHE_PERCENTAGE), DEFAULT_DOC_CHILDREN_CACHE_PERCENTAGE);
         int diffCachePercentage = toInteger(prop(PROP_DIFF_CACHE_PERCENTAGE), DEFAULT_DIFF_CACHE_PERCENTAGE);
@@ -371,7 +386,8 @@ public class DocumentNodeStoreService {
                 setStatisticsProvider(statisticsProvider).
                 memoryCacheSize(cacheSize * MB).
                 memoryCacheDistribution(
-                        nodeCachePercentage, 
+                        nodeCachePercentage,
+                        prevDocCachePercentage,
                         childrenCachePercentage, 
                         docChildrenCachePercentage, 
                         diffCachePercentage).
@@ -457,8 +473,10 @@ public class DocumentNodeStoreService {
 
         // If a shared data store register the repo id in the data store
         if (SharedDataStoreUtils.isShared(blobStore)) {
+            String customRepoID = PropertiesUtil.toString(prop(PROP_SHARED_DS_REPO_ID), DEFAULT_SHARED_DS_REPO_ID);
+
             try {
-                String repoId = ClusterRepositoryInfo.createId(mk.getNodeStore());
+                String repoId = ClusterRepositoryInfo.createId(mk.getNodeStore(), customRepoID);
                 ((SharedDataStore) blobStore).addMetadataRecord(new ByteArrayInputStream(new byte[0]),
                     SharedDataStoreUtils.SharedStoreRecordType.REPOSITORY.getNameFromId(repoId));
             } catch (Exception e) {
@@ -613,13 +631,15 @@ public class DocumentNodeStoreService {
         }
         DocumentStore ds = store.getDocumentStore();
         if (ds.getCacheStats() != null) {
-            registrations.add(
-                    registerMBean(whiteboard,
-                            CacheStatsMBean.class,
-                            ds.getCacheStats(),
-                            CacheStatsMBean.TYPE,
-                            ds.getCacheStats().getName())
-            );
+            for (CacheStats cacheStats : ds.getCacheStats()) {
+                registrations.add(
+                        registerMBean(whiteboard,
+                                CacheStatsMBean.class,
+                                cacheStats,
+                                CacheStatsMBean.TYPE,
+                                cacheStats.getName())
+                );
+            }
         }
 
         registrations.add(

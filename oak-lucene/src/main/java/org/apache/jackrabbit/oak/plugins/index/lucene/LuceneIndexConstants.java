@@ -244,6 +244,11 @@ public interface LuceneIndexConstants {
     String PROP_USE_IN_SUGGEST = "useInSuggest";
 
     /**
+     * subnode holding configuration for suggestions
+     */
+    String SUGGESTION_CONFIG = "suggestion";
+
+    /**
      * update frequency of the suggester in minutes
      */
     String SUGGEST_UPDATE_FREQUENCY_MINUTES = "suggestUpdateFrequencyMinutes";
@@ -270,6 +275,12 @@ public interface LuceneIndexConstants {
      * to support fn:name() queries
      */
     String INDEX_NODE_NAME = "indexNodeName";
+
+    /**
+     * Property definition name to indicate indexing node name
+     * Its value should match {@link FieldNames#NODE_NAME}
+     */
+    String PROPDEF_PROP_NODE_NAME = ":nodeName";
 
     /**
      * Boolean property indicating that Lucene directory content

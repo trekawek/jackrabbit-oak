@@ -23,7 +23,8 @@ traditional RDBMSs. If there is no index for a specific query, then
 the repository will be traversed. That is, the query will still work
 but probably be very slow.
 
-[The Query Engine](./query-engine.html)
+* [The Query Engine](./query-engine.html)
+* [Flags](./flags.html)
 
 ### Indexes
 
@@ -38,3 +39,7 @@ documentation page.
 ### Customisations
 
 * [Change Out-Of-The-Box Index Definitions](./ootb-index-change.html)
+
+
+
+

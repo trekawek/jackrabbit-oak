@@ -362,10 +362,10 @@ public class TimingDocumentStoreWrapper implements DocumentStore {
 
 
     @Override
-    public CacheStats getCacheStats() {
+    public Iterable<CacheStats> getCacheStats() {
         try {
             long start = now();
-            CacheStats result = base.getCacheStats();
+            Iterable<CacheStats> result = base.getCacheStats();
             updateAndLogTimes("getCacheStats", start, 0, 0);
             return result;
         } catch (Exception e) {
@@ -433,7 +433,7 @@ public class TimingDocumentStoreWrapper implements DocumentStore {
     private static <T extends Document> int size(List<T> list) {
         int result = 0;
         for (T doc : list) {
-            result += doc.getMemory();
+            result += size(doc);
         }
         return result;
     }

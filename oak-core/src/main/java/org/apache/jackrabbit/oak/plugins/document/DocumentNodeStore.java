@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.Iterables.filter;
 import static com.google.common.collect.Iterables.toArray;
 import static com.google.common.collect.Iterables.transform;
+import static com.google.common.collect.Lists.newArrayList;
+import static com.google.common.collect.Lists.reverse;
 import static java.util.Collections.singletonList;
 import static org.apache.jackrabbit.oak.commons.PathUtils.concat;
 import static org.apache.jackrabbit.oak.plugins.document.Collection.JOURNAL;
@@ -71,7 +73,6 @@ import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
@@ -81,6 +82,7 @@ import org.apache.jackrabbit.oak.commons.jmx.AnnotatedStandardMBean;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.plugins.blob.MarkSweepGarbageCollector;
 import org.apache.jackrabbit.oak.plugins.blob.ReferencedBlob;
+import org.apache.jackrabbit.oak.plugins.document.Branch.BranchCommit;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheInvalidationStats;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.broadcast.DynamicBroadcastConfig;
@@ -1161,12 +1163,14 @@ public final class DocumentNodeStore
      * Updates a commit root document.
      *
      * @param commit the updates to apply on the commit root document.
+     * @param commitRev the commit revision.
      * @return the document before the update was applied or <code>null</code>
      *          if the update failed because of a collision.
      * @throws DocumentStoreException if the update fails with an error.
      */
     @CheckForNull
-    NodeDocument updateCommitRoot(UpdateOp commit) throws DocumentStoreException {
+    NodeDocument updateCommitRoot(UpdateOp commit, Revision commitRev)
+            throws DocumentStoreException {
         // use batch commit when there are only revision and modified updates
         boolean batch = true;
         for (Map.Entry<Key, Operation> op : commit.getChanges().entrySet()) {
@@ -1178,11 +1182,63 @@ public final class DocumentNodeStore
             batch = false;
             break;
         }
-        if (batch) {
-            return batchUpdateCommitRoot(commit);
-        } else {
-            return store.findAndUpdate(NODES, commit);
+        try {
+            if (batch) {
+                return batchUpdateCommitRoot(commit);
+            } else {
+                return store.findAndUpdate(NODES, commit);
+            }
+        } catch (DocumentStoreException e) {
+            return verifyCommitRootUpdateApplied(commit, commitRev, e);
         }
+    }
+
+    /**
+     * Verifies if the {@code commit} update on the commit root was applied by
+     * reading the affected document and checks if the {@code commitRev} is
+     * set in the revisions map.
+     *
+     * @param commit the update operation on the commit root document.
+     * @param commitRev the commit revision.
+     * @param e the exception that will be thrown when this method determines
+     *          that the update was not applied.
+     * @return the before document.
+     * @throws DocumentStoreException the exception passed to this document
+     *      in case the commit update was not applied.
+     */
+    private NodeDocument verifyCommitRootUpdateApplied(UpdateOp commit,
+                                                       Revision commitRev,
+                                                       DocumentStoreException e)
+            throws DocumentStoreException {
+        LOG.info("Update of commit root failed with exception", e);
+        int numRetries = 10;
+        for (int i = 0; i < numRetries; i++) {
+            LOG.info("Checking if change made it to the DocumentStore anyway {}/{} ...",
+                    i + 1, numRetries);
+            NodeDocument commitRootDoc;
+            try {
+                commitRootDoc = store.find(NODES, commit.getId(), 0);
+            } catch (Exception ex) {
+                LOG.info("Failed to read commit root document", ex);
+                continue;
+            }
+            if (commitRootDoc == null) {
+                LOG.info("Commit root document missing for {}", commit.getId());
+                break;
+            }
+            if (commitRootDoc.getLocalRevisions().containsKey(commitRev)) {
+                LOG.info("Update made it to the store even though the call " +
+                        "failed with an exception. Previous exception will " +
+                        "be suppressed. {}", commit);
+                NodeDocument before = NODES.newDocument(store);
+                commitRootDoc.deepCopy(before);
+                UpdateUtils.applyChanges(before, commit.getReverseOperation());
+                return before;
+            }
+            break;
+        }
+        LOG.info("Update didn't make it to the store. Re-throwing the exception");
+        throw e;
     }
 
     private NodeDocument batchUpdateCommitRoot(UpdateOp commit)
@@ -1249,8 +1305,7 @@ public final class DocumentNodeStore
 
     @Nonnull
     RevisionVector reset(@Nonnull RevisionVector branchHead,
-                         @Nonnull RevisionVector ancestor,
-                         @Nullable DocumentNodeStoreBranch branch) {
+                         @Nonnull RevisionVector ancestor) {
         checkNotNull(branchHead);
         checkNotNull(ancestor);
         Branch b = getBranches().getBranch(branchHead);
@@ -1261,61 +1316,44 @@ public final class DocumentNodeStore
             throw new DocumentStoreException(branchHead + " is not the head " +
                     "of a branch");
         }
-        if (!b.containsCommit(ancestor.getBranchRevision())) {
+        if (!b.containsCommit(ancestor.getBranchRevision())
+                && !b.getBase().asBranchRevision(getClusterId()).equals(ancestor)) {
             throw new DocumentStoreException(ancestor + " is not " +
                     "an ancestor revision of " + branchHead);
         }
-        if (branchHead.equals(ancestor)) {
+        // tailSet is inclusive -> use an ancestorRev with a
+        // counter incremented by one to make the call exclusive
+        Revision ancestorRev = ancestor.getBranchRevision();
+        ancestorRev = new Revision(ancestorRev.getTimestamp(),
+                ancestorRev.getCounter() + 1, ancestorRev.getClusterId(), true);
+        List<Revision> revs = newArrayList(b.getCommits().tailSet(ancestorRev));
+        if (revs.isEmpty()) {
             // trivial
             return branchHead;
         }
-        boolean success = false;
-        Commit commit = newCommit(branchHead, branch);
-        try {
-            Iterator<Revision> it = b.getCommits().tailSet(ancestor.getBranchRevision()).iterator();
-            // first revision is the ancestor (tailSet is inclusive)
-            // do not undo changes for this revision
-            it.next();
-            Map<String, UpdateOp> operations = Maps.newHashMap();
-            if (it.hasNext()) {
-                Revision reset = it.next();
-                // TODO: correct?
-                getRoot(b.getCommit(reset).getBase().update(reset))
-                        .compareAgainstBaseState(getRoot(ancestor),
-                                new ResetDiff(reset.asTrunkRevision(), operations));
-                UpdateOp rootOp = operations.get("/");
-                if (rootOp == null) {
-                    rootOp = new UpdateOp(Utils.getIdFromPath("/"), false);
-                    NodeDocument.setModified(rootOp, commit.getRevision());
-                    operations.put("/", rootOp);
-                }
-                NodeDocument.removeCollision(rootOp, reset.asTrunkRevision());
-                NodeDocument.removeRevision(rootOp, reset.asTrunkRevision());
+        UpdateOp rootOp = new UpdateOp(Utils.getIdFromPath("/"), false);
+        // reset each branch commit in reverse order
+        Map<String, UpdateOp> operations = Maps.newHashMap();
+        for (Revision r : reverse(revs)) {
+            NodeDocument.removeCollision(rootOp, r.asTrunkRevision());
+            NodeDocument.removeRevision(rootOp, r.asTrunkRevision());
+            operations.clear();
+            BranchCommit bc = b.getCommit(r);
+            if (bc.isRebase()) {
+                continue;
             }
-            // update root document first
-            if (store.findAndUpdate(Collection.NODES, operations.get("/")) != null) {
-                // clean up in-memory branch data
-                // first revision is the ancestor (tailSet is inclusive)
-                List<Revision> revs = Lists.newArrayList(b.getCommits().tailSet(ancestor.getBranchRevision()));
-                for (Revision r : revs.subList(1, revs.size())) {
-                    b.removeCommit(r);
-                }
-                // successfully updating the root document can be considered
-                // as success because the changes are not marked as committed
-                // anymore
-                success = true;
-            }
-            operations.remove("/");
-            // update remaining documents
+            getRoot(bc.getBase().update(r))
+                    .compareAgainstBaseState(getRoot(bc.getBase()),
+                            new ResetDiff(r.asTrunkRevision(), operations));
+            // apply reset operations
             for (UpdateOp op : operations.values()) {
                 store.findAndUpdate(Collection.NODES, op);
             }
-        } finally {
-            if (!success) {
-                canceled(commit);
-            } else {
-                done(commit, true, null);
-            }
+        }
+        store.findAndUpdate(Collection.NODES, rootOp);
+        // clean up in-memory branch data
+        for (Revision r : revs) {
+            b.removeCommit(r);
         }
         return ancestor;
     }
@@ -2191,9 +2229,10 @@ public final class DocumentNodeStore
         String diff = w.toString();
         if (debug) {
             long end = now();
-            LOG.debug("Diff performed via '{}' at [{}] between revisions [{}] => [{}] took {} ms ({} ms), diff '{}'",
+            LOG.debug("Diff performed via '{}' at [{}] between revisions [{}] => [{}] took {} ms ({} ms), diff '{}', external '{}",
                     diffAlgo, from.getPath(), fromRev, toRev,
-                    end - start, getChildrenDoneIn - start, diff);
+                    end - start, getChildrenDoneIn - start, diff,
+                    to.isFromExternalChange());
         }
         return diff;
     }

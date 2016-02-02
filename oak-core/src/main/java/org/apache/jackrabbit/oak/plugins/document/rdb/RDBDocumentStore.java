@@ -61,6 +61,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import javax.sql.DataSource;
 
+import com.google.common.base.Function;
 import com.google.common.base.Stopwatch;
 import org.apache.jackrabbit.oak.cache.CacheStats;
 import org.apache.jackrabbit.oak.plugins.document.Collection;
@@ -297,6 +298,16 @@ public class RDBDocumentStore implements DocumentStore {
 
     @Override
     public <T extends Document> List<T> createOrUpdate(Collection<T> collection, List<UpdateOp> updateOps) {
+        if (!BATCHUPDATES
+                || dbInfo == RDBDocumentStoreDB.ORACLE /* see OAK-3938 */) {
+            List<T> results = new ArrayList<T>(updateOps.size());
+            for (UpdateOp update : updateOps) {
+                results.add(createOrUpdate(collection, update));
+            }
+            return results;
+        }
+
+        final Stopwatch watch = startWatch();
         Map<UpdateOp, T> results = new LinkedHashMap<UpdateOp, T>();
         Map<String, UpdateOp> operationsToCover = new LinkedHashMap<String, UpdateOp>();
         Set<UpdateOp> duplicates = new HashSet<UpdateOp>();
@@ -352,7 +363,13 @@ public class RDBDocumentStore implements DocumentStore {
                 results.put(updateOp, createOrUpdate(collection, updateOp));
             }
         }
-
+        stats.doneCreateOrUpdate(watch.elapsed(TimeUnit.NANOSECONDS),
+                collection, Lists.transform(updateOps, new Function<UpdateOp, String>() {
+                    @Override
+                    public String apply(UpdateOp input) {
+                        return input.getId();
+                    }
+                }));
         return new ArrayList<T>(results.values());
     }
 
@@ -478,7 +495,7 @@ public class RDBDocumentStore implements DocumentStore {
 
     @Override
     public CacheInvalidationStats invalidateCache() {
-        for (NodeDocument nd : nodesCache.asMap().values()) {
+        for (NodeDocument nd : nodesCache.values()) {
             nd.markUpToDate(0);
         }
         return null;
@@ -630,6 +647,11 @@ public class RDBDocumentStore implements DocumentStore {
         } catch (IOException ex) {
             LOG.error("closing connection handler", ex);
         }
+        try {
+            this.nodesCache.close();
+        } catch (IOException ex) {
+            LOG.warn("Error occurred while closing nodes cache", ex);
+        }
         LOG.info("RDBDocumentStore (" + OakVersion.getVersion() + ") disposed" + getCnStats()
                 + (this.droppedTables.isEmpty() ? "" : " (tables dropped: " + this.droppedTables + ")"));
     }
@@ -639,13 +661,13 @@ public class RDBDocumentStore implements DocumentStore {
         if (collection != Collection.NODES) {
             return null;
         } else {
-            NodeDocument doc = nodesCache.getIfPresent(id);
+            NodeDocument doc = unwrap(nodesCache.getIfPresent(id));
             return castAsT(doc);
         }
     }
 
     @Override
-    public CacheStats getCacheStats() {
+    public Iterable<CacheStats> getCacheStats() {
         return nodesCache.getCacheStats();
     }
 
@@ -1173,7 +1195,9 @@ public class RDBDocumentStore implements DocumentStore {
             UpdateUtils.applyChanges(doc, update);
             try {
                 Stopwatch watch = startWatch();
-                insertDocuments(collection, Collections.singletonList(doc));
+                if (!insertDocuments(collection, Collections.singletonList(doc))) {
+                    throw new DocumentStoreException("Can't insert the document: " + doc.getId());
+                }
                 if (collection == Collection.NODES) {
                     nodesCache.putIfAbsent((NodeDocument) doc);
                 }
@@ -1485,7 +1509,7 @@ public class RDBDocumentStore implements DocumentStore {
     }
 
     @Nonnull
-    private <T extends Document> RDBTableMetaData getTable(Collection<T> collection) {
+    protected <T extends Document> RDBTableMetaData getTable(Collection<T> collection) {
         RDBTableMetaData tmd = this.tableMeta.get(collection);
         if (tmd != null) {
             return tmd;
@@ -1757,6 +1781,9 @@ public class RDBDocumentStore implements DocumentStore {
     // Number of elapsed ms in a query above which a diagnostic warning is generated
     private static final int QUERYTIMELIMIT = Integer.getInteger(
             "org.apache.jackrabbit.oak.plugins.document.rdb.RDBDocumentStore.QUERYTIMELIMIT", 10000);
+    // Whether to use JDBC batch commands for the createOrUpdate (default: true).
+    private static final boolean BATCHUPDATES = Boolean.parseBoolean(System
+            .getProperty("org.apache.jackrabbit.oak.plugins.document.rdb.RDBDocumentStore.BATCHUPDATES", "true"));
 
     public static byte[] asBytes(String data) {
         byte[] bytes;
