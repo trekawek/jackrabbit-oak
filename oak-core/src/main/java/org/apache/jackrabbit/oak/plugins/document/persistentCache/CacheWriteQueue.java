@@ -42,6 +42,10 @@ public class CacheWriteQueue<K, V> {
         }
     }
 
+    public synchronized boolean waitsForInvalidation(K key) {
+        return finalOp.get(key) == OperationType.INVALIDATE;
+    }
+
     private synchronized boolean increaseCounter(K key, V value) {
         OperationType type = OperationType.getFromValue(value);
         if (type == finalOp.get(key)) {

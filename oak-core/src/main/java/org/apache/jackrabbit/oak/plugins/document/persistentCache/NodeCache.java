@@ -86,6 +86,9 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     }
     
     private V readIfPresent(K key) {
+        if (writerQueue.waitsForInvalidation(key)) {
+            return null;
+        }
         cache.switchGenerationIfNeeded();
         V v = map.get(key);
         return v;
