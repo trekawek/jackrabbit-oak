@@ -44,7 +44,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     private final CacheType type;
     private final DataType keyType;
     private final DataType valueType;
-    private final CacheWriteQueue writerQueue;
+    private final CacheWriteQueue<K, V> writerQueue;
 
     NodeCache(
             PersistentCache cache,
@@ -52,11 +52,11 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
             DocumentNodeStore docNodeStore, 
             DocumentStore docStore,
             CacheType type,
-            CacheWriteQueue queue) {
+            CacheActionDispatcher dispatcher) {
         this.cache = cache;
         this.memCache = memCache;
         this.type = type;
-        this.writerQueue = queue;
+        this.writerQueue = new CacheWriteQueue<K, V>(dispatcher, this);
         PersistentCache.LOG.info("wrapping map " + this.type);
         map = new MultiGenerationMap<K, V>();
         keyType = new KeyDataType(type);
@@ -100,8 +100,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     }
 
     private void asyncWrite(final K key, final V value, boolean broadcast) {
-        CacheWriteAction<K, V> action = new CacheWriteAction<K, V>(this, key, value, broadcast);
-        writerQueue.addAction(action);
+        writerQueue.addWrite(key, value, broadcast);
     }
 
     void syncWrite(final K key, final V value, boolean broadcast) {
@@ -176,7 +175,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        syncWrite((K) key, (V) null, true);
+        asyncWrite((K) key, (V) null, true);
     }
 
     @Override

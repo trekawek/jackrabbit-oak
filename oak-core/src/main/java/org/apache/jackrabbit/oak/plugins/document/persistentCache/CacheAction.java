@@ -16,28 +16,10 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
-class CacheWriteAction<K, V> implements Runnable {
+public interface CacheAction {
 
-    private final NodeCache<K, V> nodeCache;
+    void execute();
 
-    private final K key;
+    void cancel();
 
-    private final V value;
-
-    private final boolean broadcast;
-
-    CacheWriteAction(NodeCache<K, V> nodeCache,
-            K key,
-            V value,
-            boolean broadcast) {
-        this.nodeCache = nodeCache;
-        this.key = key;
-        this.value = value;
-        this.broadcast = broadcast;
-    }
-
-    @Override
-    public void run() {
-        nodeCache.syncWrite(key, value, broadcast);
-    }
 }

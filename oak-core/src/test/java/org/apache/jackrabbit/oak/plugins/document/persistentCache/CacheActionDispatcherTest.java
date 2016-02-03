@@ -20,7 +20,7 @@ package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
 import static java.lang.System.currentTimeMillis;
 import static java.lang.Thread.sleep;
-import static org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheWriteQueue.MAX_SIZE;
+import static org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheActionDispatcher.MAX_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
@@ -32,11 +32,11 @@ import java.util.Random;
 
 import org.junit.Test;
 
-public class CacheWriteQueueTest {
+public class CacheActionDispatcherTest {
 
     @Test
     public void testMaxQueueSize() {
-        CacheWriteQueue queue = new CacheWriteQueue();
+        CacheActionDispatcher queue = new CacheActionDispatcher();
         for (int i = 0; i < MAX_SIZE + 10; i++) {
             queue.addAction(createWriteAction(Integer.toString(i)));
         }
@@ -49,8 +49,8 @@ public class CacheWriteQueueTest {
         final int threads = 5;
         final int actionsPerThread = 100;
 
-        final CacheWriteQueue queue = new CacheWriteQueue();
-        Thread queueThread = new Thread(queue);
+        final CacheActionDispatcher dispatcher = new CacheActionDispatcher();
+        Thread queueThread = new Thread(dispatcher);
         queueThread.start();
 
         List<DummyCacheWriteAction> allActions = new ArrayList<DummyCacheWriteAction>();
@@ -66,7 +66,7 @@ public class CacheWriteQueueTest {
                 @Override
                 public void run() {
                     for (DummyCacheWriteAction a : threadActions) {
-                        queue.addAction(a);
+                        dispatcher.addAction(a);
                     }
                 }
             });
@@ -93,7 +93,7 @@ public class CacheWriteQueueTest {
             }
         }
 
-        queue.stop();
+        dispatcher.stop();
         queueThread.join();
         assertFalse(queueThread.isAlive());
     }
@@ -102,8 +102,7 @@ public class CacheWriteQueueTest {
         return new DummyCacheWriteAction(id);
     }
 
-    @SuppressWarnings("rawtypes")
-    private static class DummyCacheWriteAction extends CacheWriteAction {
+    private static class DummyCacheWriteAction implements CacheAction {
 
         private final String id;
 
@@ -111,15 +110,13 @@ public class CacheWriteQueueTest {
 
         private volatile boolean finished;
 
-        @SuppressWarnings("unchecked")
-        DummyCacheWriteAction(String id) {
-            super(null, null, null, true);
+        private DummyCacheWriteAction(String id) {
             this.id = id;
             this.random = new Random();
         }
 
         @Override
-        public void run() {
+        public void execute() {
             try {
                 sleep(random.nextInt(10));
             } catch (InterruptedException e) {
@@ -129,8 +126,13 @@ public class CacheWriteQueueTest {
         }
 
         @Override
+        public void cancel() {
+        }
+
+        @Override
         public String toString() {
             return id;
         }
+
     }
 }

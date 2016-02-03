@@ -16,45 +16,117 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+public class CacheWriteQueue<K, V> {
 
-class CacheWriteQueue implements Runnable {
+    private final CacheActionDispatcher dispatcher;
 
-    private static final Logger LOG = LoggerFactory.getLogger(CacheWriteQueue.class);
+    private final NodeCache<K, V> nodeCache;
 
-    static final int MAX_SIZE = 1024;
+    private final Map<K, Integer> toBeInvalidated = new HashMap<K, Integer>();
 
-    final BlockingQueue<CacheWriteAction<?,?>> queue = new ArrayBlockingQueue<CacheWriteAction<?,?>>(MAX_SIZE * 2);
+    private final Map<K, Integer> toBePut = new HashMap<K, Integer>();
 
-    private volatile boolean isRunning = true;
+    private final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
 
-    public void addAction(CacheWriteAction<?,?> action) {
-        while (queue.size() >= MAX_SIZE) {
-            queue.poll();
-        }
-        queue.offer(action);
+    public CacheWriteQueue(CacheActionDispatcher dispatcher, NodeCache<K, V> nodeCache) {
+        this.dispatcher = dispatcher;
+        this.nodeCache = nodeCache;
     }
 
-    @Override
-    public void run() {
-        while (isRunning) {
-            try {
-                CacheWriteAction<?,?> action = queue.poll(10, TimeUnit.MILLISECONDS);
-                if (action != null && isRunning) {
-                    action.run();
-                }
-            } catch (InterruptedException e) {
-                LOG.debug("Interrupted the queue.poll()", e);
+    public void addWrite(K key, V value, boolean broadcast) {
+        if (increaseCounter(key, value)) {
+            dispatcher.addAction(new CacheWriteAction(key, value, broadcast));
+        }
+    }
+
+    private synchronized boolean increaseCounter(K key, V value) {
+        OperationType type = OperationType.getFromValue(value);
+        if (type == finalOp.get(key)) {
+            return false;
+        }
+        Map<K, Integer> map = getMap(type);
+        Integer counter = map.get(key);
+        if (counter == null) {
+            counter = 0;
+        }
+        map.put(key, ++counter);
+        finalOp.put(key, type);
+        return true;
+    }
+
+    private synchronized void decreaseCounter(K key, V value) {
+        OperationType type = OperationType.getFromValue(value);
+        Map<K, Integer> map = getMap(type);
+        Integer counter = map.get(key) - 1;
+        map.put(key, counter);
+
+        if (counter == 0) {
+            clean(key);
+        }
+    }
+
+    private synchronized boolean isFinalOperation(K key, V value) {
+        OperationType type = OperationType.getFromValue(value);
+        OperationType lastAddedOp = finalOp.get(key);
+        return type == lastAddedOp && getMap(type).get(key) == 1;
+    }
+
+    private void clean(K key) {
+        if (toBeInvalidated.containsKey(key) && toBeInvalidated.get(key) > 0) {
+            return;
+        }
+        if (toBePut.containsKey(key) && toBePut.get(key) > 0) {
+            return;
+        }
+        toBeInvalidated.remove(key);
+        toBePut.remove(key);
+        finalOp.remove(key);
+    }
+
+    private Map<K, Integer> getMap(OperationType type) {
+        if (type == OperationType.INVALIDATE) {
+            return toBeInvalidated;
+        } else {
+            return toBePut;
+        }
+    }
+
+    private class CacheWriteAction implements CacheAction {
+
+        private final K key;
+
+        private final V value;
+
+        private final boolean broadcast;
+
+        private CacheWriteAction(K key, V value, boolean broadcast) {
+            this.key = key;
+            this.value = value;
+            this.broadcast = broadcast;
+        }
+
+        @Override
+        public void execute() {
+            if (isFinalOperation(key, value)) {
+                nodeCache.syncWrite(key, value, broadcast);
             }
+            decreaseCounter(key, value);
+        }
+
+        @Override
+        public void cancel() {
+            decreaseCounter(key, value);
         }
     }
 
-    public void stop() {
-        isRunning = false;
+    private static enum OperationType {
+        INVALIDATE, PUT;
+
+        private static OperationType getFromValue(Object value) {
+            return value == null ? INVALIDATE : PUT;
+        }
     }
 }

@@ -82,7 +82,7 @@ public class PersistentCache implements Broadcaster.Listener {
     private ThreadLocal<WriteBuffer> writeBuffer = new ThreadLocal<WriteBuffer>();
     private final byte[] broadcastId;
     private DynamicBroadcastConfig broadcastConfig;
-    private CacheWriteQueue writeQueue;
+    private CacheActionDispatcher writeQueue;
     private Thread writeQueueThread;
     
     {
@@ -195,7 +195,7 @@ public class PersistentCache implements Broadcaster.Listener {
         writeStore = createMapFactory(writeGeneration, false);
         initBroadcast(broadcast);
 
-        writeQueue = new CacheWriteQueue();
+        writeQueue = new CacheActionDispatcher();
         writeQueueThread = new Thread(writeQueue, "Oak CacheWriteQueue");
         writeQueueThread.setDaemon(true);
         writeQueueThread.start();
