@@ -36,9 +36,9 @@ public class CacheWriteQueue<K, V> {
         this.nodeCache = nodeCache;
     }
 
-    public void addWrite(K key, V value, boolean broadcast) {
+    public void addWrite(K key, V value) {
         if (increaseCounter(key, value)) {
-            dispatcher.addAction(new CacheWriteAction(key, value, broadcast));
+            dispatcher.addAction(new CacheWriteAction(key, value));
         }
     }
 
@@ -104,18 +104,15 @@ public class CacheWriteQueue<K, V> {
 
         private final V value;
 
-        private final boolean broadcast;
-
-        private CacheWriteAction(K key, V value, boolean broadcast) {
+        private CacheWriteAction(K key, V value) {
             this.key = key;
             this.value = value;
-            this.broadcast = broadcast;
         }
 
         @Override
         public void execute() {
             if (isFinalOperation(key, value)) {
-                nodeCache.syncWrite(key, value, broadcast);
+                nodeCache.syncWrite(key, value);
             }
             decreaseCounter(key, value);
         }

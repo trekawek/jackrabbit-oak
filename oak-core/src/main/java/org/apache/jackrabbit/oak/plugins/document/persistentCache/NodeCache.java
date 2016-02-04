@@ -36,7 +36,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheStats;
 import com.google.common.collect.ImmutableMap;
 
-class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
+class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<K, V> {
     
     private final PersistentCache cache;
     private final Cache<K, V> memCache;
@@ -95,35 +95,11 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     }
     
     private void asyncWrite(final K key, final V value) {
-        asyncWrite(key, value, true);
+        writerQueue.addWrite(key, value);
     }
 
-    private void asyncWriteWithoutBroadcast(final K key, final V value) {
-        asyncWrite(key, value, false);
-    }
-
-    private void asyncWrite(final K key, final V value, boolean broadcast) {
-        writerQueue.addWrite(key, value, broadcast);
-    }
-
-    void syncWrite(final K key, final V value, boolean broadcast) {
+    void syncWrite(final K key, final V value) {
         cache.switchGenerationIfNeeded();
-        if (broadcast) {
-            cache.broadcast(type, new Function<WriteBuffer, Void>() {
-                @Override
-                @Nullable
-                public Void apply(@Nullable WriteBuffer buffer) {
-                    keyType.write(buffer, key);
-                    if (value == null) {
-                        buffer.put((byte) 0);
-                    } else {
-                        buffer.put((byte) 1);
-                        valueType.write(buffer, value);
-                    }
-                    return null;
-                }
-            });
-        }
         MultiGenerationMap<K, V> m = map;
         if (m != null) {
             if (value == null) {
@@ -133,7 +109,24 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
             }
         }
     }
-    
+
+    private void broadcast(final K key, final V value) {
+        cache.broadcast(type, new Function<WriteBuffer, Void>() {
+            @Override
+            @Nullable
+            public Void apply(@Nullable WriteBuffer buffer) {
+                keyType.write(buffer, key);
+                if (value == null) {
+                    buffer.put((byte) 0);
+                } else {
+                    buffer.put((byte) 1);
+                    valueType.write(buffer, value);
+                }
+                return null;
+            }
+        });
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     @Nullable
@@ -158,7 +151,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
             return value;
         }
         value = memCache.get(key, valueLoader);
-        asyncWrite(key, value);
+        broadcast(key, value);
         return value;
     }
 
@@ -171,14 +164,15 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
     @Override
     public void put(K key, V value) {
         memCache.put(key, value);
-        asyncWrite(key, value);
+        broadcast(key, value);
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        asyncWrite((K) key, (V) null, true);
+        asyncWrite((K) key, (V) null);
+        broadcast((K) key, null);
     }
 
     @Override
@@ -229,7 +223,14 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
             value = (V) valueType.read(buff);
             memCache.put(key, value);
         }
-        asyncWriteWithoutBroadcast(key, value);
+    }
+
+    /**
+     * Invoked on the eviction from the {@link #memCache}
+     */
+    @Override
+    public void evicted(K key, V value) {
+        asyncWrite(key, value);
     }
 
 }
