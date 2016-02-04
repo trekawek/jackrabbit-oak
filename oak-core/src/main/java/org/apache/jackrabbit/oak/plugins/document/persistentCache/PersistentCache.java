@@ -82,8 +82,8 @@ public class PersistentCache implements Broadcaster.Listener {
     private ThreadLocal<WriteBuffer> writeBuffer = new ThreadLocal<WriteBuffer>();
     private final byte[] broadcastId;
     private DynamicBroadcastConfig broadcastConfig;
-    private CacheActionDispatcher writeQueue;
-    private Thread writeQueueThread;
+    private CacheActionDispatcher writeDispatcher;
+    private Thread writeDispatcherThread;
     
     {
         ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
@@ -195,10 +195,10 @@ public class PersistentCache implements Broadcaster.Listener {
         writeStore = createMapFactory(writeGeneration, false);
         initBroadcast(broadcast);
 
-        writeQueue = new CacheActionDispatcher();
-        writeQueueThread = new Thread(writeQueue, "Oak CacheWriteQueue");
-        writeQueueThread.setDaemon(true);
-        writeQueueThread.start();
+        writeDispatcher = new CacheActionDispatcher();
+        writeDispatcherThread = new Thread(writeDispatcher, "Oak CacheWriteQueue");
+        writeDispatcherThread.setDaemon(true);
+        writeDispatcherThread.start();
     }
     
     private void initBroadcast(String broadcast) {
@@ -345,11 +345,11 @@ public class PersistentCache implements Broadcaster.Listener {
     }
     
     public void close() {
-        writeQueue.stop();
+        writeDispatcher.stop();
         try {
-            writeQueueThread.join();
+            writeDispatcherThread.join();
         } catch (InterruptedException e) {
-            LOG.error("Can't join the {}", writeQueueThread.getName(), e);
+            LOG.error("Can't join the {}", writeDispatcherThread.getName(), e);
         }
 
         if (writeStore != null) {
@@ -409,7 +409,7 @@ public class PersistentCache implements Broadcaster.Listener {
         }
         if (wrap) {
             NodeCache<K, V> c = new NodeCache<K, V>(this, 
-                    base, docNodeStore, docStore, type, writeQueue);
+                    base, docNodeStore, docStore, type, writeDispatcher);
             initGenerationCache(c);
             return c;
         }
