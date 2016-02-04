@@ -25,11 +25,11 @@ public class CacheWriteQueue<K, V> {
 
     private final NodeCache<K, V> nodeCache;
 
-    private final Map<K, Integer> toBeInvalidated = new HashMap<K, Integer>();
+    final Map<K, Integer> toBeInvalidated = new HashMap<K, Integer>();
 
-    private final Map<K, Integer> toBePut = new HashMap<K, Integer>();
+    final Map<K, Integer> toBePut = new HashMap<K, Integer>();
 
-    private final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
+    final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
 
     public CacheWriteQueue(CacheActionDispatcher dispatcher, NodeCache<K, V> nodeCache) {
         this.dispatcher = dispatcher;
@@ -37,16 +37,15 @@ public class CacheWriteQueue<K, V> {
     }
 
     public void addWrite(K key, V value) {
-        if (increaseCounter(key, value)) {
-            dispatcher.addAction(new CacheWriteAction(key, value));
-        }
+        incrementCounter(key, value);
+        dispatcher.addAction(new CacheWriteAction(key, value));
     }
 
     public synchronized boolean waitsForInvalidation(K key) {
         return finalOp.get(key) == OperationType.INVALIDATE;
     }
 
-    private synchronized boolean increaseCounter(K key, V value) {
+    private synchronized void incrementCounter(K key, V value) {
         OperationType type = OperationType.getFromValue(value);
         Map<K, Integer> map = getMap(type);
         Integer counter = map.get(key);
@@ -55,10 +54,9 @@ public class CacheWriteQueue<K, V> {
         }
         map.put(key, ++counter);
         finalOp.put(key, type);
-        return true;
     }
 
-    private synchronized void decreaseCounter(K key, V value) {
+    private synchronized void decrementCounter(K key, V value) {
         OperationType type = OperationType.getFromValue(value);
         Map<K, Integer> map = getMap(type);
         Integer counter = map.get(key) - 1;
@@ -103,12 +101,12 @@ public class CacheWriteQueue<K, V> {
         @Override
         public void execute() {
             nodeCache.syncWrite(key, value);
-            decreaseCounter(key, value);
+            decrementCounter(key, value);
         }
 
         @Override
         public void cancel() {
-            decreaseCounter(key, value);
+            decrementCounter(key, value);
         }
     }
 
