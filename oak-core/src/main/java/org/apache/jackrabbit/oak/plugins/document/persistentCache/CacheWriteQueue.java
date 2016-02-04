@@ -23,7 +23,9 @@ public class CacheWriteQueue<K, V> {
 
     private final CacheActionDispatcher dispatcher;
 
-    private final NodeCache<K, V> nodeCache;
+    private final PersistentCache cache;
+
+    private final MultiGenerationMap<K, V> map;
 
     final Map<K, Integer> toBeInvalidated = new HashMap<K, Integer>();
 
@@ -31,9 +33,10 @@ public class CacheWriteQueue<K, V> {
 
     final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
 
-    public CacheWriteQueue(CacheActionDispatcher dispatcher, NodeCache<K, V> nodeCache) {
+    public CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, MultiGenerationMap<K, V> map) {
         this.dispatcher = dispatcher;
-        this.nodeCache = nodeCache;
+        this.cache = cache;
+        this.map = map;
     }
 
     public void addWrite(K key, V value) {
@@ -100,8 +103,18 @@ public class CacheWriteQueue<K, V> {
 
         @Override
         public void execute() {
-            nodeCache.syncWrite(key, value);
-            decrementCounter(key, value);
+            try {
+                cache.switchGenerationIfNeeded();
+                if (map != null) {
+                    if (value == null) {
+                        map.remove(key);
+                    } else {
+                        map.put(key, value);
+                    }
+                }
+            } finally {
+                decrementCounter(key, value);
+            }
         }
 
         @Override

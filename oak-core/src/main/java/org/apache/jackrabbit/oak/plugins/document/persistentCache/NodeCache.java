@@ -56,11 +56,11 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         this.cache = cache;
         this.memCache = memCache;
         this.type = type;
-        this.writerQueue = new CacheWriteQueue<K, V>(dispatcher, this);
         PersistentCache.LOG.info("wrapping map " + this.type);
         map = new MultiGenerationMap<K, V>();
         keyType = new KeyDataType(type);
         valueType = new ValueDataType(docNodeStore, docStore, type);
+        this.writerQueue = new CacheWriteQueue<K, V>(dispatcher, cache, map);
     }
     
     @Override
@@ -94,20 +94,8 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         return v;
     }
     
-    private void asyncWrite(final K key, final V value) {
+    private void write(final K key, final V value) {
         writerQueue.addWrite(key, value);
-    }
-
-    void syncWrite(final K key, final V value) {
-        cache.switchGenerationIfNeeded();
-        MultiGenerationMap<K, V> m = map;
-        if (m != null) {
-            if (value == null) {
-                m.remove(key);
-            } else {
-                m.put(key, value);
-            }
-        }
     }
 
     private void broadcast(final K key, final V value) {
@@ -171,7 +159,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        asyncWrite((K) key, (V) null);
+        write((K) key, (V) null);
         broadcast((K) key, null);
     }
 
@@ -230,7 +218,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
      */
     @Override
     public void evicted(K key, V value) {
-        asyncWrite(key, value);
+        write(key, value);
     }
 
 }

@@ -50,9 +50,8 @@ public class CacheWriteQueueTest {
             }
         };
 
-        @SuppressWarnings("unchecked")
-        NodeCache<String, Object> nodeCache = Mockito.mock(NodeCache.class);
-        queue = new CacheWriteQueue<String, Object>(dispatcher, nodeCache);
+        PersistentCache cache = Mockito.mock(PersistentCache.class);
+        queue = new CacheWriteQueue<String, Object>(dispatcher, cache, null);
     }
 
     @Test
