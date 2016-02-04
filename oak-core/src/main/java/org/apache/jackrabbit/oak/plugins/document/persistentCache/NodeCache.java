@@ -56,7 +56,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         this.cache = cache;
         this.memCache = memCache;
         this.type = type;
-        this.writerQueue = new CacheWriteQueue<K, V>(dispatcher, this, type.hasImmutableValues());
+        this.writerQueue = new CacheWriteQueue<K, V>(dispatcher, this);
         PersistentCache.LOG.info("wrapping map " + this.type);
         map = new MultiGenerationMap<K, V>();
         keyType = new KeyDataType(type);
