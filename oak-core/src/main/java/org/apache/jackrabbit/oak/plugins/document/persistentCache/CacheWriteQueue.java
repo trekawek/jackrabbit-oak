@@ -16,10 +16,14 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class CacheWriteQueue<K, V> {
+import com.google.common.collect.Iterables;
+
+class CacheWriteQueue<K, V> {
 
     private final CacheActionDispatcher dispatcher;
 
@@ -33,19 +37,51 @@ public class CacheWriteQueue<K, V> {
 
     final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
 
-    public CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, MultiGenerationMap<K, V> map) {
+    CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, MultiGenerationMap<K, V> map) {
         this.dispatcher = dispatcher;
         this.cache = cache;
         this.map = map;
     }
 
-    public void addWrite(K key, V value) {
+    void addWrite(K key, V value) {
         incrementCounter(key, value);
-        dispatcher.addAction(new CacheWriteAction(key, value));
+        dispatcher.addAction(new CacheWriteAction<K, V>(this, key, value));
     }
 
-    public synchronized boolean waitsForInvalidation(K key) {
+    boolean waitsForInvalidation(K key) {
         return finalOp.get(key) == OperationType.INVALIDATE;
+    }
+
+    void cancelAll(Iterable<CacheAction<K, V>> actions) {
+        List<K> keys = new ArrayList<K>();
+        for (CacheAction<K, V> action : actions) {
+            action.cancel();
+            Iterables.addAll(keys, action.getAffectedKeys());
+        }
+        
+        for (K key : keys) {
+            incrementCounter(key, null);
+        }
+        dispatcher.addAction(new InvalidateAllCacheAction<K, V>(this, keys));
+    }
+
+    synchronized void decrementCounter(K key, V value) {
+        OperationType type = OperationType.getFromValue(value);
+        Map<K, Integer> map = getMap(type);
+        Integer counter = map.get(key) - 1;
+        map.put(key, counter);
+
+        if (counter == 0) {
+            clean(key);
+        }
+    }
+
+    PersistentCache getCache() {
+        return cache;
+    }
+
+    MultiGenerationMap<K, V> getMap() {
+        return map;
     }
 
     private synchronized void incrementCounter(K key, V value) {
@@ -57,17 +93,6 @@ public class CacheWriteQueue<K, V> {
         }
         map.put(key, ++counter);
         finalOp.put(key, type);
-    }
-
-    private synchronized void decrementCounter(K key, V value) {
-        OperationType type = OperationType.getFromValue(value);
-        Map<K, Integer> map = getMap(type);
-        Integer counter = map.get(key) - 1;
-        map.put(key, counter);
-
-        if (counter == 0) {
-            clean(key);
-        }
     }
 
     private void clean(K key) {
@@ -87,39 +112,6 @@ public class CacheWriteQueue<K, V> {
             return toBeInvalidated;
         } else {
             return toBePut;
-        }
-    }
-
-    private class CacheWriteAction implements CacheAction {
-
-        private final K key;
-
-        private final V value;
-
-        private CacheWriteAction(K key, V value) {
-            this.key = key;
-            this.value = value;
-        }
-
-        @Override
-        public void execute() {
-            try {
-                cache.switchGenerationIfNeeded();
-                if (map != null) {
-                    if (value == null) {
-                        map.remove(key);
-                    } else {
-                        map.put(key, value);
-                    }
-                }
-            } finally {
-                decrementCounter(key, value);
-            }
-        }
-
-        @Override
-        public void cancel() {
-            decrementCounter(key, value);
         }
     }
 

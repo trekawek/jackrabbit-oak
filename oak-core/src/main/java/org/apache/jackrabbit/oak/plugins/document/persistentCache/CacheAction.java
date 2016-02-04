@@ -16,10 +16,14 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
-public interface CacheAction {
+public interface CacheAction<K, V> {
 
     void execute();
 
     void cancel();
+
+    Iterable<K> getAffectedKeys();
+
+    CacheWriteQueue<K, V> getOwner();
 
 }
