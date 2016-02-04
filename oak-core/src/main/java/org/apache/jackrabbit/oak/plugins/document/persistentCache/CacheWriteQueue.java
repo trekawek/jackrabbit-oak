@@ -58,7 +58,6 @@ class CacheWriteQueue<K, V> {
             action.cancel();
             Iterables.addAll(keys, action.getAffectedKeys());
         }
-        
         for (K key : keys) {
             incrementCounter(key, null);
         }

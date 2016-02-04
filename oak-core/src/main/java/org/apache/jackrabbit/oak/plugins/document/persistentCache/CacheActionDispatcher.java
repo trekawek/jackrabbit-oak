@@ -68,8 +68,8 @@ public class CacheActionDispatcher implements Runnable {
     }
 
     @SuppressWarnings("rawtypes")
-    private Map<CacheWriteQueue, Collection<CacheAction>> groupByOwner(List<CacheAction> removed) {
-        return index(removed, new Function<CacheAction, CacheWriteQueue>() {
+    private Map<CacheWriteQueue, Collection<CacheAction>> groupByOwner(List<CacheAction> actions) {
+        return index(actions, new Function<CacheAction, CacheWriteQueue>() {
             @Override
             public CacheWriteQueue apply(CacheAction input) {
                 return input.getOwner();
@@ -80,7 +80,7 @@ public class CacheActionDispatcher implements Runnable {
     @SuppressWarnings("rawtypes")
     private List<CacheAction> removeOldest() {
         List<CacheAction> removed = new ArrayList<CacheAction>();
-        while (queue.size() >= MAX_SIZE - ACTIONS_TO_REMOVE) {
+        while (queue.size() > MAX_SIZE - ACTIONS_TO_REMOVE) {
             CacheAction toBeCanceled = queue.poll();
             if (toBeCanceled == null) {
                 break;

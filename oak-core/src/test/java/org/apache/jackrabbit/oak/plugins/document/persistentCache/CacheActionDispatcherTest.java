@@ -18,30 +18,49 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
+import static com.google.common.collect.Iterables.size;
+import static java.lang.String.valueOf;
 import static java.lang.System.currentTimeMillis;
 import static java.lang.Thread.sleep;
+import static org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheActionDispatcher.ACTIONS_TO_REMOVE;
 import static org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheActionDispatcher.MAX_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
 import org.junit.Test;
+import org.mockito.Mockito;
 
 public class CacheActionDispatcherTest {
 
     @Test
     public void testMaxQueueSize() {
-        CacheActionDispatcher queue = new CacheActionDispatcher();
+        CacheActionDispatcher dispatcher = new CacheActionDispatcher();
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        CacheWriteQueue<String, Object> queue = new CacheWriteQueue(dispatcher, mock(PersistentCache.class), new MultiGenerationMap());
+
         for (int i = 0; i < MAX_SIZE + 10; i++) {
-            queue.addAction(createWriteAction(Integer.toString(i)));
+            dispatcher.addAction(createWriteAction(valueOf(i), queue));
         }
-        assertEquals(MAX_SIZE, queue.queue.size());
-        assertEquals("10", queue.queue.peek().toString());
+        assertEquals(MAX_SIZE - ACTIONS_TO_REMOVE + 10 + 1, dispatcher.queue.size());
+        assertEquals(valueOf(ACTIONS_TO_REMOVE), dispatcher.queue.peek().toString());
+
+        InvalidateAllCacheAction<?, ?> invalidateAction = null;
+        for (CacheAction<?, ?> action : dispatcher.queue) {
+            if (action instanceof InvalidateAllCacheAction) {
+                invalidateAction = (InvalidateAllCacheAction<?, ?>) action;
+            }
+        }
+        assertNotNull(invalidateAction);
+        assertEquals(ACTIONS_TO_REMOVE, size(invalidateAction.getAffectedKeys()));
     }
 
     @Test
@@ -49,6 +68,8 @@ public class CacheActionDispatcherTest {
         final int threads = 5;
         final int actionsPerThread = 100;
 
+        @SuppressWarnings("unchecked")
+        final CacheWriteQueue<String, Object> queue = Mockito.mock(CacheWriteQueue.class);
         final CacheActionDispatcher dispatcher = new CacheActionDispatcher();
         Thread queueThread = new Thread(dispatcher);
         queueThread.start();
@@ -58,7 +79,7 @@ public class CacheActionDispatcherTest {
         for (int i = 0; i < threads; i++) {
             final List<DummyCacheWriteAction> threadActions = new ArrayList<DummyCacheWriteAction>();
             for (int j = 0; j < actionsPerThread; j++) {
-                DummyCacheWriteAction action = new DummyCacheWriteAction(String.format("%d_%d", i, j));
+                DummyCacheWriteAction action = new DummyCacheWriteAction(String.format("%d_%d", i, j), queue);
                 threadActions.add(action);
                 allActions.add(action);
             }
@@ -98,11 +119,13 @@ public class CacheActionDispatcherTest {
         assertFalse(queueThread.isAlive());
     }
 
-    private static DummyCacheWriteAction createWriteAction(String id) {
-        return new DummyCacheWriteAction(id);
+    private DummyCacheWriteAction createWriteAction(String id, CacheWriteQueue<String, Object> queue) {
+        return new DummyCacheWriteAction(id, queue);
     }
 
-    private static class DummyCacheWriteAction implements CacheAction {
+    private class DummyCacheWriteAction implements CacheAction<String, Object> {
+
+        private final CacheWriteQueue<String, Object> queue;
 
         private final String id;
 
@@ -110,7 +133,8 @@ public class CacheActionDispatcherTest {
 
         private volatile boolean finished;
 
-        private DummyCacheWriteAction(String id) {
+        private DummyCacheWriteAction(String id, CacheWriteQueue<String, Object> queue) {
+            this.queue = queue;
             this.id = id;
             this.random = new Random();
         }
@@ -134,5 +158,14 @@ public class CacheActionDispatcherTest {
             return id;
         }
 
+        @Override
+        public Iterable<String> getAffectedKeys() {
+            return Collections.singleton(id);
+        }
+
+        @Override
+        public CacheWriteQueue<String, Object> getOwner() {
+            return queue;
+        }
     }
 }
