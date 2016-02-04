@@ -21,6 +21,8 @@ import java.util.Map;
 
 public class CacheWriteQueue<K, V> {
 
+    private final boolean immutableValues;
+
     private final CacheActionDispatcher dispatcher;
 
     private final NodeCache<K, V> nodeCache;
@@ -31,7 +33,8 @@ public class CacheWriteQueue<K, V> {
 
     private final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
 
-    public CacheWriteQueue(CacheActionDispatcher dispatcher, NodeCache<K, V> nodeCache) {
+    public CacheWriteQueue(CacheActionDispatcher dispatcher, NodeCache<K, V> nodeCache, boolean immutableValues) {
+        this.immutableValues = immutableValues;
         this.dispatcher = dispatcher;
         this.nodeCache = nodeCache;
     }
@@ -48,7 +51,7 @@ public class CacheWriteQueue<K, V> {
 
     private synchronized boolean increaseCounter(K key, V value) {
         OperationType type = OperationType.getFromValue(value);
-        if (type == finalOp.get(key)) {
+        if (immutableValues && type == finalOp.get(key)) {
             return false;
         }
         Map<K, Integer> map = getMap(type);
@@ -111,7 +114,7 @@ public class CacheWriteQueue<K, V> {
 
         @Override
         public void execute() {
-            if (isFinalOperation(key, value)) {
+            if (!immutableValues || isFinalOperation(key, value)) {
                 nodeCache.syncWrite(key, value);
             }
             decreaseCounter(key, value);

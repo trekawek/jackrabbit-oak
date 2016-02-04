@@ -248,5 +248,9 @@ public enum CacheType {
     public abstract <V> V valueFromString(
             DocumentNodeStore store, DocumentStore docStore, String value);
 
+    public boolean hasImmutableValues() {
+        return true;
+    }
+
 }
 
