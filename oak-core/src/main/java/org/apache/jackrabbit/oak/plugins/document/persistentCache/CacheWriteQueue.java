@@ -48,9 +48,6 @@ public class CacheWriteQueue<K, V> {
 
     private synchronized boolean increaseCounter(K key, V value) {
         OperationType type = OperationType.getFromValue(value);
-        if (type == finalOp.get(key)) {
-            return false;
-        }
         Map<K, Integer> map = getMap(type);
         Integer counter = map.get(key);
         if (counter == null) {
@@ -70,12 +67,6 @@ public class CacheWriteQueue<K, V> {
         if (counter == 0) {
             clean(key);
         }
-    }
-
-    private synchronized boolean isFinalOperation(K key, V value) {
-        OperationType type = OperationType.getFromValue(value);
-        OperationType lastAddedOp = finalOp.get(key);
-        return type == lastAddedOp && getMap(type).get(key) == 1;
     }
 
     private void clean(K key) {
@@ -111,9 +102,7 @@ public class CacheWriteQueue<K, V> {
 
         @Override
         public void execute() {
-            if (isFinalOperation(key, value)) {
-                nodeCache.syncWrite(key, value);
-            }
+            nodeCache.syncWrite(key, value);
             decreaseCounter(key, value);
         }
 
