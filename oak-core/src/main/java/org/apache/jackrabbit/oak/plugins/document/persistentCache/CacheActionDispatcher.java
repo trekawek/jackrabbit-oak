@@ -61,7 +61,7 @@ public class CacheActionDispatcher implements Runnable {
      *
      * @param action to be added
      */
-    public void add(CacheAction<?, ?> action) {
+    public synchronized void add(CacheAction<?, ?> action) {
         if (queue.size() >= MAX_SIZE) {
             cleanTheQueue();
         }
