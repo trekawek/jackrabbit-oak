@@ -18,6 +18,7 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
+import static java.util.Collections.singleton;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -117,13 +118,13 @@ public class CacheWriteQueueTest {
     public void testWaitsForInvalidation() {
         assertFalse(queue.waitsForInvalidation("key"));
 
-        queue.addPut("key", null);
+        queue.addInvalidate(singleton("key"));
         assertTrue(queue.waitsForInvalidation("key"));
 
         queue.addPut("key", new Object());
         assertFalse(queue.waitsForInvalidation("key"));
 
-        queue.addPut("key", null);
+        queue.addInvalidate(singleton("key"));
         assertTrue(queue.waitsForInvalidation("key"));
 
         int i;
