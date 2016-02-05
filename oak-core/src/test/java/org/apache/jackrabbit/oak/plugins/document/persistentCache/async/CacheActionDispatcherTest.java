@@ -16,14 +16,14 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.persistentCache;
+package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import static com.google.common.collect.Iterables.size;
 import static java.lang.String.valueOf;
 import static java.lang.System.currentTimeMillis;
 import static java.lang.Thread.sleep;
-import static org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheActionDispatcher.ACTIONS_TO_REMOVE;
-import static org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheActionDispatcher.MAX_SIZE;
+import static org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher.ACTIONS_TO_REMOVE;
+import static org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher.MAX_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -36,6 +36,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheAction;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheWriteQueue;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.InvalidateCacheAction;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -45,7 +50,7 @@ public class CacheActionDispatcherTest {
     public void testMaxQueueSize() {
         CacheActionDispatcher dispatcher = new CacheActionDispatcher();
         @SuppressWarnings({ "unchecked", "rawtypes" })
-        CacheWriteQueue<String, Object> queue = new CacheWriteQueue(dispatcher, mock(PersistentCache.class), new MultiGenerationMap());
+        CacheWriteQueue<String, Object> queue = new CacheWriteQueue(dispatcher, mock(PersistentCache.class), null);
 
         for (int i = 0; i < MAX_SIZE + 10; i++) {
             dispatcher.add(createWriteAction(valueOf(i), queue));

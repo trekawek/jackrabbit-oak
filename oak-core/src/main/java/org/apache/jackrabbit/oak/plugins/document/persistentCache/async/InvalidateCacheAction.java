@@ -14,17 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.persistentCache;
+package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
-import static java.util.Collections.singleton;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.MultiGenerationMap;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
 
 /**
- * Put to cache action
+ * An invalidate cache action.
  *
  * @param <K> key type
  * @param <V> value type
  */
-class PutToCacheAction<K, V> implements CacheAction<K, V> {
+class InvalidateCacheAction<K, V> implements CacheAction<K, V> {
 
     private final PersistentCache cache;
 
@@ -32,14 +33,11 @@ class PutToCacheAction<K, V> implements CacheAction<K, V> {
 
     private final CacheWriteQueue<K, V> owner;
 
-    private final K key;
+    private final Iterable<K> keys;
 
-    private final V value;
-
-    PutToCacheAction(CacheWriteQueue<K, V> cacheWriteQueue, K key, V value) {
+    InvalidateCacheAction(CacheWriteQueue<K, V> cacheWriteQueue, Iterable<K> keys) {
         this.owner = cacheWriteQueue;
-        this.key = key;
-        this.value = value;
+        this.keys = keys;
         this.cache = cacheWriteQueue.getCache();
         this.map = cacheWriteQueue.getMap();
     }
@@ -48,8 +46,10 @@ class PutToCacheAction<K, V> implements CacheAction<K, V> {
     public void execute() {
         try {
             if (map != null) {
-                cache.switchGenerationIfNeeded();
-                map.put(key, value);
+                for (K key : keys) {
+                    cache.switchGenerationIfNeeded();
+                    map.remove(key);
+                }
             }
         } finally {
             decrement();
@@ -61,10 +61,6 @@ class PutToCacheAction<K, V> implements CacheAction<K, V> {
         decrement();
     }
 
-    private void decrement() {
-        owner.remove(key);
-    }
-    
     @Override
     public CacheWriteQueue<K, V> getOwner() {
         return owner;
@@ -72,6 +68,12 @@ class PutToCacheAction<K, V> implements CacheAction<K, V> {
 
     @Override
     public Iterable<K> getAffectedKeys() {
-        return singleton(key);
+        return keys;
+    }
+
+    private void decrement() {
+        for (K key : keys) {
+            owner.remove(key);
+        }
     }
 }

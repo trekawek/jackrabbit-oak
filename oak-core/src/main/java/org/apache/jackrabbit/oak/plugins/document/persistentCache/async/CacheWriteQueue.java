@@ -14,12 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.persistentCache;
+package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.MultiGenerationMap;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
 
 /**
  * A fronted for the {@link CacheActionDispatcher} creating actions and maintaining their state.
@@ -27,7 +30,7 @@ import java.util.Set;
  * @param <K> key type
  * @param <V> value type
  */
-class CacheWriteQueue<K, V> {
+public class CacheWriteQueue<K, V> {
 
     private final CacheActionDispatcher dispatcher;
 
@@ -39,7 +42,7 @@ class CacheWriteQueue<K, V> {
 
     final Set<K> waitsForInvalidation = new HashSet<K>();
 
-    CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, MultiGenerationMap<K, V> map) {
+    public CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, MultiGenerationMap<K, V> map) {
         this.dispatcher = dispatcher;
         this.cache = cache;
         this.map = map;
@@ -50,7 +53,7 @@ class CacheWriteQueue<K, V> {
      *
      * @param keys to be invalidated
      */
-    void addInvalidate(Iterable<K> keys) {
+    public void addInvalidate(Iterable<K> keys) {
         synchronized(this) {
             for (K key : keys) {
                 incrementCounter(key);
@@ -66,7 +69,7 @@ class CacheWriteQueue<K, V> {
      * @param key to be put to cache
      * @param value to be put to cache
      */
-    void addPut(K key, V value) {
+    public void addPut(K key, V value) {
         synchronized(this) {
             incrementCounter(key);
             waitsForInvalidation.remove(key);
@@ -80,7 +83,7 @@ class CacheWriteQueue<K, V> {
      * @param key to check 
      * @return {@code true} if the last added action was invalidate
      */
-    synchronized boolean waitsForInvalidation(K key) {
+    public synchronized boolean waitsForInvalidation(K key) {
         return waitsForInvalidation.contains(key);
     }
 

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.persistentCache;
+package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import static com.google.common.collect.Multimaps.index;
 
@@ -56,18 +56,6 @@ public class CacheActionDispatcher implements Runnable {
 
     private volatile boolean isRunning = true;
 
-    /**
-     * Adds the new action and cleans the queue if necessary.
-     *
-     * @param action to be added
-     */
-    public synchronized void add(CacheAction<?, ?> action) {
-        if (queue.size() >= MAX_SIZE) {
-            cleanTheQueue();
-        }
-        queue.offer(action);
-    }
-
     @Override
     public void run() {
         while (isRunning) {
@@ -87,6 +75,18 @@ public class CacheActionDispatcher implements Runnable {
      */
     public void stop() {
         isRunning = false;
+    }
+
+    /**
+     * Adds the new action and cleans the queue if necessary.
+     *
+     * @param action to be added
+     */
+    synchronized void add(CacheAction<?, ?> action) {
+        if (queue.size() >= MAX_SIZE) {
+            cleanTheQueue();
+        }
+        queue.offer(action);
     }
 
     /**

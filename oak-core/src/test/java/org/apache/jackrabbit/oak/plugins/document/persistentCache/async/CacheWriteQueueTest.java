@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.jackrabbit.oak.plugins.document.persistentCache;
+package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -30,6 +30,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheAction;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheWriteQueue;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -106,30 +110,30 @@ public class CacheWriteQueueTest {
         }
 
         assertTrue(queue.counters.isEmpty());
-        assertTrue(queue.finalOp.isEmpty());
+        assertTrue(queue.waitsForInvalidation.isEmpty());
     }
 
     @Test
     public void testWaitsForInvalidation() {
-        assertFalse(queue.containsInvalidate("key"));
+        assertFalse(queue.waitsForInvalidation("key"));
 
         queue.addPut("key", null);
-        assertTrue(queue.containsInvalidate("key"));
+        assertTrue(queue.waitsForInvalidation("key"));
 
         queue.addPut("key", new Object());
-        assertFalse(queue.containsInvalidate("key"));
+        assertFalse(queue.waitsForInvalidation("key"));
 
         queue.addPut("key", null);
-        assertTrue(queue.containsInvalidate("key"));
+        assertTrue(queue.waitsForInvalidation("key"));
 
         int i;
         for (i = 0; i < actions.size() - 1; i++) {
             actions.get(i).execute();
-            assertTrue(queue.containsInvalidate("key"));
+            assertTrue(queue.waitsForInvalidation("key"));
         }
 
         actions.get(i).execute();
-        assertFalse(queue.containsInvalidate("key"));
+        assertFalse(queue.waitsForInvalidation("key"));
     }
 
 }
