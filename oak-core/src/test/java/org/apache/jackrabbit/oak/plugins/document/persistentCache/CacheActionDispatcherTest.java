@@ -48,15 +48,15 @@ public class CacheActionDispatcherTest {
         CacheWriteQueue<String, Object> queue = new CacheWriteQueue(dispatcher, mock(PersistentCache.class), new MultiGenerationMap());
 
         for (int i = 0; i < MAX_SIZE + 10; i++) {
-            dispatcher.addAction(createWriteAction(valueOf(i), queue));
+            dispatcher.add(createWriteAction(valueOf(i), queue));
         }
         assertEquals(MAX_SIZE - ACTIONS_TO_REMOVE + 10 + 1, dispatcher.queue.size());
         assertEquals(valueOf(ACTIONS_TO_REMOVE), dispatcher.queue.peek().toString());
 
-        InvalidateAllCacheAction<?, ?> invalidateAction = null;
+        InvalidateCacheAction<?, ?> invalidateAction = null;
         for (CacheAction<?, ?> action : dispatcher.queue) {
-            if (action instanceof InvalidateAllCacheAction) {
-                invalidateAction = (InvalidateAllCacheAction<?, ?>) action;
+            if (action instanceof InvalidateCacheAction) {
+                invalidateAction = (InvalidateCacheAction<?, ?>) action;
             }
         }
         assertNotNull(invalidateAction);
@@ -87,7 +87,7 @@ public class CacheActionDispatcherTest {
                 @Override
                 public void run() {
                     for (DummyCacheWriteAction a : threadActions) {
-                        dispatcher.addAction(a);
+                        dispatcher.add(a);
                     }
                 }
             });

@@ -16,12 +16,8 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-
-import com.google.common.collect.Iterables;
 
 class CacheWriteQueue<K, V> {
 
@@ -31,9 +27,7 @@ class CacheWriteQueue<K, V> {
 
     private final MultiGenerationMap<K, V> map;
 
-    final Map<K, Integer> toBeInvalidated = new HashMap<K, Integer>();
-
-    final Map<K, Integer> toBePut = new HashMap<K, Integer>();
+    final Map<K, Integer> counters = new HashMap<K, Integer>();
 
     final Map<K, OperationType> finalOp = new HashMap<K, OperationType>();
 
@@ -43,35 +37,35 @@ class CacheWriteQueue<K, V> {
         this.map = map;
     }
 
-    void addWrite(K key, V value) {
-        incrementCounter(key, value);
-        dispatcher.addAction(new CacheWriteAction<K, V>(this, key, value));
+    void addInvalidate(Iterable<K> keys) {
+        synchronized(this) {
+            for (K key : keys) {
+                incrementCounter(key);
+                finalOp.put(key, OperationType.INVALIDATE);
+            }
+        }
+        dispatcher.add(new InvalidateCacheAction<K, V>(this, keys));
     }
 
-    boolean waitsForInvalidation(K key) {
+    void addPut(K key, V value) {
+        synchronized(this) {
+            incrementCounter(key);
+            finalOp.put(key, OperationType.PUT);
+        }
+        dispatcher.add(new PutToCacheAction<K, V>(this, key, value));
+    }
+
+    synchronized boolean hasInvalidateOnTail(K key) {
         return finalOp.get(key) == OperationType.INVALIDATE;
     }
 
-    void cancelAll(Iterable<CacheAction<K, V>> actions) {
-        List<K> keys = new ArrayList<K>();
-        for (CacheAction<K, V> action : actions) {
-            action.cancel();
-            Iterables.addAll(keys, action.getAffectedKeys());
-        }
-        for (K key : keys) {
-            incrementCounter(key, null);
-        }
-        dispatcher.addAction(new InvalidateAllCacheAction<K, V>(this, keys));
-    }
-
-    synchronized void decrementCounter(K key, V value) {
-        OperationType type = OperationType.getFromValue(value);
-        Map<K, Integer> map = getMap(type);
-        Integer counter = map.get(key) - 1;
-        map.put(key, counter);
-
+    synchronized void remove(K key) {
+        Integer counter = counters.get(key) - 1;
         if (counter == 0) {
-            clean(key);
+            counters.remove(key);
+            finalOp.remove(key);
+        } else {
+            counters.put(key, counter);
         }
     }
 
@@ -83,42 +77,15 @@ class CacheWriteQueue<K, V> {
         return map;
     }
 
-    private synchronized void incrementCounter(K key, V value) {
-        OperationType type = OperationType.getFromValue(value);
-        Map<K, Integer> map = getMap(type);
-        Integer counter = map.get(key);
+    private void incrementCounter(K key) {
+        Integer counter = counters.get(key);
         if (counter == null) {
             counter = 0;
         }
-        map.put(key, ++counter);
-        finalOp.put(key, type);
-    }
-
-    private void clean(K key) {
-        if (toBeInvalidated.containsKey(key) && toBeInvalidated.get(key) > 0) {
-            return;
-        }
-        if (toBePut.containsKey(key) && toBePut.get(key) > 0) {
-            return;
-        }
-        toBeInvalidated.remove(key);
-        toBePut.remove(key);
-        finalOp.remove(key);
-    }
-
-    private Map<K, Integer> getMap(OperationType type) {
-        if (type == OperationType.INVALIDATE) {
-            return toBeInvalidated;
-        } else {
-            return toBePut;
-        }
+        counters.put(key, ++counter);
     }
 
     private static enum OperationType {
         INVALIDATE, PUT;
-
-        private static OperationType getFromValue(Object value) {
-            return value == null ? INVALIDATE : PUT;
-        }
     }
 }

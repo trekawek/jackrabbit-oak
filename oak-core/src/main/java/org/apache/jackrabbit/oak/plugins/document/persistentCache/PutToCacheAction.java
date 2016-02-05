@@ -18,7 +18,13 @@ package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
 import static java.util.Collections.singleton;
 
-class CacheWriteAction<K, V> implements CacheAction<K, V> {
+/**
+ * Put to cache action
+ *
+ * @param <K> key type
+ * @param <V> value type
+ */
+class PutToCacheAction<K, V> implements CacheAction<K, V> {
 
     private final PersistentCache cache;
 
@@ -30,7 +36,7 @@ class CacheWriteAction<K, V> implements CacheAction<K, V> {
 
     private final V value;
 
-    CacheWriteAction(CacheWriteQueue<K, V> cacheWriteQueue, K key, V value) {
+    PutToCacheAction(CacheWriteQueue<K, V> cacheWriteQueue, K key, V value) {
         this.owner = cacheWriteQueue;
         this.key = key;
         this.value = value;
@@ -41,13 +47,9 @@ class CacheWriteAction<K, V> implements CacheAction<K, V> {
     @Override
     public void execute() {
         try {
-            cache.switchGenerationIfNeeded();
             if (map != null) {
-                if (value == null) {
-                    map.remove(key);
-                } else {
-                    map.put(key, value);
-                }
+                cache.switchGenerationIfNeeded();
+                map.put(key, value);
             }
         } finally {
             decrement();
@@ -60,7 +62,7 @@ class CacheWriteAction<K, V> implements CacheAction<K, V> {
     }
 
     private void decrement() {
-        owner.decrementCounter(key, value);
+        owner.remove(key);
     }
     
     @Override

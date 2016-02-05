@@ -16,14 +16,36 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
+/**
+ * Object represents an action on the cache (eg. put or invalidate).
+ *
+ * @param <K> key type
+ * @param <V> value type
+ */
 public interface CacheAction<K, V> {
 
+    /**
+     * Execute the action
+     */
     void execute();
 
+    /**
+     * Cancel the action without executing it
+     */
     void cancel();
 
+    /**
+     * Return the keys affected by this action
+     *
+     * @return keys affected by this action
+     */
     Iterable<K> getAffectedKeys();
 
+    /**
+     * Return the owner of this action
+     *
+     * @return {@link CacheWriteQueue} executing this action
+     */
     CacheWriteQueue<K, V> getOwner();
 
 }

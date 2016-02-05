@@ -38,6 +38,7 @@ public class CacheWriteQueueTest {
 
     private CacheWriteQueue<String, Object> queue;
 
+    @SuppressWarnings("rawtypes")
     private List<CacheAction> actions = Collections.synchronizedList(new ArrayList<CacheAction>());
 
     @Before
@@ -45,7 +46,7 @@ public class CacheWriteQueueTest {
         actions.clear();
 
         CacheActionDispatcher dispatcher = new CacheActionDispatcher() {
-            public void addAction(CacheAction action) {
+            public void add(CacheAction<?, ?> action) {
                 actions.add(action);
             }
         };
@@ -59,12 +60,10 @@ public class CacheWriteQueueTest {
         final int threadCount = 10;
         final int actionsPerThread = 50;
 
-        final Map<String, AtomicInteger> invalidations = new HashMap<String, AtomicInteger>();
-        final Map<String, AtomicInteger> updates = new HashMap<String, AtomicInteger>();
+        final Map<String, AtomicInteger> counters = new HashMap<String, AtomicInteger>();
         for (int i = 0; i < 10; i++) {
             String key = "key_" + i;
-            invalidations.put(key, new AtomicInteger());
-            updates.put(key, new AtomicInteger());
+            counters.put(key, new AtomicInteger());
         }
 
         final Random random = new Random();
@@ -74,14 +73,13 @@ public class CacheWriteQueueTest {
                 @Override
                 public void run() {
                     for (int j = 0; j < actionsPerThread; j++) {
-                        for (String key : invalidations.keySet()) {
+                        for (String key : counters.keySet()) {
                             if (random.nextBoolean()) {
-                                queue.addWrite(key, null);
-                                invalidations.get(key).incrementAndGet();
+                                queue.addPut(key, null);
                             } else {
-                                queue.addWrite(key, new Object());
-                                updates.get(key).incrementAndGet();
+                                queue.addPut(key, new Object());
                             }
+                            counters.get(key).incrementAndGet();
                         }
                     }
                 }
@@ -95,12 +93,11 @@ public class CacheWriteQueueTest {
         for (Thread t : threads) {
             t.join();
         }
-        for (String key : invalidations.keySet()) {
-            assertEquals(queue.toBeInvalidated.get(key).intValue(), invalidations.get(key).get());
-            assertEquals(queue.toBePut.get(key).intValue(), updates.get(key).get());
+        for (String key : counters.keySet()) {
+            assertEquals(queue.counters.get(key).intValue(), counters.get(key).get());
         }
 
-        for (CacheAction action : actions) {
+        for (CacheAction<?, ?> action : actions) {
             if (random.nextBoolean()) {
                 action.execute();
             } else {
@@ -108,32 +105,31 @@ public class CacheWriteQueueTest {
             }
         }
 
-        assertTrue(queue.toBeInvalidated.isEmpty());
-        assertTrue(queue.toBePut.isEmpty());
+        assertTrue(queue.counters.isEmpty());
         assertTrue(queue.finalOp.isEmpty());
     }
 
     @Test
     public void testWaitsForInvalidation() {
-        assertFalse(queue.waitsForInvalidation("key"));
+        assertFalse(queue.containsInvalidate("key"));
 
-        queue.addWrite("key", null);
-        assertTrue(queue.waitsForInvalidation("key"));
+        queue.addPut("key", null);
+        assertTrue(queue.containsInvalidate("key"));
 
-        queue.addWrite("key", new Object());
-        assertFalse(queue.waitsForInvalidation("key"));
+        queue.addPut("key", new Object());
+        assertFalse(queue.containsInvalidate("key"));
 
-        queue.addWrite("key", null);
-        assertTrue(queue.waitsForInvalidation("key"));
+        queue.addPut("key", null);
+        assertTrue(queue.containsInvalidate("key"));
 
         int i;
         for (i = 0; i < actions.size() - 1; i++) {
             actions.get(i).execute();
-            assertTrue(queue.waitsForInvalidation("key"));
+            assertTrue(queue.containsInvalidate("key"));
         }
 
         actions.get(i).execute();
-        assertFalse(queue.waitsForInvalidation("key"));
+        assertFalse(queue.containsInvalidate("key"));
     }
 
 }

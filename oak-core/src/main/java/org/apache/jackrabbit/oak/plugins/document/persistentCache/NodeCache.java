@@ -16,6 +16,8 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
+import static java.util.Collections.singleton;
+
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -86,16 +88,12 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     }
     
     private V readIfPresent(K key) {
-        if (writerQueue.waitsForInvalidation(key)) {
+        if (writerQueue.hasInvalidateOnTail(key)) {
             return null;
         }
         cache.switchGenerationIfNeeded();
         V v = map.get(key);
         return v;
-    }
-    
-    private void write(final K key, final V value) {
-        writerQueue.addWrite(key, value);
     }
 
     private void broadcast(final K key, final V value) {
@@ -159,7 +157,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        write((K) key, (V) null);
+        writerQueue.addInvalidate(singleton((K) key));
         broadcast((K) key, null);
     }
 
@@ -218,7 +216,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
      */
     @Override
     public void evicted(K key, V value) {
-        write(key, value);
+        writerQueue.addPut(key, value);
     }
 
 }

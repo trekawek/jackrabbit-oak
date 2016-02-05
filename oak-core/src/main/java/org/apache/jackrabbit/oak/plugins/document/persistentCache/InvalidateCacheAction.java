@@ -16,7 +16,13 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
-class InvalidateAllCacheAction<K, V> implements CacheAction<K, V> {
+/**
+ * An invalidate cache action.
+ *
+ * @param <K> key type
+ * @param <V> value type
+ */
+class InvalidateCacheAction<K, V> implements CacheAction<K, V> {
 
     private final PersistentCache cache;
 
@@ -26,7 +32,7 @@ class InvalidateAllCacheAction<K, V> implements CacheAction<K, V> {
 
     private final Iterable<K> keys;
 
-    InvalidateAllCacheAction(CacheWriteQueue<K, V> cacheWriteQueue, Iterable<K> keys) {
+    InvalidateCacheAction(CacheWriteQueue<K, V> cacheWriteQueue, Iterable<K> keys) {
         this.owner = cacheWriteQueue;
         this.keys = keys;
         this.cache = cacheWriteQueue.getCache();
@@ -54,7 +60,7 @@ class InvalidateAllCacheAction<K, V> implements CacheAction<K, V> {
 
     private void decrement() {
         for (K key : keys) {
-            owner.decrementCounter(key, null);
+            owner.remove(key);
         }
     }
 

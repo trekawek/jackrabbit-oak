@@ -31,7 +31,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
 
+/**
+ * An asynchronous buffer of the CacheAction objects. The buffer removes
+ * {@link #ACTIONS_TO_REMOVE} oldest entries if the queue length is larger than
+ * {@link #MAX_SIZE}.
+ */
 public class CacheActionDispatcher implements Runnable {
 
     private static final Logger LOG = LoggerFactory.getLogger(CacheActionDispatcher.class);
@@ -50,45 +56,16 @@ public class CacheActionDispatcher implements Runnable {
 
     private volatile boolean isRunning = true;
 
-    public void addAction(CacheAction<?, ?> action) {
+    /**
+     * Adds the new action and cleans the queue if necessary.
+     *
+     * @param action to be added
+     */
+    public void add(CacheAction<?, ?> action) {
         if (queue.size() >= MAX_SIZE) {
             cleanTheQueue();
         }
         queue.offer(action);
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void cleanTheQueue() {
-        List<CacheAction> removed = removeOldest();
-        for (Entry<CacheWriteQueue, Collection<CacheAction>> e : groupByOwner(removed).entrySet()) {
-            CacheWriteQueue owner = e.getKey();
-            Collection<CacheAction> actions = e.getValue();
-            owner.cancelAll((Iterable) actions);
-        }
-    }
-
-    @SuppressWarnings("rawtypes")
-    private Map<CacheWriteQueue, Collection<CacheAction>> groupByOwner(List<CacheAction> actions) {
-        return index(actions, new Function<CacheAction, CacheWriteQueue>() {
-            @Override
-            public CacheWriteQueue apply(CacheAction input) {
-                return input.getOwner();
-            }
-        }).asMap();
-    }
-
-    @SuppressWarnings("rawtypes")
-    private List<CacheAction> removeOldest() {
-        List<CacheAction> removed = new ArrayList<CacheAction>();
-        while (queue.size() > MAX_SIZE - ACTIONS_TO_REMOVE) {
-            CacheAction toBeCanceled = queue.poll();
-            if (toBeCanceled == null) {
-                break;
-            } else {
-                removed.add(toBeCanceled);
-            }
-        }
-        return removed;
     }
 
     @Override
@@ -105,7 +82,75 @@ public class CacheActionDispatcher implements Runnable {
         }
     }
 
+    /**
+     * Stop the processing.
+     */
     public void stop() {
         isRunning = false;
+    }
+
+    /**
+     * Clean the queue and add a single invalidate action for all the removed entries. 
+     */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private void cleanTheQueue() {
+        List<CacheAction> removed = removeOldest();
+        for (Entry<CacheWriteQueue, Collection<CacheAction>> e : groupByOwner(removed).entrySet()) {
+            CacheWriteQueue owner = e.getKey();
+            Collection<CacheAction> actions = e.getValue();
+            List<Object> affectedKeys = cancelAll(actions);
+            owner.addInvalidate(affectedKeys);
+        }
+    }
+
+    /**
+     * Remove {@link #ACTIONS_TO_REMOVE} oldest actions.
+     *
+     * @return A list of removed items.
+     */
+    @SuppressWarnings("rawtypes")
+    private List<CacheAction> removeOldest() {
+        List<CacheAction> removed = new ArrayList<CacheAction>();
+        while (queue.size() > MAX_SIZE - ACTIONS_TO_REMOVE) {
+            CacheAction toBeCanceled = queue.poll();
+            if (toBeCanceled == null) {
+                break;
+            } else {
+                removed.add(toBeCanceled);
+            }
+        }
+        return removed;
+    }
+
+    /**
+     * Group passed actions by their owners.
+     *
+     * @param actions to be grouped
+     * @return map in which owner is the key and assigned action list is the value
+     */
+    @SuppressWarnings("rawtypes")
+    private Map<CacheWriteQueue, Collection<CacheAction>> groupByOwner(List<CacheAction> actions) {
+        return index(actions, new Function<CacheAction, CacheWriteQueue>() {
+            @Override
+            public CacheWriteQueue apply(CacheAction input) {
+                return input.getOwner();
+            }
+        }).asMap();
+    }
+
+    /**
+     * Cancel all passed actions.
+     *
+     * @param actions to cancel
+     * @return list of affected keys
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private List<Object> cancelAll(Collection<CacheAction> actions) {
+        List<Object> cancelledKeys = new ArrayList<Object>();
+        for (CacheAction action : actions) {
+            action.cancel();
+            Iterables.addAll(cancelledKeys, action.getAffectedKeys());
+        }
+        return cancelledKeys;
     }
 }
