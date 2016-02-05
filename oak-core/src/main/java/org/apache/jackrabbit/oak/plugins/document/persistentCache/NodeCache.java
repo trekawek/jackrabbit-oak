@@ -88,7 +88,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     }
     
     private V readIfPresent(K key) {
-        if (writerQueue.hasInvalidateOnTail(key)) {
+        if (writerQueue.waitsForInvalidation(key)) {
             return null;
         }
         cache.switchGenerationIfNeeded();
