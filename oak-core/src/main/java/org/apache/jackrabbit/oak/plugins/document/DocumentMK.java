@@ -1083,9 +1083,11 @@ public class DocumentMK {
                         recordStats().
                         evictionCallback(new EvictionCallback<K, V>() {
                             @Override
-                            public void evicted(K key, V value) {
-                                for (EvictionListener<K, V> l : listeners) {
-                                    l.evicted(key, value);
+                            public void evicted(K key, V value, RemovalCause cause) {
+                                if (EnumSet.of(COLLECTED, EXPIRED, SIZE).contains(cause)) {
+                                    for (EvictionListener<K, V> l : listeners) {
+                                        l.evicted(key, value);
+                                    }
                                 }
                             }
                         }).
