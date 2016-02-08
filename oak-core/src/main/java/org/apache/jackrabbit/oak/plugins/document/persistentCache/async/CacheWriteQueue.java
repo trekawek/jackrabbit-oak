@@ -16,13 +16,14 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.MultiGenerationMap;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
+
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
 
 /**
  * A fronted for the {@link CacheActionDispatcher} creating actions and maintaining their state.
@@ -38,7 +39,7 @@ public class CacheWriteQueue<K, V> {
 
     private final MultiGenerationMap<K, V> map;
 
-    final Map<K, Integer> counters = new HashMap<K, Integer>();
+    final Multiset<K> queuedKeys = HashMultiset.create();
 
     final Set<K> waitsForInvalidation = new HashSet<K>();
 
@@ -56,7 +57,7 @@ public class CacheWriteQueue<K, V> {
     public void addInvalidate(Iterable<K> keys) {
         synchronized(this) {
             for (K key : keys) {
-                incrementCounter(key);
+                queuedKeys.add(key);
                 waitsForInvalidation.add(key);
             }
         }
@@ -71,7 +72,7 @@ public class CacheWriteQueue<K, V> {
      */
     public void addPut(K key, V value) {
         synchronized(this) {
-            incrementCounter(key);
+            queuedKeys.add(key);
             waitsForInvalidation.remove(key);
         }
         dispatcher.add(new PutToCacheAction<K, V>(this, key, value));
@@ -93,12 +94,9 @@ public class CacheWriteQueue<K, V> {
      * @param key to be removed
      */
     synchronized void remove(K key) {
-        Integer counter = counters.get(key) - 1;
-        if (counter == 0) {
-            counters.remove(key);
+        queuedKeys.remove(key);
+        if (!queuedKeys.contains(key)) {
             waitsForInvalidation.remove(key);
-        } else {
-            counters.put(key, counter);
         }
     }
 
@@ -108,13 +106,5 @@ public class CacheWriteQueue<K, V> {
 
     MultiGenerationMap<K, V> getMap() {
         return map;
-    }
-
-    private void incrementCounter(K key) {
-        Integer counter = counters.get(key);
-        if (counter == null) {
-            counter = 0;
-        }
-        counters.put(key, ++counter);
     }
 }

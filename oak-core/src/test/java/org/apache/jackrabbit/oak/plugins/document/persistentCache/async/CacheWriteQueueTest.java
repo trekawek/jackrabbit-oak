@@ -99,7 +99,7 @@ public class CacheWriteQueueTest {
             t.join();
         }
         for (String key : counters.keySet()) {
-            assertEquals(queue.counters.get(key).intValue(), counters.get(key).get());
+            assertEquals(queue.queuedKeys.count(key), counters.get(key).get());
         }
 
         for (CacheAction<?, ?> action : actions) {
@@ -110,7 +110,7 @@ public class CacheWriteQueueTest {
             }
         }
 
-        assertTrue(queue.counters.isEmpty());
+        assertTrue(queue.queuedKeys.isEmpty());
         assertTrue(queue.waitsForInvalidation.isEmpty());
     }
 
