@@ -1084,10 +1084,8 @@ public class DocumentMK {
                         evictionCallback(new EvictionCallback<K, V>() {
                             @Override
                             public void evicted(K key, V value, RemovalCause cause) {
-                                if (EnumSet.of(COLLECTED, EXPIRED, SIZE).contains(cause)) {
-                                    for (EvictionListener<K, V> l : listeners) {
-                                        l.evicted(key, value);
-                                    }
+                                for (EvictionListener<K, V> l : listeners) {
+                                    l.evicted(key, value, cause);
                                 }
                             }
                         }).
@@ -1101,11 +1099,8 @@ public class DocumentMK {
                     removalListener(new RemovalListener<K, V>() {
                         @Override
                         public void onRemoval(RemovalNotification<K, V> notification) {
-                            RemovalCause cause = notification.getCause();
-                            if (EnumSet.of(COLLECTED, EXPIRED, SIZE).contains(cause)) {
-                                for (EvictionListener<K, V> l : listeners) {
-                                    l.evicted(notification.getKey(), notification.getValue());
-                                }
+                            for (EvictionListener<K, V> l : listeners) {
+                                l.evicted(notification.getKey(), notification.getValue(), notification.getCause());
                             }
                         }
                     }).

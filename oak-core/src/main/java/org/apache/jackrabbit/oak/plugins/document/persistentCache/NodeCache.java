@@ -16,10 +16,14 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
+import static com.google.common.cache.RemovalCause.COLLECTED;
+import static com.google.common.cache.RemovalCause.EXPIRED;
+import static com.google.common.cache.RemovalCause.SIZE;
 import static java.util.Collections.singleton;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -38,9 +42,13 @@ import org.h2.mvstore.type.DataType;
 import com.google.common.base.Function;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheStats;
+import com.google.common.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 
 class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<K, V> {
+    
+    private static final Set<RemovalCause> EVICTION_CAUSES = ImmutableSet.of(COLLECTED, EXPIRED, SIZE);
     
     private final PersistentCache cache;
     private final Cache<K, V> memCache;
@@ -217,8 +225,10 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
      * Invoked on the eviction from the {@link #memCache}
      */
     @Override
-    public void evicted(K key, V value) {
-        writerQueue.addPut(key, value);
+    public void evicted(K key, V value, RemovalCause cause) {
+        if (EVICTION_CAUSES.contains(cause) && value != null) { // invalidations are handled separately
+            writerQueue.addPut(key, value);
+        }
     }
 
 }

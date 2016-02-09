@@ -16,8 +16,10 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
+import com.google.common.cache.RemovalCause;
+
 public interface EvictionListener<K, V> {
 
-    void evicted(K key, V value);
+    void evicted(K key, V value, RemovalCause removalCause);
 
 }
