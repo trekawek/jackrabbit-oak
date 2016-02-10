@@ -17,9 +17,9 @@
 package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
-import org.apache.jackrabbit.oak.plugins.document.persistentCache.MultiGenerationMap;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
 
 import com.google.common.collect.HashMultiset;
@@ -37,13 +37,13 @@ public class CacheWriteQueue<K, V> {
 
     private final PersistentCache cache;
 
-    private final MultiGenerationMap<K, V> map;
+    private final Map<K, V> map;
 
     final Multiset<K> queuedKeys = HashMultiset.create();
 
     final Set<K> waitsForInvalidation = new HashSet<K>();
 
-    public CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, MultiGenerationMap<K, V> map) {
+    public CacheWriteQueue(CacheActionDispatcher dispatcher, PersistentCache cache, Map<K, V> map) {
         this.dispatcher = dispatcher;
         this.cache = cache;
         this.map = map;
@@ -104,7 +104,7 @@ public class CacheWriteQueue<K, V> {
         return cache;
     }
 
-    MultiGenerationMap<K, V> getMap() {
+    Map<K, V> getMap() {
         return map;
     }
 }

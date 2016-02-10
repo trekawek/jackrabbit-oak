@@ -18,7 +18,8 @@ package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import static java.util.Collections.singleton;
 
-import org.apache.jackrabbit.oak.plugins.document.persistentCache.MultiGenerationMap;
+import java.util.Map;
+
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
 
 /**
@@ -31,7 +32,7 @@ class PutToCacheAction<K, V> implements CacheAction<K, V> {
 
     private final PersistentCache cache;
 
-    private final MultiGenerationMap<K, V> map;
+    private final Map<K, V> map;
 
     private final CacheWriteQueue<K, V> owner;
 

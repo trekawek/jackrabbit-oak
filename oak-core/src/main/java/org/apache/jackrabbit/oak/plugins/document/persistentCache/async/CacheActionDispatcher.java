@@ -68,6 +68,7 @@ public class CacheActionDispatcher implements Runnable {
                 LOG.debug("Interrupted the queue.poll()", e);
             }
         }
+        applyInvalidateActions();
     }
 
     /**
@@ -153,4 +154,16 @@ public class CacheActionDispatcher implements Runnable {
         }
         return cancelledKeys;
     }
+
+    @SuppressWarnings("rawtypes")
+    private void applyInvalidateActions() {
+        CacheAction action;
+        do {
+            action = queue.poll();
+            if (action instanceof InvalidateCacheAction) {
+                action.execute();
+            }
+        } while (action != null);
+    }
+
 }
