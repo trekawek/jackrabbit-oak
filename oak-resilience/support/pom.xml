@@ -24,17 +24,34 @@
         <groupId>org.apache.jackrabbit</groupId>
         <artifactId>oak-parent</artifactId>
         <version>1.4-SNAPSHOT</version>
-        <relativePath>../oak-parent/pom.xml</relativePath>
+        <relativePath>../../oak-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>oak-resilience</artifactId>
-    <packaging>pom</packaging>
+    <artifactId>oak-resilience-support</artifactId>
+    <packaging>jar</packaging>
 
-    <name>Oak Resilience Testing Framework</name>
+    <name>Oak Resilience Support</name>
 
-    <modules>
-      <module>it</module>
-      <module>it-remote</module>
-      <module>support</module>
-    </modules>
+    <dependencies>
+        <!-- logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- commons -->
+        <dependency>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.4</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+    </dependencies>
 </project>
