@@ -18,6 +18,8 @@ package org.apache.jackrabbit.oak.resilience;
 
 import java.io.IOException;
 
+import org.apache.jackrabbit.oak.resilience.vagrant.RemoteProcess;
+
 public interface VM {
 
     void init() throws IOException;
@@ -32,6 +34,7 @@ public interface VM {
 
     String copyJar(String groupId, String artifactId, String version) throws IOException;
 
-    void runClass(String jar, String className, String... args) throws IOException;
+    RemoteProcess runClass(String jar, String className, String... args) throws IOException;
 
+    RemoteProcess runJunit(String jar, String testClassName) throws IOException;
 }

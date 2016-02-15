@@ -17,21 +17,28 @@
 package org.apache.jackrabbit.oak.resilience.vagrant;
 
 import java.io.IOException;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.jackrabbit.oak.resilience.VM;
 import org.apache.jackrabbit.oak.resilience.remote.RemoteTest;
+import org.apache.jackrabbit.oak.resilience.remote.UnitTest;
 import org.junit.Test;
 
 public class VagrantVMTest {
 
     @Test
-    public void test() throws IOException {
+    public void test() throws IOException, TimeoutException {
         VM vm = new VagrantVM.Builder().setVagrantFile("../vagrant/package.box").build();
         vm.init();
         vm.start();
 
         String jar = vm.copyJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
-        vm.runClass(jar, RemoteTest.class.getName());
+        RemoteProcess process = vm.runClass(jar, RemoteTest.class.getName());
+        process.waitForMessage("that's fine", 10);
+        process.waitFor();
+
+        RemoteProcess test = vm.runJunit(jar, UnitTest.class.getName());
+        test.waitFor();
 
         vm.stop();
         vm.destroy();

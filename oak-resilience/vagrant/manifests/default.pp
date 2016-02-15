@@ -1,1 +1,1 @@
-class { 'jdk_oracle': }
+include 'jdk_oracle'

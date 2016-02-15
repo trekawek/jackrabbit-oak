@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Map;
+import java.util.UUID;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -34,7 +35,7 @@ public class VagrantVM implements VM {
 
     private static final Logger LOG = LoggerFactory.getLogger(VagrantVM.class);
 
-    private final String vagrantExecutable;
+    final String vagrantExecutable;
 
     private final String extraPath;
 
@@ -89,25 +90,36 @@ public class VagrantVM implements VM {
     public String copyJar(String groupId, String artifactId, String version) throws IOException {
         String artifact = String.format("%s:%s:%s", groupId, artifactId, version);
         String outputName = String.format("%s-%s.jar", artifactId, version);
-        exec("mvn", "dependency:copy", "-Dartifact=" + artifact, "-DoutputDirectory=.");
+        exec("/usr/local/bin/mvn", "dependency:copy", "-Dartifact=" + artifact, "-DoutputDirectory=.");
 
         return outputName;
     }
 
     @Override
-    public void runClass(String jar, String className, String... args) throws IOException {
-        ssh(concat(a("java", "-cp", "/vagrant/" + jar, className), args));
+    public RemoteProcess runClass(String jar, String className, String... args) throws IOException {
+        String mqFile = String.format("%s-%s.txt", className, UUID.randomUUID().toString());
+        Process process = execProcess(concat(a(vagrantExecutable, "ssh", "--", "java", "-DMQ_FILE=/vagrant/" + mqFile,
+                "-cp", "/vagrant/" + jar, className), args));
+        return new RemoteProcess(process, new File(workDir, mqFile));
     }
 
-    private int exec(String... cmd) throws IOException {
+    @Override
+    public RemoteProcess runJunit(String jar, String testClassName) throws IOException {
+        return runClass(jar, "org.junit.runner.JUnitCore", testClassName);
+    }
+
+    Process execProcess(String... cmd) throws IOException {
         LOG.info("$ {}", StringUtils.join(cmd, ' '));
         ProcessBuilder builder = new ProcessBuilder(cmd).redirectErrorStream(true).directory(workDir);
         Map<String, String> env = builder.environment();
         if (extraPath != null) {
             env.put("PATH", env.get("PATH") + ":" + extraPath);
         }
-        Process process = builder.start();
+        return builder.start();
+    }
 
+    private int exec(String... cmd) throws IOException {
+        Process process = execProcess(cmd);
         BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()));
         try {
             String line;
