@@ -33,11 +33,11 @@ public class VagrantVMTest {
         vm.start();
 
         String jar = vm.copyJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
-        RemoteProcess process = vm.runClass(jar, RemoteTest.class.getName());
+        RemoteProcess process = vm.runClass(jar, RemoteTest.class.getName(), null);
         process.waitForMessage("that's fine", 10);
         process.waitFor();
 
-        RemoteProcess test = vm.runJunit(jar, UnitTest.class.getName());
+        RemoteProcess test = vm.runJunit(jar, UnitTest.class.getName(), null);
         test.waitFor();
 
         vm.stop();
