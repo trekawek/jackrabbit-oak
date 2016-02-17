@@ -22,22 +22,33 @@ import static java.util.Arrays.asList;
 import static java.util.UUID.randomUUID;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.apache.commons.lang.StringUtils.join;
+import static org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner.MQ_TEST_ID;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import org.apache.jackrabbit.oak.resilience.VM;
+import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
+import org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class VagrantVM implements VM {
+import com.google.common.io.Files;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+
+public class VagrantVM {
 
     private static final Logger LOG = LoggerFactory.getLogger(VagrantVM.class);
 
@@ -45,7 +56,9 @@ public class VagrantVM implements VM {
 
     private static final String PATH = "PATH";
 
-    public static final String MQ_FILE = "MQ_FILE";
+    public static final String MQ_ID = "MQ_ID";
+
+    private static final Pattern PORT_PATTERN = Pattern.compile("^ *(\\d+) \\(guest\\) => (\\d+) \\(host\\)$");
 
     private final String vagrantExecutable;
 
@@ -53,56 +66,100 @@ public class VagrantVM implements VM {
 
     private final String extraPath;
 
-    private final File workDir;
-
     private final File vagrantFile;
 
+    private final Map<Integer, Integer> ports;
+
+    private File workDir;
+
+    private Connection connection;
+
+    private Channel channel;
+
     private VagrantVM(Builder builder) throws IOException {
-        if (builder.workDir == null) {
-            workDir = createTempDir();
-        } else {
-            workDir = builder.workDir;
-            workDir.mkdirs();
-        }
         vagrantExecutable = builder.vagrantExecutable;
         mavenExecutable = builder.mavenExecutable;
         extraPath = builder.extraPath;
         vagrantFile = builder.vagrantFile;
+        ports = new HashMap<Integer, Integer>();
+    }
+
+    public void init() throws IOException {
+        workDir = createTempDir();
+
         if (vagrantFile == null || !vagrantFile.exists()) {
             throw new IOException("Can't find Vagrantfile: " + vagrantFile);
         }
-    }
+        Files.copy(vagrantFile, new File(workDir, "Vagrantfile"));
 
-    @Override
-    public void init() throws IOException {
         LOG.info("Executable: {}", vagrantExecutable);
         LOG.info("Workdir: {}", workDir);
-        exec(vagrantExecutable, "init", vagrantFile.getAbsolutePath());
+        LOG.info("Vagrantfile: {}", vagrantFile);
     }
 
-    @Override
     public void start() throws IOException {
         exec(vagrantExecutable, "up");
+        discoverPorts();
+
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
+        factory.setPort(ports.get(5672));
+
+        try {
+            connection = factory.newConnection();
+        } catch (TimeoutException e) {
+            throw new IOException(e);
+        }
+        channel = connection.createChannel();
     }
 
-    @Override
+    private void discoverPorts() throws IOException {
+        ports.clear();
+
+        Process process = execProcess(vagrantExecutable, "port");
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            Matcher m = PORT_PATTERN.matcher(line);
+            if (m.matches()) {
+                String guest = m.group(1);
+                String host = m.group(2);
+                ports.put(Integer.valueOf(guest), Integer.valueOf(host));
+            }
+        }
+    }
+
+    public Integer getHostPort(int guestPort) {
+        return ports.get(guestPort);
+    }
+
     public void stop() throws IOException {
+        try {
+            if (channel.isOpen()) {
+                channel.close();
+            }
+        } catch (TimeoutException e) {
+            throw new IOException(e);
+        }
+        if (connection.isOpen()) {
+            connection.close();
+        }
         exec(vagrantExecutable, "halt");
     }
 
-    @Override
     public void destroy() throws IOException {
-        stop();
         exec(vagrantExecutable, "destroy", "--force");
         deleteQuietly(workDir);
     }
 
-    @Override
     public void ssh(String... command) throws IOException {
         exec(concat(a(vagrantExecutable, "ssh", "--"), command));
     }
 
-    @Override
+    public InputStream readFile(String path) throws IOException {
+        return execProcess(a(vagrantExecutable, "ssh", "--", "dd", "if=" + path)).getInputStream();
+    }
+
     public String copyJar(String groupId, String artifactId, String version) throws IOException {
         String artifact = format("%s:%s:%s", groupId, artifactId, version);
         String outputName = format("%s-%s.jar", artifactId, version);
@@ -110,13 +167,12 @@ public class VagrantVM implements VM {
         return outputName;
     }
 
-    @Override
     public RemoteProcess runClass(String jar, String className, Map<String, String> properties, String... args)
             throws IOException {
-        String mqFile = format("%s-%s.txt", className, randomUUID().toString());
+        String mqId = format("%s-%s", className, randomUUID().toString());
 
         Map<String, String> allProps = new HashMap<String, String>();
-        allProps.put(MQ_FILE, VAGRANT_PREFIX + mqFile);
+        allProps.put(MQ_ID, mqId);
         if (properties != null) {
             allProps.putAll(properties);
         }
@@ -131,12 +187,18 @@ public class VagrantVM implements VM {
         cmd.addAll(asList(args));
 
         Process process = execProcess(cmd.toArray(new String[0]));
-        return new RemoteProcess(process, new File(workDir, mqFile));
+        return new RemoteProcess(process, channel, mqId);
     }
 
-    @Override
-    public RemoteProcess runJunit(String jar, String testClassName, Map<String, String> properties) throws IOException {
-        return runClass(jar, "org.junit.runner.JUnitCore", properties, testClassName);
+    public JunitProcess runJunit(String jar, String testClassName, Map<String, String> properties) throws IOException {
+        String mqTestId = format("%s-%s", testClassName, randomUUID().toString());
+        Map<String, String> allProps = new HashMap<String, String>();
+        allProps.put(MQ_TEST_ID, mqTestId);
+        if (properties != null) {
+            allProps.putAll(properties);
+        }
+        runClass(jar, MqTestRunner.class.getName(), allProps, testClassName);
+        return new JunitProcess(channel, mqTestId);
     }
 
     private Process execProcess(String... cmd) throws IOException {
@@ -195,8 +257,6 @@ public class VagrantVM implements VM {
 
         private String extraPath = "/usr/local/bin";
 
-        private File workDir;
-
         private File vagrantFile = new File("Vagrantfile");
 
         public Builder setVagrantExecutable(String vagrantExecutable) {
@@ -211,11 +271,6 @@ public class VagrantVM implements VM {
 
         public Builder setExtraPath(String extraPath) {
             this.extraPath = extraPath;
-            return this;
-        }
-
-        public Builder setWorkDir(String workDir) {
-            this.workDir = new File(workDir);
             return this;
         }
 

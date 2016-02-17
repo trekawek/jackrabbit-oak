@@ -3,13 +3,16 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 import static java.lang.System.currentTimeMillis;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.QueueingConsumer;
+import com.rabbitmq.client.QueueingConsumer.Delivery;
 
 public class RemoteProcess {
 
@@ -19,14 +22,19 @@ public class RemoteProcess {
 
     private final BufferedReader stdoutReader;
 
-    private final BufferedReader mqReader;
+    private final QueueingConsumer consumer;
 
-    public RemoteProcess(Process process, File mqFile) throws IOException {
+    private final Channel channel;
+
+    public RemoteProcess(Process process, Channel channel, String mqId) throws IOException {
         this.process = process;
+        this.channel = channel;
+        this.consumer = new QueueingConsumer(channel);
 
-        mqFile.createNewFile();
+        channel.queueDeclare(mqId, false, false, false, null);
+        channel.basicConsume(mqId, consumer);
+
         this.stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        this.mqReader = new BufferedReader(new FileReader(mqFile));
     }
 
     public BufferedReader getStdout() {
@@ -38,33 +46,46 @@ public class RemoteProcess {
         while ((currentTimeMillis() - start) < durationSec * 1000) {
             logStdout(100);
 
-            String line = mqReader.readLine();
-            if (message.equals(line)) {
-                return true;
-            }
-
-            if (line != null) {
-                LOG.info("Got message: {}", line);
-                continue;
-            }
-
+            Delivery delivery;
             try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
+                delivery = consumer.nextDelivery(10);
+            } catch (Exception e) {
                 throw new IOException(e);
+            }
+            if (delivery == null) {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    throw new IOException(e);
+                }
+            } else {
+                String line = new String(delivery.getBody());
+                if (line != null) {
+                    LOG.info("Got message: {}", line);
+                }
+                channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+
+                if (message.equals(line)) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
     public String getMessage() throws IOException {
-        return mqReader.readLine();
+        try {
+            Delivery delivery = consumer.nextDelivery();
+            return new String(delivery.getBody());
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
 
-    public int waitFor() throws IOException {
+    public boolean waitForFinish() throws IOException {
         try {
-            logStdout(Integer.MAX_VALUE);
-            return process.waitFor();
+            logStdout(10000);
+            return process.waitFor(10, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             throw new IOException(e);
         }

@@ -16,34 +16,50 @@
  */
 package org.apache.jackrabbit.oak.resilience.remote;
 
-import static org.apache.jackrabbit.oak.resilience.vagrant.VagrantVM.MQ_FILE;
+import static org.apache.jackrabbit.oak.resilience.vagrant.VagrantVM.MQ_ID;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.PrintWriter;
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
 
-import org.apache.jackrabbit.oak.resilience.vagrant.VagrantVM;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
 
-public class MessageProducer {
+public class MessageProducer implements Closeable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MessageProducer.class);
+    private final Connection connection;
 
-    public static void write(String message) {
-        File file = new File(System.getProperty(MQ_FILE));
-        PrintWriter writer = null;
+    private final Channel channel;
+
+    private final String queueId;
+
+    public MessageProducer() throws IOException {
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
         try {
-            writer = new PrintWriter(new FileOutputStream(file, true));
-            writer.println(message);
-            writer.flush();
-        } catch (FileNotFoundException e) {
-            LOG.error("Can't write message", e);
-        } finally {
-            if (writer != null) {
-                writer.close();
-            }
+            connection = factory.newConnection();
+        } catch (TimeoutException e) {
+            throw new IOException(e);
         }
+
+        queueId = System.getProperty(MQ_ID);
+
+        channel = connection.createChannel();
+        channel.queueDeclare(queueId, false, false, false, null);
+    }
+
+    public void publish(String message) throws IOException {
+        channel.basicPublish("", queueId, null, message.getBytes());
+    }
+
+    @Override
+    public void close() throws IOException {
+        try {
+            channel.close();
+        } catch (TimeoutException e) {
+            throw new IOException(e);
+        }
+        connection.close();
     }
 }
