@@ -5,7 +5,6 @@ import static java.lang.System.currentTimeMillis;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,10 +81,10 @@ public class RemoteProcess {
         }
     }
 
-    public boolean waitForFinish() throws IOException {
+    public int waitForFinish() throws IOException {
         try {
-            logStdout(10000);
-            return process.waitFor(10, TimeUnit.SECONDS);
+            logStdout(Long.MAX_VALUE);
+            return process.waitFor();
         } catch (InterruptedException e) {
             throw new IOException(e);
         }
