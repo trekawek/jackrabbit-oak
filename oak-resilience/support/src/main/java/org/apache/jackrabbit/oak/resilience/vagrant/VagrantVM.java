@@ -27,7 +27,6 @@ import static org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner.MQ_
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -134,6 +133,10 @@ public class VagrantVM {
     }
 
     public void stop() throws IOException {
+        stop(false);
+    }
+
+    private void stop(boolean force) throws IOException {
         try {
             if (channel.isOpen()) {
                 channel.close();
@@ -144,7 +147,11 @@ public class VagrantVM {
         if (connection.isOpen()) {
             connection.close();
         }
-        exec(vagrantExecutable, "halt");
+        if (force) {
+            exec(vagrantExecutable, "halt", "--force");
+        } else {
+            exec(vagrantExecutable, "halt");
+        }
     }
 
     public void destroy() throws IOException {
@@ -152,12 +159,13 @@ public class VagrantVM {
         deleteQuietly(workDir);
     }
 
-    public void ssh(String... command) throws IOException {
-        exec(concat(a(vagrantExecutable, "ssh", "--"), command));
+    public void reset() throws IOException {
+        stop(true);
+        start();
     }
 
-    public InputStream readFile(String path) throws IOException {
-        return execProcess(a(vagrantExecutable, "ssh", "--", "dd", "if=" + path)).getInputStream();
+    public void ssh(String... command) throws IOException {
+        exec(concat(a(vagrantExecutable, "ssh", "--"), command));
     }
 
     public String copyJar(String groupId, String artifactId, String version) throws IOException {

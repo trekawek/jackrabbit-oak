@@ -16,26 +16,32 @@
  */
 package org.apache.jackrabbit.oak.resilience.vagrant;
 
+import static org.junit.Assert.assertTrue;
+
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.jackrabbit.oak.resilience.junit.JunitReceiver;
-import org.apache.jackrabbit.oak.resilience.remote.RemoteTest;
-import org.apache.jackrabbit.oak.resilience.remote.UnitTest;
+import org.apache.jackrabbit.oak.resilience.remote.NodeWriter;
+import org.apache.jackrabbit.oak.resilience.remote.NodeWriterTest;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class VagrantVMTest {
+public class NodeWriteResilienceTest {
 
     private VagrantVM vm;
+
+    private String itRemoteJar;
 
     @Before
     public void setupVm() throws IOException {
         vm = new VagrantVM.Builder().setVagrantFile("src/test/resources/Vagrantfile").build();
         vm.init();
         vm.start();
+        itRemoteJar = vm.copyJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
     }
 
     @After
@@ -45,13 +51,14 @@ public class VagrantVMTest {
     }
 
     @Test
-    public void test() throws IOException, TimeoutException {
-        String jar = vm.copyJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
-        RemoteProcess process = vm.runClass(jar, RemoteTest.class.getName(), null);
-        process.waitForMessage("that's fine", 1000);
-        process.waitForFinish();
+    public void testWriteResilience() throws IOException, TimeoutException {
+        Map<String, String> props = Collections.singletonMap("OAK_DIR", "/home/vagrant/" + this.getClass().getName());
 
-        JunitReceiver junit = vm.runJunit(jar, UnitTest.class.getName(), null);
-        Assert.assertTrue(junit.read().wasSuccessful());
+        RemoteProcess process = vm.runClass(itRemoteJar, NodeWriter.class.getName(), props);
+        process.waitForMessage("go", 600);
+        vm.reset();
+
+        JunitReceiver junit = vm.runJunit(itRemoteJar, NodeWriterTest.class.getName(), props);
+        assertTrue(junit.read().wasSuccessful());
     }
 }
