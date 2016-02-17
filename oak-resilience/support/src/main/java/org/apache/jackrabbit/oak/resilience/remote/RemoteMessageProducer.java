@@ -26,7 +26,7 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
-public class MessageProducer implements Closeable {
+public class RemoteMessageProducer implements Closeable {
 
     private final Connection connection;
 
@@ -34,7 +34,7 @@ public class MessageProducer implements Closeable {
 
     private final String queueId;
 
-    public MessageProducer() throws IOException {
+    public RemoteMessageProducer() throws IOException {
         ConnectionFactory factory = new ConnectionFactory();
         factory.setHost("localhost");
         try {

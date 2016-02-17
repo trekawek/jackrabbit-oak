@@ -2,12 +2,7 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 
 import static java.lang.System.currentTimeMillis;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
@@ -15,61 +10,43 @@ import com.rabbitmq.client.QueueingConsumer.Delivery;
 
 public class RemoteProcess {
 
-    private static final Logger LOG = LoggerFactory.getLogger(VagrantVM.class);
-
     private final Process process;
 
-    private final BufferedReader stdoutReader;
+    private final Thread stdoutLogger;
 
     private final QueueingConsumer consumer;
 
-    private final Channel channel;
-
     public RemoteProcess(Process process, Channel channel, String mqId) throws IOException {
         this.process = process;
-        this.channel = channel;
         this.consumer = new QueueingConsumer(channel);
 
         channel.queueDeclare(mqId, false, false, false, null);
-        channel.basicConsume(mqId, consumer);
+        channel.basicConsume(mqId, true, consumer);
 
-        this.stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-    }
-
-    public BufferedReader getStdout() {
-        return stdoutReader;
+        stdoutLogger = new Thread(new StreamLogger(process.getInputStream()));
+        stdoutLogger.start();
     }
 
     public boolean waitForMessage(String message, long durationSec) throws IOException {
-        long start = currentTimeMillis();
-        while ((currentTimeMillis() - start) < durationSec * 1000) {
-            logStdout(100);
-
-            Delivery delivery;
+        long end = currentTimeMillis() + durationSec * 1000;
+        while (true) {
+            long timeout = end - currentTimeMillis();
+            if (timeout <= 0) {
+                return false;
+            }
+            Delivery delivery = null;
             try {
-                delivery = consumer.nextDelivery(10);
-            } catch (Exception e) {
+                delivery = consumer.nextDelivery(timeout);
+            } catch (InterruptedException e) {
                 throw new IOException(e);
             }
             if (delivery == null) {
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException e) {
-                    throw new IOException(e);
-                }
-            } else {
-                String line = new String(delivery.getBody());
-                if (line != null) {
-                    LOG.info("Got message: {}", line);
-                }
-                channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-
-                if (message.equals(line)) {
-                    return true;
-                }
+                return false;
+            }
+            if (message.equals(new String(delivery.getBody()))) {
+                return true;
             }
         }
-        return false;
     }
 
     public String getMessage() throws IOException {
@@ -83,21 +60,11 @@ public class RemoteProcess {
 
     public int waitForFinish() throws IOException {
         try {
-            logStdout(Long.MAX_VALUE);
-            return process.waitFor();
+            int result = process.waitFor();
+            stdoutLogger.join();
+            return result;
         } catch (InterruptedException e) {
             throw new IOException(e);
-        }
-    }
-
-    private void logStdout(long maxDurationMillis) throws IOException {
-        long start = currentTimeMillis();
-        while ((currentTimeMillis() - start) < maxDurationMillis) {
-            String line = stdoutReader.readLine();
-            if (line == null) {
-                return;
-            }
-            LOG.info(line);
         }
     }
 }

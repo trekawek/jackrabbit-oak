@@ -38,7 +38,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
+import org.apache.jackrabbit.oak.resilience.junit.JunitReceiver;
 import org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -190,15 +190,15 @@ public class VagrantVM {
         return new RemoteProcess(process, channel, mqId);
     }
 
-    public JunitProcess runJunit(String jar, String testClassName, Map<String, String> properties) throws IOException {
+    public JunitReceiver runJunit(String jar, String testClassName, Map<String, String> properties) throws IOException {
         String mqTestId = format("%s-%s", testClassName, randomUUID().toString());
         Map<String, String> allProps = new HashMap<String, String>();
         allProps.put(MQ_TEST_ID, mqTestId);
         if (properties != null) {
             allProps.putAll(properties);
         }
-        runClass(jar, MqTestRunner.class.getName(), allProps, testClassName);
-        return new JunitProcess(channel, mqTestId);
+        RemoteProcess process = runClass(jar, MqTestRunner.class.getName(), allProps, testClassName);
+        return new JunitReceiver(process, channel, mqTestId);
     }
 
     private Process execProcess(String... cmd) throws IOException {

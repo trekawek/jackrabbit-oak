@@ -19,10 +19,11 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
+import org.apache.jackrabbit.oak.resilience.junit.JunitReceiver;
 import org.apache.jackrabbit.oak.resilience.remote.RemoteTest;
 import org.apache.jackrabbit.oak.resilience.remote.UnitTest;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -50,7 +51,7 @@ public class VagrantVMTest {
         process.waitForMessage("that's fine", 1000);
         process.waitForFinish();
 
-        JunitProcess junit = vm.runJunit(jar, UnitTest.class.getName(), null);
-        junit.waitForFinish();
+        JunitReceiver junit = vm.runJunit(jar, UnitTest.class.getName(), null);
+        Assert.assertTrue(junit.read().wasSuccessful());
     }
 }
