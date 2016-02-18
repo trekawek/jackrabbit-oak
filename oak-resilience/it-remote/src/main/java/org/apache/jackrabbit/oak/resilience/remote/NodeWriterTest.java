@@ -10,6 +10,7 @@ import org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.plugins.segment.SegmentStore;
 import org.apache.jackrabbit.oak.plugins.segment.file.FileStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -27,6 +28,7 @@ public class NodeWriterTest {
         ns = SegmentNodeStore.newSegmentNodeStore(store).create();
     }
 
+    @AfterClass
     public static void closeOak() {
         store.close();
     }
