@@ -3,7 +3,7 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.UUID.randomUUID;
-import static org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner.MQ_TEST_ID;
+import static org.apache.jackrabbit.oak.resilience.remote.junit.JunitClassWrapper.MQ_TEST_ID;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,9 +14,7 @@ import java.util.Map.Entry;
 
 import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
 import org.apache.jackrabbit.oak.resilience.remote.MainClassWrapper;
-import org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner;
-
-import com.rabbitmq.client.Channel;
+import org.apache.jackrabbit.oak.resilience.remote.junit.JunitClassWrapper;
 
 public class RemoteJar {
 
@@ -59,7 +57,7 @@ public class RemoteJar {
         if (properties != null) {
             allProps.putAll(properties);
         }
-        RemoteJvmProcess process = runClass(MqTestRunner.class.getName(), allProps, testClassName);
+        RemoteJvmProcess process = runClass(JunitClassWrapper.class.getName(), allProps, testClassName);
         return new JunitProcess(process, vm.channel, mqTestId);
     }
 

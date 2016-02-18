@@ -65,13 +65,16 @@ public class RemoteMessageProducer {
         channel.basicPublish("", queueId, null, message.getBytes());
     }
 
-    static void close() throws IOException, TimeoutException {
+    public static void close() throws IOException, TimeoutException {
         if (instance != null) {
             if (instance.channel != null) {
                 instance.channel.close();
             }
             if (instance.connection != null) {
                 instance.connection.close();
+            }
+            synchronized (RemoteMessageProducer.class) {
+                instance = null;
             }
         }
     }

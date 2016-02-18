@@ -3,13 +3,14 @@ package org.apache.jackrabbit.oak.resilience.remote.junit;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.jackrabbit.oak.resilience.remote.RemoteMessageProducer;
 import org.junit.runner.JUnitCore;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
-public class MqTestRunner {
+public class JunitClassWrapper {
 
     public static final String MQ_TEST_ID = "TEST_RESULTS";
 
@@ -31,7 +32,11 @@ public class MqTestRunner {
         for (String className : args) {
             classes[i++] = Class.forName(className);
         }
-        core.run(classes);
+        try {
+            core.run(classes);
+        } finally {
+            RemoteMessageProducer.close();
+        }
 
         channel.close();
         connection.close();
