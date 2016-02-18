@@ -18,27 +18,19 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 
 import static com.google.common.io.Files.createTempDir;
 import static java.lang.String.format;
-import static java.util.Arrays.asList;
-import static java.util.UUID.randomUUID;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.apache.commons.lang.StringUtils.join;
-import static org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner.MQ_TEST_ID;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.jackrabbit.oak.resilience.junit.JunitReceiver;
-import org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,7 +51,7 @@ public class VagrantVM {
 
     private static final Pattern PORT_PATTERN = Pattern.compile("^ *(\\d+) \\(guest\\) => (\\d+) \\(host\\)$");
 
-    private final String vagrantExecutable;
+    final String vagrantExecutable;
 
     private final String mavenExecutable;
 
@@ -164,52 +156,14 @@ public class VagrantVM {
         start();
     }
 
-    public void ssh(String... command) throws IOException {
-        exec(concat(a(vagrantExecutable, "ssh", "--"), command));
-    }
-
-    public String copyJar(String groupId, String artifactId, String version) throws IOException {
+    public RemoteJar uploadJar(String groupId, String artifactId, String version) throws IOException {
         String artifact = format("%s:%s:%s", groupId, artifactId, version);
         String outputName = format("%s-%s.jar", artifactId, version);
         exec(mavenExecutable, "dependency:copy", "-Dartifact=" + artifact, "-DoutputDirectory=.");
-        return outputName;
+        return new RemoteJar(this, VAGRANT_PREFIX + outputName, channel);
     }
 
-    public RemoteProcess runClass(String jar, String className, Map<String, String> properties, String... args)
-            throws IOException {
-        String mqId = format("%s-%s", className, randomUUID().toString());
-
-        Map<String, String> allProps = new HashMap<String, String>();
-        allProps.put(MQ_ID, mqId);
-        if (properties != null) {
-            allProps.putAll(properties);
-        }
-
-        List<String> cmd = new ArrayList<String>();
-        cmd.add(vagrantExecutable);
-        cmd.addAll(asList("ssh", "--", "java"));
-        for (Entry<String, String> e : allProps.entrySet()) {
-            cmd.add(String.format("-D%s=%s", e.getKey(), e.getValue()));
-        }
-        cmd.addAll(asList("-cp", VAGRANT_PREFIX + jar, className));
-        cmd.addAll(asList(args));
-
-        Process process = execProcess(cmd.toArray(new String[0]));
-        return new RemoteProcess(process, channel, mqId);
-    }
-
-    public JunitReceiver runJunit(String jar, String testClassName, Map<String, String> properties) throws IOException {
-        String mqTestId = format("%s-%s", testClassName, randomUUID().toString());
-        Map<String, String> allProps = new HashMap<String, String>();
-        allProps.put(MQ_TEST_ID, mqTestId);
-        if (properties != null) {
-            allProps.putAll(properties);
-        }
-        RemoteProcess process = runClass(jar, MqTestRunner.class.getName(), allProps, testClassName);
-        return new JunitReceiver(process, channel, mqTestId);
-    }
-
-    private Process execProcess(String... cmd) throws IOException {
+    Process execProcess(String... cmd) throws IOException {
         LOG.info("$ {}", join(cmd, ' '));
         ProcessBuilder builder = new ProcessBuilder(cmd).redirectErrorStream(true).directory(workDir);
         Map<String, String> env = builder.environment();
@@ -235,26 +189,6 @@ public class VagrantVM {
         } catch (InterruptedException e) {
             throw new IOException(e);
         }
-    }
-
-    private static String[] concat(String[]... arrays) {
-        int length = 0;
-        for (String[] array : arrays) {
-            length += array.length;
-        }
-
-        String[] result = new String[length];
-        int i = 0;
-        for (String[] array : arrays) {
-            for (String value : array) {
-                result[i++] = value;
-            }
-        }
-        return result;
-    }
-
-    private static String[] a(String... strings) {
-        return strings;
     }
 
     public static class Builder {

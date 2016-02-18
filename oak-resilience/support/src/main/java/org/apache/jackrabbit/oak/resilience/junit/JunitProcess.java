@@ -8,6 +8,7 @@ import java.util.List;
 
 import org.apache.jackrabbit.oak.resilience.remote.junit.TestEventType;
 import org.apache.jackrabbit.oak.resilience.vagrant.RemoteProcess;
+import org.junit.internal.TextListener;
 import org.junit.runner.Description;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
@@ -16,7 +17,7 @@ import org.junit.runner.notification.RunListener;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
 
-public class JunitReceiver {
+public class JunitProcess {
 
     private final RemoteProcess process;
 
@@ -28,7 +29,7 @@ public class JunitReceiver {
 
     private volatile Result result;
 
-    public JunitReceiver(RemoteProcess process, Channel channel, String mqTestId) throws IOException {
+    public JunitProcess(RemoteProcess process, Channel channel, String mqTestId) throws IOException {
         this.process = process;
         this.channel = channel;
         this.mqTestId = mqTestId;
@@ -36,9 +37,10 @@ public class JunitReceiver {
         listeners.add(new RunListener() {
             @Override
             public void testRunFinished(Result result) {
-                JunitReceiver.this.result = result;
+                JunitProcess.this.result = result;
             }
         });
+        listeners.add(new TextListener(System.out));
     }
 
     public void addListener(RunListener listener) {

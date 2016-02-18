@@ -3,7 +3,6 @@ package org.apache.jackrabbit.oak.resilience.remote.junit;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
-import org.junit.internal.TextListener;
 import org.junit.runner.JUnitCore;
 
 import com.rabbitmq.client.Channel;
@@ -25,7 +24,6 @@ public class MqTestRunner {
         channel.queueDeclare(mqId, false, false, false, null);
 
         JUnitCore core = new JUnitCore();
-        core.addListener(new TextListener(System.out));
         core.addListener(new JunitBroadcaster(channel, mqId));
 
         Class<?>[] classes = new Class<?>[args.length];

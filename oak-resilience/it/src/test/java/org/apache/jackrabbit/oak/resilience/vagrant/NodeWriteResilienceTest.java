@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.jackrabbit.oak.resilience.junit.JunitReceiver;
+import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
 import org.apache.jackrabbit.oak.resilience.remote.NodeWriter;
 import org.apache.jackrabbit.oak.resilience.remote.NodeWriterTest;
 import org.junit.After;
@@ -34,14 +34,14 @@ public class NodeWriteResilienceTest {
 
     private VagrantVM vm;
 
-    private String itRemoteJar;
+    private RemoteJar itJar;
 
     @Before
     public void setupVm() throws IOException {
         vm = new VagrantVM.Builder().setVagrantFile("src/test/resources/Vagrantfile").build();
         vm.init();
         vm.start();
-        itRemoteJar = vm.copyJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
+        itJar = vm.uploadJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
     }
 
     @After
@@ -54,11 +54,11 @@ public class NodeWriteResilienceTest {
     public void testWriteResilience() throws IOException, TimeoutException {
         Map<String, String> props = Collections.singletonMap("OAK_DIR", "/home/vagrant/" + this.getClass().getName());
 
-        RemoteProcess process = vm.runClass(itRemoteJar, NodeWriter.class.getName(), props);
+        RemoteProcess process = itJar.runClass(NodeWriter.class.getName(), props);
         process.waitForMessage("go", 600);
         vm.reset();
 
-        JunitReceiver junit = vm.runJunit(itRemoteJar, NodeWriterTest.class.getName(), props);
+        JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), props);
         assertTrue(junit.read().wasSuccessful());
     }
 }
