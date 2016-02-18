@@ -18,7 +18,6 @@ package org.apache.jackrabbit.oak.resilience.remote;
 
 import static org.apache.jackrabbit.oak.resilience.vagrant.VagrantVM.MQ_ID;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
@@ -26,7 +25,7 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
-public class RemoteMessageProducer implements Closeable {
+public class RemoteMessageProducer {
 
     private final Connection connection;
 
@@ -34,7 +33,9 @@ public class RemoteMessageProducer implements Closeable {
 
     private final String queueId;
 
-    public RemoteMessageProducer() throws IOException {
+    private static RemoteMessageProducer instance;
+
+    private RemoteMessageProducer() throws IOException {
         ConnectionFactory factory = new ConnectionFactory();
         factory.setHost("localhost");
         try {
@@ -49,17 +50,29 @@ public class RemoteMessageProducer implements Closeable {
         channel.queueDeclare(queueId, false, false, false, null);
     }
 
+    public static RemoteMessageProducer getInstance() throws IOException {
+        if (instance == null) {
+            synchronized (RemoteMessageProducer.class) {
+                if (instance == null) {
+                    instance = new RemoteMessageProducer();
+                }
+            }
+        }
+        return instance;
+    }
+
     public void publish(String message) throws IOException {
         channel.basicPublish("", queueId, null, message.getBytes());
     }
 
-    @Override
-    public void close() throws IOException {
-        try {
-            channel.close();
-        } catch (TimeoutException e) {
-            throw new IOException(e);
+    static void close() throws IOException, TimeoutException {
+        if (instance != null) {
+            if (instance.channel != null) {
+                instance.channel.close();
+            }
+            if (instance.connection != null) {
+                instance.connection.close();
+            }
         }
-        connection.close();
     }
 }

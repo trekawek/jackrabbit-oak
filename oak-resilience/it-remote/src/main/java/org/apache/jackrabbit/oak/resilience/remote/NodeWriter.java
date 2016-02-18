@@ -29,7 +29,7 @@ public class NodeWriter {
             }
 
             if (i == 50000) {
-                new RemoteMessageProducer().publish("go");
+                RemoteMessageProducer.getInstance().publish("go");
             }
         }
         Thread.sleep(1000 * 60);

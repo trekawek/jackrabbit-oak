@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.jackrabbit.oak.resilience.remote.junit.TestEventType;
-import org.apache.jackrabbit.oak.resilience.vagrant.RemoteProcess;
+import org.apache.jackrabbit.oak.resilience.vagrant.RemoteJvmProcess;
 import org.junit.internal.TextListener;
 import org.junit.runner.Description;
 import org.junit.runner.Result;
@@ -19,7 +19,7 @@ import com.rabbitmq.client.QueueingConsumer;
 
 public class JunitProcess {
 
-    private final RemoteProcess process;
+    private final RemoteJvmProcess process;
 
     private final Channel channel;
 
@@ -29,7 +29,7 @@ public class JunitProcess {
 
     private volatile Result result;
 
-    public JunitProcess(RemoteProcess process, Channel channel, String mqTestId) throws IOException {
+    public JunitProcess(RemoteJvmProcess process, Channel channel, String mqTestId) throws IOException {
         this.process = process;
         this.channel = channel;
         this.mqTestId = mqTestId;

@@ -54,7 +54,7 @@ public class NodeWriteResilienceTest {
     public void testWriteResilience() throws IOException, TimeoutException {
         Map<String, String> props = Collections.singletonMap("OAK_DIR", "/home/vagrant/" + this.getClass().getName());
 
-        RemoteProcess process = itJar.runClass(NodeWriter.class.getName(), props);
+        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), props);
         process.waitForMessage("go", 600);
         vm.reset();
 

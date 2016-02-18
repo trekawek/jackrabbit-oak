@@ -8,7 +8,7 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
 import com.rabbitmq.client.QueueingConsumer.Delivery;
 
-public class RemoteProcess {
+public class RemoteJvmProcess {
 
     private final Process process;
 
@@ -16,7 +16,7 @@ public class RemoteProcess {
 
     private final QueueingConsumer consumer;
 
-    public RemoteProcess(Process process, Channel channel, String mqId) throws IOException {
+    public RemoteJvmProcess(Process process, Channel channel, String mqId) throws IOException {
         this.process = process;
         this.consumer = new QueueingConsumer(channel);
 

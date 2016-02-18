@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
+import org.apache.jackrabbit.oak.resilience.remote.MainClassWrapper;
 import org.apache.jackrabbit.oak.resilience.remote.junit.MqTestRunner;
 
 import com.rabbitmq.client.Channel;
@@ -23,15 +24,13 @@ public class RemoteJar {
 
     private final String jarPath;
 
-    private final Channel channel;
-
-    public RemoteJar(VagrantVM vm, String jarPath, Channel channel) {
+    public RemoteJar(VagrantVM vm, String jarPath) {
         this.vm = vm;
         this.jarPath = jarPath;
-        this.channel = channel;
     }
 
-    public RemoteProcess runClass(String className, Map<String, String> properties, String... args) throws IOException {
+    public RemoteJvmProcess runClass(String className, Map<String, String> properties, String... args)
+            throws IOException {
         String mqId = format("%s-%s", className, randomUUID().toString());
 
         Map<String, String> allProps = new HashMap<String, String>();
@@ -46,11 +45,11 @@ public class RemoteJar {
         for (Entry<String, String> e : allProps.entrySet()) {
             cmd.add(String.format("-D%s=%s", e.getKey(), e.getValue()));
         }
-        cmd.addAll(asList("-cp", jarPath, className));
+        cmd.addAll(asList("-cp", jarPath, MainClassWrapper.class.getName(), className));
         cmd.addAll(asList(args));
 
         Process process = vm.execProcess(cmd.toArray(new String[0]));
-        return new RemoteProcess(process, channel, mqId);
+        return new RemoteJvmProcess(process, vm.channel, mqId);
     }
 
     public JunitProcess runJunit(String testClassName, Map<String, String> properties) throws IOException {
@@ -60,8 +59,8 @@ public class RemoteJar {
         if (properties != null) {
             allProps.putAll(properties);
         }
-        RemoteProcess process = runClass(MqTestRunner.class.getName(), allProps, testClassName);
-        return new JunitProcess(process, channel, mqTestId);
+        RemoteJvmProcess process = runClass(MqTestRunner.class.getName(), allProps, testClassName);
+        return new JunitProcess(process, vm.channel, mqTestId);
     }
 
 }

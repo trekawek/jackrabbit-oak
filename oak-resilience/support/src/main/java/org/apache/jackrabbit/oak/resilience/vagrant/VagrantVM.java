@@ -65,7 +65,7 @@ public class VagrantVM {
 
     private Connection connection;
 
-    private Channel channel;
+    Channel channel;
 
     private VagrantVM(Builder builder) throws IOException {
         vagrantExecutable = builder.vagrantExecutable;
@@ -160,7 +160,7 @@ public class VagrantVM {
         String artifact = format("%s:%s:%s", groupId, artifactId, version);
         String outputName = format("%s-%s.jar", artifactId, version);
         exec(mavenExecutable, "dependency:copy", "-Dartifact=" + artifact, "-DoutputDirectory=.");
-        return new RemoteJar(this, VAGRANT_PREFIX + outputName, channel);
+        return new RemoteJar(this, VAGRANT_PREFIX + outputName);
     }
 
     Process execProcess(String... cmd) throws IOException {

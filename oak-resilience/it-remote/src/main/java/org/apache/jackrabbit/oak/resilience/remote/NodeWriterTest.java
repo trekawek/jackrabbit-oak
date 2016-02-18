@@ -10,6 +10,7 @@ import org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.plugins.segment.SegmentStore;
 import org.apache.jackrabbit.oak.plugins.segment.file.FileStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -38,5 +39,10 @@ public class NodeWriterTest {
             assertTrue("child-" + i + " doesn't exists", child.exists());
             assertEquals("wrong value for the 'x' property on child-" + i, (long) Long.valueOf(i), child.getLong("x"));
         }
+    }
+
+    @Test
+    public void simpleTest() {
+        Assert.assertTrue(true);
     }
 }
