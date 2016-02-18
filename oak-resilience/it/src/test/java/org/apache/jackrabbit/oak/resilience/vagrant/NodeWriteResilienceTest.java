@@ -32,6 +32,9 @@ import org.junit.Test;
 
 public class NodeWriteResilienceTest {
 
+    private static final Map<String, String> PROPS = Collections.singletonMap("OAK_DIR",
+            "/home/vagrant/" + NodeWriteResilienceTest.class.getName());
+
     private VagrantVM vm;
 
     private RemoteJar itJar;
@@ -52,13 +55,11 @@ public class NodeWriteResilienceTest {
 
     @Test
     public void testWriteResilience() throws IOException, TimeoutException {
-        Map<String, String> props = Collections.singletonMap("OAK_DIR", "/home/vagrant/" + this.getClass().getName());
-
-        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), props);
+        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS);
         process.waitForMessage("go", 600);
         vm.reset();
 
-        JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), props);
+        JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), PROPS);
         assertTrue(junit.read().wasSuccessful());
     }
 }
