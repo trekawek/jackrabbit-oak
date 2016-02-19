@@ -30,6 +30,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import eu.rekawek.toxiproxy.ToxiproxyClient;
+
 public class NodeWriteResilienceTest {
 
     private static final Map<String, String> PROPS = Collections.singletonMap("OAK_DIR",

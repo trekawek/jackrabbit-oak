@@ -39,6 +39,9 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
+import eu.rekawek.toxiproxy.ToxiproxyClient;
+import eu.rekawek.toxiproxy.model.Proxy;
+
 public class VagrantVM {
 
     private static final Logger LOG = LoggerFactory.getLogger(VagrantVM.class);
@@ -161,6 +164,18 @@ public class VagrantVM {
         String outputName = format("%s-%s.jar", artifactId, version);
         exec(mavenExecutable, "dependency:copy", "-Dartifact=" + artifact, "-DoutputDirectory=.");
         return new RemoteJar(this, VAGRANT_PREFIX + outputName);
+    }
+
+    public Proxy createProxyFromGuestToHost(int upstreamHostPort, int listenGuestPort) {
+        String hostAddr = getHostAddr();
+        String name = String.format("proxy_%d_%d", upstreamHostPort, listenGuestPort);
+        ToxiproxyClient client = new ToxiproxyClient("localhost", getHostPort(8474));
+        client.createProxy(name, "localhost:" + listenGuestPort, hostAddr + ":" + upstreamHostPort);
+    }
+
+    private String getHostAddr() {
+        // TODO Auto-generated method stub
+        return null;
     }
 
     Process execProcess(String... cmd) throws IOException {
