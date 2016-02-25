@@ -298,8 +298,7 @@ public class RDBDocumentStore implements DocumentStore {
 
     @Override
     public <T extends Document> List<T> createOrUpdate(Collection<T> collection, List<UpdateOp> updateOps) {
-        if (!BATCHUPDATES
-                || dbInfo == RDBDocumentStoreDB.ORACLE /* see OAK-3938 */) {
+        if (!BATCHUPDATES) {
             List<T> results = new ArrayList<T>(updateOps.size());
             for (UpdateOp update : updateOps) {
                 results.add(createOrUpdate(collection, update));
@@ -782,7 +781,7 @@ public class RDBDocumentStore implements DocumentStore {
                 .build();
         String versionDiags = dbInfo.checkVersion(md);
         if (!versionDiags.isEmpty()) {
-            LOG.info(versionDiags);
+            LOG.error(versionDiags);
         }
 
         if (! "".equals(dbInfo.getInitializationStatement())) {
@@ -1159,12 +1158,13 @@ public class RDBDocumentStore implements DocumentStore {
                     docs.add(doc);
                 }
                 boolean done = insertDocuments(collection, docs);
-                if (done && collection == Collection.NODES) {
-                    for (T doc : docs) {
-                        nodesCache.putIfAbsent((NodeDocument) doc);
+                if (done) {
+                    if (collection == Collection.NODES) {
+                        for (T doc : docs) {
+                            nodesCache.putIfAbsent((NodeDocument) doc);
+                        }
                     }
-                }
-                else {
+                } else {
                     success = false;
                 }
             }

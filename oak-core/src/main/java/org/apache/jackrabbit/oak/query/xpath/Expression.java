@@ -379,19 +379,15 @@ abstract class Expression {
                 in = new InCondition(in.getLeft(), in.list);
                 return in;
             }
+            Expression le = left.getLeft();
             if (XPathToSQL2Converter.NODETYPE_UNION) {
-                if (left instanceof Condition) {
-                    Condition c = (Condition) left;
-                    if (c.left instanceof Property && 
-                        "jcr:primaryType".equals(((Property) c.left).name)) {
-                        return this;
-                    }
+                if (commonLeft.endsWith("[jcr:primaryType]")) {
+                    return this;
                 }
             }
             ArrayList<Expression> list = new ArrayList<Expression>();
             list.addAll(left.getRight());
             list.addAll(right.getRight());
-            Expression le = left.getLeft();
             InCondition in = new InCondition(le, list);
             return in;
         }
@@ -477,27 +473,41 @@ abstract class Expression {
                 return nt;
             }
             return right.getMostSpecificNodeType(selectorName);
-        }        
+        }
         
         @Override
         AndCondition pullOrRight() {
-            if (right instanceof OrCondition) {
-                return this;
-            } else if (left instanceof OrCondition) {
-                return new AndCondition(right, left);
+            ArrayList<Expression> list = getAllAndConditions();
+            OrCondition or = null;
+            Expression result = null;
+            for(Expression e : list) {
+                if (e instanceof OrCondition && or == null) {
+                    or = (OrCondition) e;
+                } else if (result == null) {
+                    result = e;
+                } else {
+                    result = new AndCondition(result, e);
+                }
+            }
+            if (or != null) {
+                result = new AndCondition(result, or);
+            }
+            return (AndCondition) result;
+        }
+        
+        private ArrayList<Expression> getAllAndConditions() {
+            ArrayList<Expression> list = new ArrayList<Expression>();
+            if (left instanceof AndCondition) {
+                list.addAll(((AndCondition) left).getAllAndConditions());
+            } else {
+                list.add(left);
             }
             if (right instanceof AndCondition) {
-                // pull up x:
-                // a and (b and (x)) -> (a and b) and (x)
-                AndCondition r2 = (AndCondition) right;
-                r2 = r2.pullOrRight();
-                AndCondition l2 = new AndCondition(left, r2.left);
-                l2 = l2.pullOrRight();
-                return new AndCondition(l2, r2.right);
-            } else if (left instanceof AndCondition) {
-                return new AndCondition(right, left).pullOrRight();
+                list.addAll(((AndCondition) right).getAllAndConditions());
+            } else {
+                list.add(right);
             }
-            return this;
+            return list;
         }
         
         @Override

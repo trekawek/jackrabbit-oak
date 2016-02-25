@@ -20,8 +20,11 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import java.io.InputStream;
 import java.net.UnknownHostException;
+import java.util.EnumMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
@@ -32,12 +35,16 @@ import javax.sql.DataSource;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalCause;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.cache.Weigher;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.mongodb.DB;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.cache.CacheLIRS;
+import org.apache.jackrabbit.oak.cache.CacheLIRS.EvictionCallback;
 import org.apache.jackrabbit.oak.cache.CacheStats;
 import org.apache.jackrabbit.oak.cache.CacheValue;
 import org.apache.jackrabbit.oak.cache.EmpiricalWeigher;
@@ -59,7 +66,9 @@ import org.apache.jackrabbit.oak.plugins.document.mongo.MongoDocumentStore;
 import org.apache.jackrabbit.oak.plugins.document.mongo.MongoMissingLastRevSeeker;
 import org.apache.jackrabbit.oak.plugins.document.mongo.MongoVersionGCSupport;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.CacheType;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.EvictionListener;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCache;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.PersistentCacheStats;
 import org.apache.jackrabbit.oak.plugins.document.rdb.RDBBlobStore;
 import org.apache.jackrabbit.oak.plugins.document.rdb.RDBDocumentStore;
 import org.apache.jackrabbit.oak.plugins.document.rdb.RDBOptions;
@@ -524,6 +533,8 @@ public class DocumentMK {
         private BlobStoreStats blobStoreStats;
         private CacheStats blobStoreCacheStats;
         private DocumentStoreStatsCollector documentStoreStatsCollector;
+        private Map<CacheType, PersistentCacheStats> persistentCacheStats =
+                new EnumMap<CacheType, PersistentCacheStats>(CacheType.class);
 
         public Builder() {
         }
@@ -910,6 +921,9 @@ public class DocumentMK {
             return this;
         }
 
+        public StatisticsProvider getStatisticsProvider() {
+            return this.statisticsProvider;
+        }
         public DocumentStoreStatsCollector getDocumentStoreStatsCollector() {
             if (documentStoreStatsCollector == null) {
                 documentStoreStatsCollector = new DocumentStoreStats(statisticsProvider);
@@ -920,6 +934,11 @@ public class DocumentMK {
         public Builder setDocumentStoreStatsCollector(DocumentStoreStatsCollector documentStoreStatsCollector) {
             this.documentStoreStatsCollector = documentStoreStatsCollector;
             return this;
+        }
+
+        @Nonnull
+        public Map<CacheType, PersistentCacheStats> getPersistenceCacheStats() {
+            return persistentCacheStats;
         }
 
         @CheckForNull
@@ -1034,19 +1053,28 @@ public class DocumentMK {
             return new NodeDocumentCache(nodeDocumentsCache, nodeDocumentsCacheStats, prevDocumentsCache, prevDocumentsCacheStats, locks);
         }
 
+        @SuppressWarnings("unchecked")
         private <K extends CacheValue, V extends CacheValue> Cache<K, V> buildCache(
                 CacheType cacheType,
                 long maxWeight,
                 DocumentNodeStore docNodeStore,
                 DocumentStore docStore
                 ) {
-            Cache<K, V> cache = buildCache(cacheType.name(), maxWeight);
+            Set<EvictionListener<K, V>> listeners = new CopyOnWriteArraySet<EvictionListener<K,V>>();
+            Cache<K, V> cache = buildCache(cacheType.name(), maxWeight, listeners);
             PersistentCache p = getPersistentCache();
             if (p != null) {
                 if (docNodeStore != null) {
                     docNodeStore.setPersistentCache(p);
                 }
-                cache = p.wrap(docNodeStore, docStore, cache, cacheType);
+                cache = p.wrap(docNodeStore, docStore, cache, cacheType, statisticsProvider);
+                if (cache instanceof EvictionListener) {
+                    listeners.add((EvictionListener<K, V>) cache);
+                }
+                PersistentCacheStats stats = PersistentCache.getPersistentCacheStats(cache);
+                if (stats != null) {
+                    persistentCacheStats.put(cacheType, stats);
+                }
             }
             return cache;
         }
@@ -1068,7 +1096,8 @@ public class DocumentMK {
         
         private <K extends CacheValue, V extends CacheValue> Cache<K, V> buildCache(
                 String module,
-                long maxWeight) {
+                long maxWeight,
+                final Set<EvictionListener<K, V>> listeners) {
             // by default, use the LIRS cache when using the persistent cache,
             // but don't use it otherwise
             boolean useLirs = persistentCacheURI != null;
@@ -1090,6 +1119,14 @@ public class DocumentMK {
                         segmentCount(cacheSegmentCount).
                         stackMoveDistance(cacheStackMoveDistance).
                         recordStats().
+                        evictionCallback(new EvictionCallback<K, V>() {
+                            @Override
+                            public void evicted(K key, V value, RemovalCause cause) {
+                                for (EvictionListener<K, V> l : listeners) {
+                                    l.evicted(key, value, cause);
+                                }
+                            }
+                        }).
                         build();
             }
             return CacheBuilder.newBuilder().
@@ -1097,6 +1134,14 @@ public class DocumentMK {
                     weigher(weigher).
                     maximumWeight(maxWeight).
                     recordStats().
+                    removalListener(new RemovalListener<K, V>() {
+                        @Override
+                        public void onRemoval(RemovalNotification<K, V> notification) {
+                            for (EvictionListener<K, V> l : listeners) {
+                                l.evicted(notification.getKey(), notification.getValue(), notification.getCause());
+                            }
+                        }
+                    }).
                     build();
         }
 

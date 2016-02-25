@@ -28,11 +28,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.jackrabbit.oak.plugins.document.DocumentNodeStore;
 import org.apache.jackrabbit.oak.plugins.document.DocumentStore;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.broadcast.DynamicBroadcastConfig;
+import org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.broadcast.Broadcaster;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.broadcast.InMemoryBroadcaster;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.broadcast.TCPBroadcaster;
 import org.apache.jackrabbit.oak.plugins.document.persistentCache.broadcast.UDPBroadcaster;
 import org.apache.jackrabbit.oak.spi.blob.GarbageCollectableBlobStore;
+import org.apache.jackrabbit.oak.stats.StatisticsProvider;
 import org.h2.mvstore.FileStore;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVMap.Builder;
@@ -82,6 +84,8 @@ public class PersistentCache implements Broadcaster.Listener {
     private ThreadLocal<WriteBuffer> writeBuffer = new ThreadLocal<WriteBuffer>();
     private final byte[] broadcastId;
     private DynamicBroadcastConfig broadcastConfig;
+    private CacheActionDispatcher writeDispatcher;
+    private Thread writeDispatcherThread;
     
     {
         ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
@@ -192,6 +196,11 @@ public class PersistentCache implements Broadcaster.Listener {
         }
         writeStore = createMapFactory(writeGeneration, false);
         initBroadcast(broadcast);
+
+        writeDispatcher = new CacheActionDispatcher();
+        writeDispatcherThread = new Thread(writeDispatcher, "Oak CacheWriteQueue");
+        writeDispatcherThread.setDaemon(true);
+        writeDispatcherThread.start();
     }
     
     private void initBroadcast(String broadcast) {
@@ -338,6 +347,13 @@ public class PersistentCache implements Broadcaster.Listener {
     }
     
     public void close() {
+        writeDispatcher.stop();
+        try {
+            writeDispatcherThread.join();
+        } catch (InterruptedException e) {
+            LOG.error("Can't join the {}", writeDispatcherThread.getName(), e);
+        }
+
         if (writeStore != null) {
             writeStore.closeStore();
         }
@@ -366,6 +382,14 @@ public class PersistentCache implements Broadcaster.Listener {
             DocumentNodeStore docNodeStore, 
             DocumentStore docStore,
             Cache<K, V> base, CacheType type) {
+       return wrap(docNodeStore, docStore, base, type, StatisticsProvider.NOOP);
+    }
+
+    public synchronized <K, V> Cache<K, V> wrap(
+            DocumentNodeStore docNodeStore,
+            DocumentStore docStore,
+            Cache<K, V> base, CacheType type,
+            StatisticsProvider statisticsProvider) {
         boolean wrap;
         switch (type) {
         case NODE:
@@ -395,7 +419,8 @@ public class PersistentCache implements Broadcaster.Listener {
         }
         if (wrap) {
             NodeCache<K, V> c = new NodeCache<K, V>(this, 
-                    base, docNodeStore, docStore, type);
+                    base, docNodeStore, docStore,
+                    type, writeDispatcher, statisticsProvider);
             initGenerationCache(c);
             return c;
         }
@@ -515,6 +540,15 @@ public class PersistentCache implements Broadcaster.Listener {
         buff.position(end);
     }
     
+    public static PersistentCacheStats getPersistentCacheStats(Cache cache) {
+        if (cache instanceof NodeCache) {
+            return ((NodeCache) cache).getPersistentCacheStats();
+        }
+        else {
+            return null;
+        }
+    }
+
     private void receiveMessage(ByteBuffer buff) {
         CacheType type = CacheType.VALUES[buff.get()];
         GenerationCache cache = caches.get(type);
