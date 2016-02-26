@@ -69,6 +69,7 @@ Vagrant.configure(2) do |config|
     sudo puppet module install puppetlabs-rabbitmq
     wget -O /tmp/toxiproxy-1.2.1.deb https://github.com/Shopify/toxiproxy/releases/download/v1.2.1/toxiproxy_1.2.1_amd64.deb
     sudo dpkg -i /tmp/toxiproxy-1.2.1.deb
+    sudo sed -i 's/localhost/0.0.0.0/' /etc/init/toxiproxy.conf
   SHELL
 
   config.vm.provision "puppet"

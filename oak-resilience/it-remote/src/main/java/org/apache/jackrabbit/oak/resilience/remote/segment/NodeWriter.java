@@ -1,10 +1,11 @@
-package org.apache.jackrabbit.oak.resilience.remote;
+package org.apache.jackrabbit.oak.resilience.remote.segment;
 
 import java.io.File;
 
 import org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.plugins.segment.SegmentStore;
 import org.apache.jackrabbit.oak.plugins.segment.file.FileStore;
+import org.apache.jackrabbit.oak.resilience.remote.RemoteMessageProducer;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;

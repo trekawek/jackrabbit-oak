@@ -19,27 +19,24 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
-import org.apache.jackrabbit.oak.resilience.remote.NodeWriter;
-import org.apache.jackrabbit.oak.resilience.remote.NodeWriterTest;
+import org.apache.jackrabbit.oak.resilience.remote.mongo.MongoWriter;
+import org.apache.jackrabbit.oak.resilience.remote.mongo.MongoWriterTest;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import eu.rekawek.toxiproxy.ToxiproxyClient;
+import eu.rekawek.toxiproxy.model.Proxy;
 
-public class NodeWriteResilienceTest {
-
-    private static final Map<String, String> PROPS = Collections.singletonMap("OAK_DIR",
-            "/home/vagrant/" + NodeWriteResilienceTest.class.getName());
+public class NetworkDownResilienceTest {
 
     private VagrantVM vm;
 
     private RemoteJar itJar;
+
+    private Proxy proxy;
 
     @Before
     public void setupVm() throws IOException {
@@ -47,6 +44,7 @@ public class NodeWriteResilienceTest {
         vm.init();
         vm.start();
         itJar = vm.uploadJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
+        proxy = vm.forwardPortToGuest(27017, 27017);
     }
 
     @After
@@ -56,12 +54,14 @@ public class NodeWriteResilienceTest {
     }
 
     @Test
-    public void testWriteResilience() throws IOException, TimeoutException {
-        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS);
+    public void testWriteResilience() throws IOException, TimeoutException, InterruptedException {
+        RemoteJvmProcess process = itJar.runClass(MongoWriter.class.getName(), null);
         process.waitForMessage("go", 600);
-        vm.reset();
 
-        JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), PROPS);
+        proxy.downstream().latency().setLatency(100);
+        process.waitForFinish();
+
+        JunitProcess junit = itJar.runJunit(MongoWriterTest.class.getName(), null);
         assertTrue(junit.read().wasSuccessful());
     }
 }

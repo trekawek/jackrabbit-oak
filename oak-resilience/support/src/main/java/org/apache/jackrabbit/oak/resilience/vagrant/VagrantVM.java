@@ -25,6 +25,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
@@ -166,16 +167,11 @@ public class VagrantVM {
         return new RemoteJar(this, VAGRANT_PREFIX + outputName);
     }
 
-    public Proxy createProxyFromGuestToHost(int upstreamHostPort, int listenGuestPort) {
-        String hostAddr = getHostAddr();
+    public Proxy forwardPortToGuest(int upstreamHostPort, int listenGuestPort) throws IOException {
+        String hostAddr = InetAddress.getLocalHost().getHostAddress();
         String name = String.format("proxy_%d_%d", upstreamHostPort, listenGuestPort);
         ToxiproxyClient client = new ToxiproxyClient("localhost", getHostPort(8474));
-        client.createProxy(name, "localhost:" + listenGuestPort, hostAddr + ":" + upstreamHostPort);
-    }
-
-    private String getHostAddr() {
-        // TODO Auto-generated method stub
-        return null;
+        return client.createProxy(name, "localhost:" + listenGuestPort, hostAddr + ":" + upstreamHostPort);
     }
 
     Process execProcess(String... cmd) throws IOException {

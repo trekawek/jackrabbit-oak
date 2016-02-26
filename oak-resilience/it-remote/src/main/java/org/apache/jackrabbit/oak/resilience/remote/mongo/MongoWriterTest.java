@@ -1,36 +1,31 @@
-package org.apache.jackrabbit.oak.resilience.remote;
+package org.apache.jackrabbit.oak.resilience.remote.mongo;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
 
-import org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore;
-import org.apache.jackrabbit.oak.plugins.segment.SegmentStore;
-import org.apache.jackrabbit.oak.plugins.segment.file.FileStore;
+import org.apache.jackrabbit.oak.plugins.document.DocumentMK;
+import org.apache.jackrabbit.oak.plugins.document.DocumentNodeStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class NodeWriterTest {
+public class MongoWriterTest {
 
-    private static SegmentStore store;
-
-    private static SegmentNodeStore ns;
+    private static DocumentNodeStore ns;
 
     @BeforeClass
     public static void setupOak() throws IOException {
-        File oakDir = new File(System.getProperty("OAK_DIR"));
-        store = FileStore.newFileStore(oakDir).create();
-        ns = SegmentNodeStore.newSegmentNodeStore(store).create();
+        DocumentMK.Builder nsBuilder = new DocumentMK.Builder();
+        ns = new DocumentNodeStore(nsBuilder);
     }
 
     @AfterClass
     public static void closeOak() {
-        store.close();
+        ns.dispose();
     }
 
     @Test
