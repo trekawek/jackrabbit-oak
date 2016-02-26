@@ -7,5 +7,5 @@ vagrant up
 vagrant halt
 vagrant package
 vagrant destroy --force
-vagrant box add --name oak-resilience package.box --box-version 1.0
+vagrant box add --name oak-resilience package.box
 rm package.box
