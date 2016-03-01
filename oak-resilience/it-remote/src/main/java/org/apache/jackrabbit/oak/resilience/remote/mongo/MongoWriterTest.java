@@ -13,6 +13,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.mongodb.MongoClient;
+
 public class MongoWriterTest {
 
     private static DocumentNodeStore ns;
@@ -20,6 +22,7 @@ public class MongoWriterTest {
     @BeforeClass
     public static void setupOak() throws IOException {
         DocumentMK.Builder nsBuilder = new DocumentMK.Builder();
+        nsBuilder.setMongoDB(new MongoClient().getDB("oak-test"));
         ns = new DocumentNodeStore(nsBuilder);
     }
 
@@ -30,7 +33,7 @@ public class MongoWriterTest {
 
     @Test
     public void testRead() {
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 1000; i++) {
             NodeState child = ns.getRoot().getChildNode("child-" + i);
 
             assertTrue("child-" + i + " doesn't exists", child.exists());

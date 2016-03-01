@@ -58,8 +58,9 @@ public class NetworkDownResilienceTest {
         RemoteJvmProcess process = itJar.runClass(MongoWriter.class.getName(), null);
         process.waitForMessage("go", 600);
 
-        proxy.downstream().latency().setLatency(100);
+        proxy.disable();
         process.waitForFinish();
+        proxy.enable();
 
         JunitProcess junit = itJar.runJunit(MongoWriterTest.class.getName(), null);
         assertTrue(junit.read().wasSuccessful());
