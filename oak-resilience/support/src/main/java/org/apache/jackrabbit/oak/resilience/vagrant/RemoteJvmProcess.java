@@ -3,6 +3,7 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 import static java.lang.System.currentTimeMillis;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
@@ -16,9 +17,15 @@ public class RemoteJvmProcess {
 
     private final QueueingConsumer consumer;
 
+    private final Channel channel;
+
+    private final String mqId;
+
     public RemoteJvmProcess(Process process, Channel channel, String mqId) throws IOException {
         this.process = process;
         this.consumer = new QueueingConsumer(channel);
+        this.channel = channel;
+        this.mqId = mqId;
 
         channel.queueDeclare(mqId, false, false, false, null);
         channel.basicConsume(mqId, true, consumer);
@@ -66,5 +73,27 @@ public class RemoteJvmProcess {
         } catch (InterruptedException e) {
             throw new IOException(e);
         }
+    }
+
+    public void fillMemory(int memorySize, MemoryUnit memoryUnit, int period, TimeUnit timeUnit) throws IOException {
+        long bytes = memoryUnit.toByte(memorySize);
+        if (bytes > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("memorySize is too big");
+        }
+        channel.basicPublish("", mqId, null, String
+                .format("fill_memory\t%d\t%d", memoryUnit.toByte(memorySize), timeUnit.toMillis(period)).getBytes());
+    }
+
+    public boolean isResponding() {
+        try {
+            channel.basicPublish("", mqId, null, "ping".getBytes());
+        } catch (IOException e) {
+            return false;
+        }
+        return true;
+    }
+
+    public void kill() {
+        process.destroy();
     }
 }

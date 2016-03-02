@@ -24,6 +24,7 @@ import java.util.concurrent.TimeoutException;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.QueueingConsumer;
 
 public class RemoteMessageProducer {
 
@@ -61,6 +62,12 @@ public class RemoteMessageProducer {
         return instance;
     }
 
+    QueueingConsumer createConsumer() throws IOException {
+        QueueingConsumer consumer = new QueueingConsumer(channel);
+        channel.basicConsume(queueId, true, consumer);
+        return consumer;
+    }
+
     public void publish(String message) throws IOException {
         channel.basicPublish("", queueId, null, message.getBytes());
     }
@@ -68,10 +75,16 @@ public class RemoteMessageProducer {
     public static void close() throws IOException, TimeoutException {
         if (instance != null) {
             if (instance.channel != null) {
-                instance.channel.close();
+                try {
+                    instance.channel.close();
+                } catch (Exception e) {
+                }
             }
             if (instance.connection != null) {
-                instance.connection.close();
+                try {
+                    instance.connection.close();
+                } catch (Exception e) {
+                }
             }
             synchronized (RemoteMessageProducer.class) {
                 instance = null;

@@ -33,7 +33,8 @@ public class NodeWriter {
                 RemoteMessageProducer.getInstance().publish("go");
             }
         }
-        Thread.sleep(1000 * 60);
+
+        store.close();
     }
 
 }
