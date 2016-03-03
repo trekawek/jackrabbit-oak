@@ -11,4 +11,12 @@ public enum MemoryUnit {
         }
         return result;
     }
+
+    public long toKilobyte(long size) {
+        return toByte(size) / 1024;
+    }
+
+    public long toMegabyte(long size) {
+        return toKilobyte(size) / 1024;
+    }
 }

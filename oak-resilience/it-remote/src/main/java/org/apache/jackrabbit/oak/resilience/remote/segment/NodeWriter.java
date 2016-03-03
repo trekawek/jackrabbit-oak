@@ -19,7 +19,7 @@ public class NodeWriter {
         SegmentStore store = FileStore.newFileStore(oakDir).create();
         SegmentNodeStore ns = SegmentNodeStore.newSegmentNodeStore(store).create();
 
-        for (int i = 0; i < 100000; i++) {
+        for (int i = 0; i < 150000; i++) {
             NodeBuilder builder = ns.getRoot().builder();
             NodeBuilder child = builder.child("child-" + i);
             child.setProperty("x", i);

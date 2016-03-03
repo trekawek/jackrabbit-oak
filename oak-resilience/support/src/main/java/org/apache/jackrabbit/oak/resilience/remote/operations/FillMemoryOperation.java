@@ -21,6 +21,7 @@ public class FillMemoryOperation implements Runnable {
         while (true) {
             System.out.println("Adding " + memorySize + " to heap");
             CHUNKS.add(new byte[memorySize]);
+            System.out.println("Free memory left: " + Runtime.getRuntime().freeMemory());
             try {
                 Thread.sleep(periodMillis);
             } catch (InterruptedException e) {

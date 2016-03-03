@@ -18,15 +18,20 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 
 import static com.google.common.io.Files.createTempDir;
 import static java.lang.String.format;
+import static java.util.UUID.randomUUID;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.apache.commons.lang.StringUtils.join;
+import static org.apache.jackrabbit.oak.resilience.vagrant.MemoryUnit.KILOBYTE;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
@@ -35,6 +40,8 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -158,6 +165,44 @@ public class VagrantVM {
     public void reset() throws IOException {
         stop(true);
         start();
+    }
+
+    private int ssh(String... args) throws IOException {
+        List<String> cmd = new ArrayList<String>();
+        cmd.addAll(Arrays.asList(vagrantExecutable, "ssh", "--"));
+        cmd.addAll(Arrays.asList(args));
+        return exec(cmd.toArray(new String[0]));
+    }
+
+    public long freeDiskSpaceKb() throws IOException {
+        Process process = execProcess(vagrantExecutable, "ssh", "--", "df", "/");
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        reader.readLine();
+        List<String> output = Lists.newArrayList(Splitter.on(' ').omitEmptyStrings().split(reader.readLine()));
+        return Long.parseLong(output.get(3));
+    }
+
+    public void fillDiskUntil(long freeSpaceToLeave, MemoryUnit unit) throws IOException {
+        ssh("mkdir", "-p", "/tmp/zeroes");
+
+        long currentFreeSpace = freeDiskSpaceKb();
+        long toOccupyKb = currentFreeSpace - unit.toKilobyte(freeSpaceToLeave);
+        if (toOccupyKb < 0) {
+            return;
+        }
+        ssh("dd", "if=/dev/zero", "of=/tmp/zeroes/" + randomUUID().toString(), "bs=1M",
+                "count=" + KILOBYTE.toMegabyte(toOccupyKb));
+
+        currentFreeSpace = freeDiskSpaceKb();
+        toOccupyKb = currentFreeSpace - unit.toKilobyte(freeSpaceToLeave);
+        if (toOccupyKb < 0) {
+            return;
+        }
+        ssh("dd", "if=/dev/zero", "of=/tmp/zeroes/" + randomUUID().toString(), "bs=1K", "count=" + toOccupyKb);
+    }
+
+    public void cleanupDisk() throws IOException {
+        ssh("rm", "-rf", "/tmp/zeroes");
     }
 
     public RemoteJar uploadJar(String groupId, String artifactId, String version) throws IOException {
