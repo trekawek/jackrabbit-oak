@@ -22,6 +22,12 @@ to install modules. Then invoke
 
 to run the resilience integration tests.
 
+## Modules
+
+* oak-resilience-it - contains test classes run on the local (supervisor) machine,
+* oak-resilience-remote-it - test classes run on the remote (virtual) machine,
+* oak-resilience-support - the framework code.
+
 ## Sample code
 
 Following code will create a virtual machine, upload the jar containing code to run and then start the `NodeWriter#main()` method. When the method is finished, it'll run unit tests from the `NodeWriterTest` class and check if they were successful.
