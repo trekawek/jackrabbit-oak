@@ -49,6 +49,8 @@ Following code will create a virtual machine, upload the jar containing code to 
     vm.stop();
     vm.destroy();
 
+More samples can be found in the [oak-resilience-it](/oak-resilience/it/src/test/java/org/apache/jackrabbit/oak/resilience/vagrant) module.
+
 ## Passing system properties
 
 Both `RemoteJar#runClass()` and `#runJunit()` accepts a `Map<String, String> properties` parameter. The passed map will be exposed as system properties in the resulting Java process:
