@@ -37,7 +37,7 @@ Following code will create a virtual machine, upload the jar containing code to 
     RemoteJvmProcess process = jar.runClass(NodeWriter.class.getName(), null);
     process.waitForFinish();
 
-    JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), null);
+    JunitProcess junit = jar.runJunit(NodeWriterTest.class.getName(), null);
     assert(junit.read().wasSuccessful());
 
     vm.stop();
@@ -99,7 +99,7 @@ oak-resilience integrated the [Toxiproxy](https://github.com/Shopify/toxiproxy) 
     VagrantVM vm = ...;
     Proxy proxy = vm.forwardPortToGuest(27017, 3333);
 
-From now on, the remote test may connect to the localhost:3333 and the connection will be forwarded to the supervisor port 27017. The {{Proxy}} object may be used to break the connection in any time.
+From now on, the remote test may connect to the localhost:3333 and the connection will be forwarded to the supervisor port 27017. The `Proxy` object may be used to break the connection in any time.
 
 ## Breaking the virtual machine
 
