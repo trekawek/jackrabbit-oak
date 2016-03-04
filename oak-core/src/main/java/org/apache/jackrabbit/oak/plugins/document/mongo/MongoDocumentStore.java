@@ -691,7 +691,6 @@ public class MongoDocumentStore implements DocumentStore {
                 DBObject query = QueryBuilder.start(Document.ID).in(keyBatch).get();
                 try {
                     dbCollection.remove(query);
-                    
                 } catch (Exception e) {
                     throw DocumentStoreException.convert(e, "Remove failed for " + keyBatch);
                 } finally {

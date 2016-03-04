@@ -192,7 +192,7 @@ public class ReplicaSetInfoTest {
         assertTrue(msg, from <= actual);
         assertTrue(msg, actual <= to);
     }
-    
+
     private class ReplicationSetStatusMock {
 
         private List<BasicBSONObject> members = new ArrayList<BasicBSONObject>();
