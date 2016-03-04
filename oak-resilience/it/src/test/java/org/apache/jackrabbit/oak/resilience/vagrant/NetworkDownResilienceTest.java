@@ -17,6 +17,7 @@
 package org.apache.jackrabbit.oak.resilience.vagrant;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
@@ -26,7 +27,11 @@ import org.apache.jackrabbit.oak.resilience.remote.mongo.MongoWriter;
 import org.apache.jackrabbit.oak.resilience.remote.mongo.MongoWriterTest;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.mongodb.Mongo;
+import com.mongodb.MongoClient;
 
 import eu.rekawek.toxiproxy.model.Proxy;
 
@@ -37,6 +42,11 @@ public class NetworkDownResilienceTest {
     private RemoteJar itJar;
 
     private Proxy proxy;
+
+    @BeforeClass
+    public static void checkMongo() {
+        assumeTrue(isMongoAvailable());
+    }
 
     @Before
     public void setupVm() throws IOException {
@@ -64,5 +74,20 @@ public class NetworkDownResilienceTest {
 
         JunitProcess junit = itJar.runJunit(MongoWriterTest.class.getName(), null);
         assertTrue(junit.read().wasSuccessful());
+    }
+
+    private static boolean isMongoAvailable() {
+        Mongo mongo = null;
+        try {
+            mongo = new MongoClient();
+            mongo.getDatabaseNames();
+            return true;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (mongo != null) {
+                mongo.close();
+            }
+        }
     }
 }
