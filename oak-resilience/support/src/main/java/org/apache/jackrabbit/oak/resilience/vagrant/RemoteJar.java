@@ -27,6 +27,10 @@ public class RemoteJar {
         this.jarPath = jarPath;
     }
 
+    public RemoteJvmProcess runClass(String className, String... args) throws IOException {
+        return runClass(className, null, args);
+    }
+
     public RemoteJvmProcess runClass(String className, Map<String, String> properties, String... args)
             throws IOException {
         String mqId = format("%s-%s", className, randomUUID().toString());
@@ -48,6 +52,10 @@ public class RemoteJar {
 
         Process process = vm.execProcess(cmd.toArray(new String[0]));
         return new RemoteJvmProcess(process, vm.channel, mqId);
+    }
+
+    public JunitProcess runJunit(String testClassName) throws IOException {
+        return runJunit(testClassName);
     }
 
     public JunitProcess runJunit(String testClassName, Map<String, String> properties) throws IOException {
