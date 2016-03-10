@@ -45,12 +45,12 @@ public class CacheActionDispatcher implements Runnable {
     /**
      * What's the length of the queue.
      */
-    static final int MAX_SIZE = 1024;
+    static final int MAX_SIZE = Integer.getInteger("oak.cache.queue.size", 1024);
 
     /**
      * How many actions remove once the queue is longer than {@link #MAX_SIZE}.
      */
-    static final int ACTIONS_TO_REMOVE = 256;
+    static final int ACTIONS_TO_REMOVE = Integer.getInteger("oak.cache.queue.flush", 256);;
 
     final BlockingQueue<CacheAction<?, ?>> queue = new ArrayBlockingQueue<CacheAction<?, ?>>(MAX_SIZE * 2);
 
@@ -85,6 +85,7 @@ public class CacheActionDispatcher implements Runnable {
      */
     synchronized void add(CacheAction<?, ?> action) {
         if (queue.size() >= MAX_SIZE) {
+            LOG.debug("Too many actions in the queue {}. Removing {}.", queue.size(), ACTIONS_TO_REMOVE);
             cleanTheQueue();
         }
         queue.offer(action);
