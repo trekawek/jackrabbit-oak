@@ -19,18 +19,12 @@
 package org.apache.jackrabbit.oak.plugins.document.persistentCache.async;
 
 import static com.google.common.collect.ImmutableSet.of;
-import static com.google.common.collect.Iterables.size;
-import static java.lang.String.valueOf;
 import static java.lang.System.currentTimeMillis;
 import static java.lang.Thread.sleep;
-import static org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher.ACTIONS_TO_REMOVE;
-import static org.apache.jackrabbit.oak.plugins.document.persistentCache.async.CacheActionDispatcher.MAX_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,28 +43,6 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 public class CacheActionDispatcherTest {
-
-    @Test
-    public void testMaxQueueSize() {
-        CacheActionDispatcher dispatcher = new CacheActionDispatcher();
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-        CacheWriteQueue<String, Object> queue = new CacheWriteQueue(dispatcher, mock(PersistentCache.class), null);
-
-        for (int i = 0; i < MAX_SIZE + 10; i++) {
-            dispatcher.add(createWriteAction(valueOf(i), queue));
-        }
-        assertEquals(MAX_SIZE - ACTIONS_TO_REMOVE + 10 + 1, dispatcher.queue.size());
-        assertEquals(valueOf(ACTIONS_TO_REMOVE), dispatcher.queue.peek().toString());
-
-        InvalidateCacheAction<?, ?> invalidateAction = null;
-        for (CacheAction<?, ?> action : dispatcher.queue) {
-            if (action instanceof InvalidateCacheAction) {
-                invalidateAction = (InvalidateCacheAction<?, ?>) action;
-            }
-        }
-        assertNotNull(invalidateAction);
-        assertEquals(ACTIONS_TO_REMOVE, size(invalidateAction.getAffectedKeys()));
-    }
 
     @Test
     public void testQueue() throws InterruptedException {
@@ -151,10 +123,6 @@ public class CacheActionDispatcherTest {
 
         queueThread.join();
         assertTrue(cacheMap.isEmpty());
-    }
-
-    private DummyCacheWriteAction createWriteAction(String id, CacheWriteQueue<String, Object> queue) {
-        return new DummyCacheWriteAction(id, queue);
     }
 
     private class DummyCacheWriteAction implements CacheAction<String, Object> {

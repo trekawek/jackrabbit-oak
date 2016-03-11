@@ -16,14 +16,10 @@
  */
 package org.apache.jackrabbit.oak.plugins.document.persistentCache;
 
-import static com.google.common.cache.RemovalCause.COLLECTED;
-import static com.google.common.cache.RemovalCause.EXPIRED;
-import static com.google.common.cache.RemovalCause.SIZE;
 import static java.util.Collections.singleton;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -46,17 +42,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheStats;
 import com.google.common.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 
 class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<K, V> {
-
-    private static final Set<RemovalCause> EVICTION_CAUSES = ImmutableSet.of(COLLECTED, EXPIRED, SIZE);
-
-    /**
-     * Whether to use the queue to put items into cache. Default: false (cache
-     * will be updated synchronously).
-     */
-    private static final boolean ASYNC_CACHE = Boolean.getBoolean("oak.cache.asynchronous");
 
     private final PersistentCache cache;
     private final PersistentCacheStats stats;
@@ -141,10 +128,15 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     private void write(final K key, final V value) {
         cache.switchGenerationIfNeeded();
         if (value == null) {
-            map.remove(key);
+            writerQueue.addInvalidate(singleton(key));
         } else {
-            map.put(key, value);
+            writerQueue.addPut(key, value);
         }
+        long memory = 0L;
+        memory += (key == null ? 0L: keyType.getMemory(key));
+        memory += (value == null ? 0L: valueType.getMemory(value));
+        stats.markBytesWritten(memory);
+        stats.markPut();
     }
 
     @SuppressWarnings("unchecked")
@@ -181,9 +173,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         try {
             value = memCache.get(key, valueLoader);
             ctx.stop();
-            if (!ASYNC_CACHE) {
-                write((K) key, value);
-            }
+            write((K) key, value);
             broadcast(key, value);
             return value;
         } catch (ExecutionException e) {
@@ -201,9 +191,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     @Override
     public void put(K key, V value) {
         memCache.put(key, value);
-        if (!ASYNC_CACHE) {
-            write((K) key, value);
-        }
+        write((K) key, value);
         broadcast(key, value);
     }
 
@@ -211,11 +199,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        if (ASYNC_CACHE) {
-            writerQueue.addInvalidate(singleton((K) key));
-        } else {
-            write((K) key, null);
-        }
+        write((K) key, null);
         broadcast((K) key, null);
         stats.markInvalidateOne();
     }
@@ -270,9 +254,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
             memCache.put(key, value);
         }
         stats.markRecvBroadcast();
-        if (!ASYNC_CACHE) {
-            write(key, value);
-        }
+        write(key, value);
     }
 
     /**
@@ -280,16 +262,6 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
      */
     @Override
     public void evicted(K key, V value, RemovalCause cause) {
-        if (ASYNC_CACHE && EVICTION_CAUSES.contains(cause) && value != null) { 
-            // invalidations are handled separately
-            writerQueue.addPut(key, value);
-
-            long memory = 0L;
-            memory += (key == null ? 0L: keyType.getMemory(key));
-            memory += (value == null ? 0L: valueType.getMemory(value));
-            stats.markBytesWritten(memory);
-            stats.markPut();
-        }
     }
 
     public PersistentCacheStats getPersistentCacheStats() {
