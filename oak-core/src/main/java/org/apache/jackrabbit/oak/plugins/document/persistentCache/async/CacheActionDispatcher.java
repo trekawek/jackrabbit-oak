@@ -57,7 +57,7 @@ public class CacheActionDispatcher implements Runnable {
     }
 
     /**
-     * Adds the new action and cleans the queue if necessary.
+     * Adds the new action. This is a blocking operation.
      *
      * @param action to be added
      */
