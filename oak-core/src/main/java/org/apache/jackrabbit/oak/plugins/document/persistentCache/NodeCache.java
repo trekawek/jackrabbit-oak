@@ -52,6 +52,12 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
 
     private static final Set<RemovalCause> EVICTION_CAUSES = ImmutableSet.of(COLLECTED, EXPIRED, SIZE);
 
+    /**
+     * Whether to use the queue to put items into cache. Default: false (cache
+     * will be updated synchronously).
+     */
+    private static final boolean ASYNC_CACHE = Boolean.getBoolean("oak.cache.asynchronous");
+
     private final PersistentCache cache;
     private final PersistentCacheStats stats;
     private final Cache<K, V> memCache;
@@ -132,6 +138,18 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         });
     }
 
+    private void write(final K key, final V value) {
+        cache.switchGenerationIfNeeded();
+        MultiGenerationMap<K, V> m = map;
+        if (m != null) {
+            if (value == null) {
+                m.remove(key);
+            } else {
+                m.put(key, value);
+            }
+        }
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     @Nullable
@@ -166,6 +184,9 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         try {
             value = memCache.get(key, valueLoader);
             ctx.stop();
+            if (!ASYNC_CACHE) {
+                write((K) key, value);
+            }
             broadcast(key, value);
             return value;
         } catch (ExecutionException e) {
@@ -183,6 +204,9 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     @Override
     public void put(K key, V value) {
         memCache.put(key, value);
+        if (!ASYNC_CACHE) {
+            write((K) key, value);
+        }
         broadcast(key, value);
     }
 
@@ -190,7 +214,11 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     @Override
     public void invalidate(Object key) {
         memCache.invalidate(key);
-        writerQueue.addInvalidate(singleton((K) key));
+        if (ASYNC_CACHE) {
+            writerQueue.addInvalidate(singleton((K) key));
+        } else {
+            write((K) key, null);
+        }
         broadcast((K) key, null);
         stats.markInvalidateOne();
     }
@@ -245,6 +273,9 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
             memCache.put(key, value);
         }
         stats.markRecvBroadcast();
+        if (!ASYNC_CACHE) {
+            write(key, value);
+        }
     }
 
     /**
@@ -252,7 +283,7 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
      */
     @Override
     public void evicted(K key, V value, RemovalCause cause) {
-        if (EVICTION_CAUSES.contains(cause) && value != null) { 
+        if (ASYNC_CACHE && EVICTION_CAUSES.contains(cause) && value != null) { 
             // invalidations are handled separately
             writerQueue.addPut(key, value);
 
