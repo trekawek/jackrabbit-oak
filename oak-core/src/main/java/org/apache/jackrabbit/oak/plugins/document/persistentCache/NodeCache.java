@@ -126,7 +126,6 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
     }
 
     private void write(final K key, final V value) {
-        cache.switchGenerationIfNeeded();
         if (value == null) {
             writerQueue.addInvalidate(singleton(key));
         } else {
