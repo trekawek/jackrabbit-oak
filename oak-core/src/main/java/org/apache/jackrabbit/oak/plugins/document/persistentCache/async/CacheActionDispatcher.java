@@ -65,7 +65,7 @@ public class CacheActionDispatcher implements Runnable {
         try {
             queue.put(action);
         } catch (InterruptedException e) {
-            LOG.error("Can't put item");
+            LOG.error("Can't put item", e);
         }
     }
 
