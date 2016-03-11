@@ -40,10 +40,9 @@ import org.h2.mvstore.type.DataType;
 import com.google.common.base.Function;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheStats;
-import com.google.common.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 
-class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<K, V> {
+class NodeCache<K, V> implements Cache<K, V>, GenerationCache {
 
     private final PersistentCache cache;
     private final PersistentCacheStats stats;
@@ -254,13 +253,6 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
         }
         stats.markRecvBroadcast();
         write(key, value);
-    }
-
-    /**
-     * Invoked on the eviction from the {@link #memCache}
-     */
-    @Override
-    public void evicted(K key, V value, RemovalCause cause) {
     }
 
     public PersistentCacheStats getPersistentCacheStats() {
