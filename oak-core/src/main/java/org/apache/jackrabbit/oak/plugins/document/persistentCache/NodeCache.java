@@ -140,13 +140,10 @@ class NodeCache<K, V> implements Cache<K, V>, GenerationCache, EvictionListener<
 
     private void write(final K key, final V value) {
         cache.switchGenerationIfNeeded();
-        MultiGenerationMap<K, V> m = map;
-        if (m != null) {
-            if (value == null) {
-                m.remove(key);
-            } else {
-                m.put(key, value);
-            }
+        if (value == null) {
+            map.remove(key);
+        } else {
+            map.put(key, value);
         }
     }
 
