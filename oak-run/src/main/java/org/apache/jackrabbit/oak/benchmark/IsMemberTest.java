@@ -20,8 +20,6 @@ import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import javax.annotation.Nonnull;
-import javax.jcr.Credentials;
 import javax.jcr.Node;
 import javax.jcr.Repository;
 import javax.jcr.RepositoryException;
@@ -31,6 +29,7 @@ import javax.security.auth.Subject;
 import org.apache.jackrabbit.api.JackrabbitSession;
 import org.apache.jackrabbit.api.security.user.Authorizable;
 import org.apache.jackrabbit.api.security.user.Group;
+import org.apache.jackrabbit.api.security.user.User;
 import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.jackrabbit.oak.Oak;
 import org.apache.jackrabbit.oak.fixture.JcrCreator;
@@ -48,58 +47,68 @@ import org.apache.jackrabbit.oak.spi.xml.ProtectedItemImporter;
 import org.apache.jackrabbit.util.Text;
 
 /**
- * Test the performance of adding a configured number of members to groups. The
- * following parameters can be used to run the benchmark:
+ * Benchmark for {@link Group#isMember(Authorizable)} with the following setup:
+ * - 10 groups
+ * - boolean flag defining if the 10 groups will be nested or not.
+ * - configurable number of users that will be added as members.
  *
- * - numberOfMembers : the number of members that should be added in the test run
- * - batchSize : the number of members that should be added before calling Session.save
- * - importBehavior : the {@link org.apache.jackrabbit.oak.spi.xml.ImportBehavior}; valid options are "besteffort", "ignore" and "abort"
+ * The test setup adds the configured number of users as members to the 10 groups,
+ * where the target group is picked randomly. But note that each user is only
+ * member of one single group!
  *
- * For simplicity this benchmark makes use of {@link Group#addMembers(String...)}.
- * An importbehavior of "ignore" and "abort" will required the members to exist
- * and will resolve each ID to the corresponding authorizble first. Those are
- * consequently almost equivalent to calling {@link Group#addMember(org.apache.jackrabbit.api.security.user.Authorizable)}.
- * In case of "besteffort" the member is not resolved to an authorizable.
+ * The test run picks random users and tests for being member of a randomly
+ * selected group.
  */
-public class ManyGroupMembersTest extends AbstractTest {
+public class IsMemberTest extends AbstractTest {
 
     private final Random random = new Random();
 
     private static final String REL_TEST_PATH = "testPath";
+
     private static final String USER = "user";
     private static final String GROUP = "group";
-    private static final int GROUP_CNT = 100;
+    private static final int GROUP_CNT = 10;
 
-    static final int DEFAULT_BATCH_SIZE = 1;
+    private final int numberOfUsers;
+    private final boolean nestedGroups;
 
-    private final int numberOfMembers;
-    private final int batchSize;
-    private final String importBehavior;
+    private List<String> gPaths = new ArrayList<String>();
+    private List<String> uPaths = new ArrayList<String>();
 
-    public ManyGroupMembersTest(int numberOfMembers, int batchSize, @Nonnull String importBehavior) {
-        this.numberOfMembers = numberOfMembers;
-        this.batchSize = batchSize;
-        this.importBehavior = importBehavior;
+    public IsMemberTest(int numberOfUsers, boolean nestedGroups) {
+        this.numberOfUsers = numberOfUsers;
+        this.nestedGroups = nestedGroups;
     }
 
     @Override
-    public void setUp(Repository repository, Credentials credentials) throws Exception {
-        super.setUp(repository, credentials);
+    protected void beforeSuite() throws Exception {
+        super.beforeSuite();
 
         Session s = loginAdministrative();
         try {
             UserManager userManager = ((JackrabbitSession) s).getUserManager();
-            for (int i = 0; i <= GROUP_CNT; i++) {
-                userManager.createGroup(new PrincipalImpl(GROUP + i), REL_TEST_PATH);
+            Group gr = userManager.createGroup(new PrincipalImpl(GROUP + 0), REL_TEST_PATH);
+            gPaths.add(gr.getPath());
+            for (int i = 1; i < GROUP_CNT; i++) {
+                Group g = userManager.createGroup(new PrincipalImpl(GROUP + i), REL_TEST_PATH);
+                if (nestedGroups) {
+                    g.addMember(gr);
+                }
+                gr = g;
+                gPaths.add(gr.getPath());
             }
 
-            if (!ImportBehavior.NAME_BESTEFFORT.equals(importBehavior)) {
-                for (int i = 0; i <= numberOfMembers; i++) {
-                    String id = USER + i;
-                    userManager.createUser(id, null, new PrincipalImpl(id), REL_TEST_PATH);
+            int cnt = 0;
+            for (int i = 0; i <= numberOfUsers; i++) {
+                User u = userManager.createUser(USER + i, null, new PrincipalImpl(USER + i), REL_TEST_PATH);
+                uPaths.add(u.getPath());
+
+                getRandomGroup(userManager).addMember(u);
+
+                if (++cnt == 20000) {
+                    s.save();
                 }
             }
-
         } finally {
             s.save();
             s.logout();
@@ -108,28 +117,22 @@ public class ManyGroupMembersTest extends AbstractTest {
     }
 
     @Override
-    public void tearDown() throws Exception {
+    public void afterSuite() throws Exception {
+        Session s = loginAdministrative();
         try {
-            Session s = loginAdministrative();
-
             Authorizable authorizable = ((JackrabbitSession) s).getUserManager().getAuthorizable(GROUP + "0");
             if (authorizable != null) {
                 Node n = s.getNode(Text.getRelativeParent(authorizable.getPath(), 1));
                 n.remove();
             }
-
-            if (!ImportBehavior.NAME_BESTEFFORT.equals(importBehavior)) {
-                authorizable = ((JackrabbitSession) s).getUserManager().getAuthorizable(USER + "0");
-                if (authorizable != null) {
-                    Node n = s.getNode(Text.getRelativeParent(authorizable.getPath(), 1));
-                    n.remove();
-                }
+            authorizable = ((JackrabbitSession) s).getUserManager().getAuthorizable(USER + "0");
+            if (authorizable != null) {
+                Node n = s.getNode(Text.getRelativeParent(authorizable.getPath(), 1));
+                n.remove();
             }
             s.save();
-            s.logout();
-
         } finally {
-            super.tearDown();
+            s.logout();
         }
     }
 
@@ -139,7 +142,7 @@ public class ManyGroupMembersTest extends AbstractTest {
             return ((OakRepositoryFixture) fixture).setUpCluster(1, new JcrCreator() {
                 @Override
                 public Jcr customize(Oak oak) {
-                    SecurityProvider sp = new SecurityProviderImpl(ConfigurationParameters.of(UserConfiguration.NAME, ConfigurationParameters.of(ProtectedItemImporter.PARAM_IMPORT_BEHAVIOR, importBehavior)));
+                    SecurityProvider sp = new SecurityProviderImpl(ConfigurationParameters.of(UserConfiguration.NAME, ConfigurationParameters.of(ProtectedItemImporter.PARAM_IMPORT_BEHAVIOR, ImportBehavior.NAME_BESTEFFORT)));
                     return new Jcr(oak).with(sp);
                 }
             });
@@ -160,30 +163,30 @@ public class ManyGroupMembersTest extends AbstractTest {
                 }
             }, null);
             UserManager userManager = ((JackrabbitSession) s).getUserManager();
-            String groupId = GROUP + random.nextInt(GROUP_CNT);
-            Group g = userManager.getAuthorizable(groupId, Group.class);
-            for (int i = 0; i <= numberOfMembers; i++) {
-                if (batchSize <= DEFAULT_BATCH_SIZE) {
-                    g.addMembers(USER + i);
-                } else {
-                    List<String> ids = new ArrayList<String>(batchSize);
-                    for (int j = 0; j < batchSize && i <= numberOfMembers; j++) {
-                        ids.add(USER + i);
-                        i++;
-                    }
-                    g.addMembers(ids.toArray(new String[ids.size()]));
-                }
-                s.save();
+
+            for (int i = 0; i <= 1000; i++) {
+                Group g = getRandomGroup(userManager);
+                boolean isMember = isMember(g, getRandomUser(userManager));
+                //System.out.println(USER + i + " is " + (isMember? "" : "not ")+ "member of " +groupId);
             }
         } catch (RepositoryException e) {
             System.out.println(e.getMessage());
-            if (s.hasPendingChanges()) {
-                s.refresh(false);
-            }
         } finally {
             if (s != null) {
                 s.logout();
             }
         }
+    }
+
+    protected boolean isMember(Group g, Authorizable member) throws RepositoryException {
+        return g.isMember(member);
+    }
+
+    private Group getRandomGroup(UserManager uMgr) throws RepositoryException {
+        return (Group) uMgr.getAuthorizableByPath(gPaths.get(random.nextInt(GROUP_CNT)));
+    }
+
+    private User getRandomUser(UserManager uMgr) throws RepositoryException {
+        return (User) uMgr.getAuthorizableByPath(uPaths.get(random.nextInt(numberOfUsers)));
     }
 }
