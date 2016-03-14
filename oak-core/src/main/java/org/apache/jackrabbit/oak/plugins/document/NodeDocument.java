@@ -54,7 +54,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.primitives.Longs;
 
 import static com.google.common.base.Objects.equal;
 import static com.google.common.base.Preconditions.checkArgument;
@@ -1313,10 +1312,12 @@ public final class NodeDocument extends Document implements CachedNodeDocument{
     }
 
     NodeDocument getPreviousDocument(String prevId){
-        //Use the maxAge variant such that in case of Mongo call for
-        //previous doc are directed towards replicas first
         LOG.trace("get previous document {}", prevId);
-        return store.find(Collection.NODES, prevId, Integer.MAX_VALUE);
+        NodeDocument doc = store.find(Collection.NODES, prevId);
+        if (doc == null) {
+            doc = store.find(Collection.NODES, prevId, 0); // force the primary
+        }
+        return doc;
     }
 
     @Nonnull

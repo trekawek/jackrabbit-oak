@@ -504,17 +504,6 @@ public class MongoDocumentStore implements DocumentStore {
 
             DBObject obj = dbCollection.findOne(getByKeyQuery(key).get(), null, null, readPreference);
 
-            if (obj == null
-                    && readPreference.isSlaveOk()) {
-                //In case secondary read preference is used and node is not found
-                //then check with primary again as it might happen that node document has not been
-                //replicated. This is required for case like SplitDocument where the SplitDoc is fetched with
-                //maxCacheAge == Integer.MAX_VALUE which results in readPreference of secondary.
-                //In such a case we know that document with such an id must exist
-                //but possibly dut to replication lag it has not reached to secondary. So in that case read again
-                //from primary
-                obj = dbCollection.findOne(getByKeyQuery(key).get(), null, null, ReadPreference.primary());
-            }
             if(obj == null){
                 docFound = false;
                 return null;
