@@ -39,7 +39,7 @@ Following code will create a virtual machine, upload the jar containing code to 
     vm.start();
 
     // jar will be taken from the local Maven repository
-    RemoteJar jar = vm.uploadJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
+    RemoteJar jar = vm.uploadJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.6-SNAPSHOT");
     RemoteJvmProcess process = jar.runClass(NodeWriter.class.getName(), null);
     process.waitForFinish();
 

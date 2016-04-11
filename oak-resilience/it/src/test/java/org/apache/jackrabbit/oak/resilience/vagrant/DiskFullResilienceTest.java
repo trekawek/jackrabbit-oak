@@ -45,7 +45,7 @@ public class DiskFullResilienceTest {
         vm = new VagrantVM.Builder().setVagrantFile("src/test/resources/Vagrantfile").build();
         vm.init();
         vm.start();
-        itJar = vm.uploadJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.4-SNAPSHOT");
+        itJar = vm.uploadJar("org.apache.jackrabbit", "oak-resilience-it-remote", "1.6-SNAPSHOT");
     }
 
     @After
