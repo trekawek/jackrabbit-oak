@@ -27,9 +27,14 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -213,10 +218,42 @@ public class VagrantVM {
     }
 
     public Proxy forwardPortToGuest(int upstreamHostPort, int listenGuestPort) throws IOException {
-        String hostAddr = InetAddress.getLocalHost().getHostAddress();
+        String hostAddr = getLocalIp().getHostAddress();
         String name = String.format("proxy_%d_%d", upstreamHostPort, listenGuestPort);
         ToxiproxyClient client = new ToxiproxyClient("localhost", getHostPort(8474));
         return client.createProxy(name, "localhost:" + listenGuestPort, hostAddr + ":" + upstreamHostPort);
+    }
+
+    private InetAddress getLocalIp() throws IOException {
+        InetAddress local = InetAddress.getLocalHost();
+        if (isValidAddress(local)) {
+            return local;
+        }
+        InetAddress[] addrs = InetAddress.getAllByName(local.getCanonicalHostName());
+        if (addrs != null) {
+            for (InetAddress addr : addrs) {
+                if (isValidAddress(addr)) {
+                    return addr;
+                }
+            }
+        }
+        for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
+            NetworkInterface networkInterface = en.nextElement();
+            for (Enumeration<InetAddress> intfAddrs = networkInterface.getInetAddresses(); intfAddrs.hasMoreElements(); ) {
+                InetAddress addr = intfAddrs.nextElement();
+                if (isValidAddress(addr)) {
+                    return addr;
+                }
+            }
+        }
+        throw new IOException("Can't find local address different than 127.0.0.1");
+    }
+
+    private boolean isValidAddress(InetAddress addr) {
+        if (addr.isLoopbackAddress()) {
+            return false;
+        }
+        return addr instanceof Inet4Address;
     }
 
     Process execProcess(String... cmd) throws IOException {
