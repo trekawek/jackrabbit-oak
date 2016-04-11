@@ -65,7 +65,7 @@ public class NetworkDownResilienceTest {
 
     @Test
     public void testWriteResilience() throws IOException, TimeoutException, InterruptedException {
-        RemoteJvmProcess process = itJar.runClass(MongoWriter.class.getName(), null);
+        RemoteJvmProcess process = itJar.runClass(MongoWriter.class.getName());
         process.waitForMessage("go", 600);
 
         proxy.disable();
