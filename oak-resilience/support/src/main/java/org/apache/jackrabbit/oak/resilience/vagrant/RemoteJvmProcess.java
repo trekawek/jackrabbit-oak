@@ -75,13 +75,13 @@ public class RemoteJvmProcess {
         }
     }
 
-    public void fillMemory(int memorySize, MemoryUnit memoryUnit, int period, TimeUnit timeUnit) throws IOException {
+    public void fillMemory(int memorySize, MemoryUnit memoryUnit, int period, TimeUnit timeUnit, boolean onHeap) throws IOException {
         long bytes = memoryUnit.toByte(memorySize);
         if (bytes > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("memorySize is too big");
         }
         channel.basicPublish("", mqId, null, String
-                .format("fill_memory\t%d\t%d", memoryUnit.toByte(memorySize), timeUnit.toMillis(period)).getBytes());
+                .format("fill_memory\t%d\t%d\t%s", memoryUnit.toByte(memorySize), timeUnit.toMillis(period), Boolean.toString(onHeap)).getBytes());
     }
 
     public boolean isResponding() {

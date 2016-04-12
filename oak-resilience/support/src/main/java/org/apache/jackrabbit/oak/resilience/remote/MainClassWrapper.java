@@ -61,7 +61,7 @@ public class MainClassWrapper {
         FILL_MEMORY {
             @Override
             protected Runnable getRunnable(String[] message) {
-                return new FillMemoryOperation(Integer.parseInt(message[1]), Long.parseLong(message[2]));
+                return new FillMemoryOperation(Integer.parseInt(message[1]), Long.parseLong(message[2]), Boolean.parseBoolean(message[3]));
             }
         },
         PING {
