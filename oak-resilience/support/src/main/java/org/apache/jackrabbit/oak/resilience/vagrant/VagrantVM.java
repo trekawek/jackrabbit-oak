@@ -182,9 +182,13 @@ public class VagrantVM {
     public long freeDiskSpaceKb() throws IOException {
         Process process = execProcess(vagrantExecutable, "ssh", "--", "df", "/");
         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        reader.readLine();
-        List<String> output = Lists.newArrayList(Splitter.on(' ').omitEmptyStrings().split(reader.readLine()));
-        return Long.parseLong(output.get(3));
+        try {
+            reader.readLine();
+            List<String> output = Lists.newArrayList(Splitter.on(' ').omitEmptyStrings().split(reader.readLine()));
+            return Long.parseLong(output.get(3));
+        } finally {
+            reader.close();
+        }
     }
 
     public void fillDiskUntil(long freeSpaceToLeave, MemoryUnit unit) throws IOException {
