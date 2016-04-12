@@ -55,7 +55,7 @@ public class RestartResilienceTest {
 
     @Test
     public void testWriteResilience() throws IOException, TimeoutException {
-        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS);
+        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS, "150000");
         process.waitForMessage("go", 600);
         vm.reset();
 

@@ -59,7 +59,7 @@ public class DiskFullResilienceTest {
         vm.fillDiskUntil(100, MEGABYTE);
         assertTrue(vm.freeDiskSpaceKb() <= MEGABYTE.toKilobyte(100));
 
-        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS);
+        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS, "150000");
         process.waitForMessage("go", 600);
         vm.fillDiskUntil(0, MEGABYTE);
         process.waitForFinish();

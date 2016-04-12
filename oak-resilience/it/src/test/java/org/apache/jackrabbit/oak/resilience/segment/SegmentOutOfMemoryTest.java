@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.resilience.vagrant;
+package org.apache.jackrabbit.oak.resilience.segment;
 
 import static org.junit.Assert.assertTrue;
 
@@ -27,14 +27,18 @@ import java.util.concurrent.TimeoutException;
 import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
 import org.apache.jackrabbit.oak.resilience.remote.segment.NodeWriter;
 import org.apache.jackrabbit.oak.resilience.remote.segment.NodeWriterTest;
+import org.apache.jackrabbit.oak.resilience.vagrant.MemoryUnit;
+import org.apache.jackrabbit.oak.resilience.vagrant.RemoteJar;
+import org.apache.jackrabbit.oak.resilience.vagrant.RemoteJvmProcess;
+import org.apache.jackrabbit.oak.resilience.vagrant.VagrantVM;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-public class MemoryFullResilienceTest {
+public class SegmentOutOfMemoryTest {
 
     private static final Map<String, String> PROPS = Collections.singletonMap("OAK_DIR",
-            "/home/vagrant/" + MemoryFullResilienceTest.class.getName());
+            "/home/vagrant/" + SegmentOutOfMemoryTest.class.getName());
 
     private VagrantVM vm;
 
@@ -55,10 +59,21 @@ public class MemoryFullResilienceTest {
     }
 
     @Test
-    public void testWriteResilience() throws IOException, TimeoutException, InterruptedException {
-        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS);
+    public void testOnHeapMemoryFull() throws IOException, TimeoutException, InterruptedException {
+        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS, "150000");
         process.waitForMessage("go", 600);
-        process.fillMemory(1, MemoryUnit.MEGABYTE, 50, TimeUnit.MILLISECONDS);
+        process.fillMemory(1, MemoryUnit.MEGABYTE, 50, TimeUnit.MILLISECONDS, true);
+        process.waitForFinish();
+
+        JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), PROPS);
+        assertTrue(junit.read().wasSuccessful());
+    }
+
+    @Test
+    public void testOffHeapMemoryFull() throws IOException, TimeoutException, InterruptedException {
+        RemoteJvmProcess process = itJar.runClass(NodeWriter.class.getName(), PROPS, "200000");
+        process.waitForMessage("go", 600);
+        process.fillMemory(1, MemoryUnit.MEGABYTE, 50, TimeUnit.MILLISECONDS, false);
         process.waitForFinish();
 
         JunitProcess junit = itJar.runJunit(NodeWriterTest.class.getName(), PROPS);
