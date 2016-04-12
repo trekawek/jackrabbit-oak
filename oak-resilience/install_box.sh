@@ -1,6 +1,7 @@
 #!/bin/bash
 
-vagrant box update --box ubuntu/trusty64
+BASE=ubuntu/wily64
+vagrant box add "$BASE" || vagrant box update --box "$BASE"
 
 cd vagrant
 vagrant up
