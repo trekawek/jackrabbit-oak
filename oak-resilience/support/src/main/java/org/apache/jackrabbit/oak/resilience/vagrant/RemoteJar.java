@@ -51,7 +51,7 @@ public class RemoteJar {
         cmd.addAll(asList(args));
 
         Process process = vm.execProcess(cmd.toArray(new String[0]));
-        return new RemoteJvmProcess(process, vm.channel, mqId);
+        return new RemoteJvmProcess(process, vm.channel, mqId, vm);
     }
 
     public JunitProcess runJunit(String testClassName) throws IOException {

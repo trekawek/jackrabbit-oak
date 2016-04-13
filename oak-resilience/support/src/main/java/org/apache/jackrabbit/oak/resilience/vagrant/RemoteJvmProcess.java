@@ -2,8 +2,12 @@ package org.apache.jackrabbit.oak.resilience.vagrant;
 
 import static java.lang.System.currentTimeMillis;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
@@ -21,13 +25,16 @@ public class RemoteJvmProcess {
 
     private final String mqId;
 
-    public RemoteJvmProcess(Process process, Channel channel, String mqId) throws IOException {
+    private final VagrantVM vm;
+
     private final int pid;
 
+    public RemoteJvmProcess(Process process, Channel channel, String mqId, VagrantVM vm) throws IOException {
         this.process = process;
         this.consumer = new QueueingConsumer(channel);
         this.channel = channel;
         this.mqId = mqId;
+        this.vm = vm;
 
         channel.queueDeclare(mqId, false, false, false, null);
         channel.basicConsume(mqId, true, consumer);
@@ -85,6 +92,25 @@ public class RemoteJvmProcess {
         }
         channel.basicPublish("", mqId, null, String
                 .format("fill_memory\t%d\t%d\t%s", memoryUnit.toByte(memorySize), timeUnit.toMillis(period), Boolean.toString(onHeap)).getBytes());
+    }
+
+    public int getDescriptorLimit() throws IOException {
+        Process process = vm.execProcess(vm.vagrantExecutable, "ssh", "--", "prlimit", "--nofile", "-p", String.valueOf(pid));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        try {
+            reader.readLine();
+            Matcher m = Pattern.compile("^NOFILE   max number of open files (\\d+) (\\d+)$").matcher(reader.readLine());
+            if (!m.matches()) {
+                return -1;
+            }
+            return Integer.parseInt(m.group(1));
+        } finally {
+            reader.close();
+        }
+    }
+
+    public void setDescriptorLimit(int limit) throws IOException {
+        vm.ssh("sudo", "prlimit", "--nofile=" + limit, "-p", String.valueOf(pid));
     }
 
     public boolean isResponding() {

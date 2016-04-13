@@ -172,7 +172,7 @@ public class VagrantVM {
         start();
     }
 
-    private int ssh(String... args) throws IOException {
+    int ssh(String... args) throws IOException {
         List<String> cmd = new ArrayList<String>();
         cmd.addAll(Arrays.asList(vagrantExecutable, "ssh", "--"));
         cmd.addAll(Arrays.asList(args));
