@@ -49,28 +49,33 @@ public class TreeNodeWriter {
         this.arity = arity;
     }
 
-   private void start() throws CommitFailedException, IOException, InterruptedException {
-       System.out.println("Create tree with " + treeLevel + " levels and " + nodesToCreate + " nodes with child arity " + arity);
-       createTree(0, rootBuilder);
+    private void start() throws CommitFailedException, IOException, InterruptedException {
+        System.out.println("Create tree with " + treeLevel + " levels and " + nodesToCreate + " nodes with child arity " + arity);
+        createTree(0, rootBuilder);
+        ns.merge(rootBuilder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
     }
 
     private void createTree(int level, NodeBuilder builder) throws CommitFailedException, IOException, InterruptedException {
-       for (int i = 0; i < arity; i++) {
-           NodeBuilder child = builder.child(String.format("child_%d_%d", level, i));
-           createdNodes++;
-           if (createdNodes % 1000 == 0) {
-               ns.merge(rootBuilder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
-               System.out.println("Merged. Created nodes: " + createdNodes + ". Last builder: " + child);
-           }
-           if (createdNodes == nodesToCreate / 10) {
-               System.out.println("Sending message");
-               RemoteMessageProducer.getInstance().publish("go");
-               Thread.sleep(5000);
-           }
-           if (createdNodes < nodesToCreate && level < treeLevel - 1) {
-               createTree(level + 1, child);
-           }
-       }
+        for (int i = 0; i < arity; i++) {
+            if (createdNodes >= nodesToCreate) {
+                break;
+            }
+            NodeBuilder child = builder.child(String.format("child_%d_%d", level, i));
+            child.setProperty("key", "xyz");
+            createdNodes++;
+            if (createdNodes % 1000 == 0) {
+                ns.merge(rootBuilder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
+                System.out.println("Merged. Created nodes: " + createdNodes + ". Last builder: " + child);
+            }
+            if (createdNodes == nodesToCreate / 20) {
+                System.out.println("Sending message");
+                RemoteMessageProducer.getInstance().publish("go");
+                Thread.sleep(5000);
+            }
+            if (level < treeLevel - 1) {
+                createTree(level + 1, child);
+            }
+        }
     }
 
     private static int computeTreeLevel(int nodeChildrenCount, int nodesToCreate) {

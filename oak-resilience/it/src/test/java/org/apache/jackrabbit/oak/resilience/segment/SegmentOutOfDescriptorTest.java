@@ -1,6 +1,8 @@
 package org.apache.jackrabbit.oak.resilience.segment;
 
+import org.apache.jackrabbit.oak.resilience.junit.JunitProcess;
 import org.apache.jackrabbit.oak.resilience.remote.segment.TreeNodeWriter;
+import org.apache.jackrabbit.oak.resilience.remote.segment.TreeNodeWriterTest;
 import org.apache.jackrabbit.oak.resilience.vagrant.RemoteJar;
 import org.apache.jackrabbit.oak.resilience.vagrant.RemoteJvmProcess;
 import org.apache.jackrabbit.oak.resilience.vagrant.VagrantVM;
@@ -14,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class SegmentOutOfDescriptorTest {
     private static final Map<String, String> PROPS = Collections.singletonMap("OAK_DIR",
@@ -42,7 +45,11 @@ public class SegmentOutOfDescriptorTest {
         RemoteJvmProcess process = itJar.runClass(TreeNodeWriter.class.getName(), PROPS, "5000000");
         process.waitForMessage("go", 600);
         process.setDescriptorLimit(1);
+        process.exhaustDescriptors();
         process.waitForFinish();
+
+        JunitProcess junit = itJar.runJunit(TreeNodeWriterTest.class.getName(), PROPS);
+        assertTrue(junit.read().wasSuccessful());
     }
 
 }
