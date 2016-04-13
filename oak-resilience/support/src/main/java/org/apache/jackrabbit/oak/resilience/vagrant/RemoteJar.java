@@ -7,6 +7,7 @@ import static org.apache.jackrabbit.oak.resilience.remote.junit.JunitClassWrappe
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,7 @@ public class RemoteJar {
     }
 
     public JunitProcess runJunit(String testClassName) throws IOException {
-        return runJunit(testClassName);
+        return runJunit(testClassName, Collections.<String, String>emptyMap());
     }
 
     public JunitProcess runJunit(String testClassName, Map<String, String> properties) throws IOException {
