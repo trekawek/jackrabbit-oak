@@ -22,13 +22,13 @@ public class MainClassWrapper {
         }
 
         RemoteMessageProducer producer = RemoteMessageProducer.getInstance();
-        final QueueingConsumer consumer = producer.createConsumer();
+        final QueueingConsumer controlQueueConsumer = producer.createControlQueueConsumer();
         new Thread(new Runnable() {
             @Override
             public void run() {
                 while (true) {
                     try {
-                        handleDelivery(consumer.nextDelivery());
+                        handleDelivery(controlQueueConsumer.nextDelivery());
                     } catch (Exception e) {
                         if (!(e instanceof ShutdownSignalException)) {
                             e.printStackTrace();

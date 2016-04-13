@@ -25,6 +25,8 @@ public class RemoteJvmProcess {
 
     private final String mqId;
 
+    private final String controlMqId;
+
     private final VagrantVM vm;
 
     private final int pid;
@@ -34,9 +36,11 @@ public class RemoteJvmProcess {
         this.consumer = new QueueingConsumer(channel);
         this.channel = channel;
         this.mqId = mqId;
+        this.controlMqId = mqId + "-control";
         this.vm = vm;
 
         channel.queueDeclare(mqId, false, false, false, null);
+        channel.queueDeclare(controlMqId, false, false, false, null);
         channel.basicConsume(mqId, true, consumer);
         pid = Integer.valueOf(getMessage());
 
@@ -90,7 +94,7 @@ public class RemoteJvmProcess {
         if (bytes > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("memorySize is too big");
         }
-        channel.basicPublish("", mqId, null, String
+        channel.basicPublish("", controlMqId, null, String
                 .format("fill_memory\t%d\t%d\t%s", memoryUnit.toByte(memorySize), timeUnit.toMillis(period), Boolean.toString(onHeap)).getBytes());
     }
 
@@ -115,7 +119,7 @@ public class RemoteJvmProcess {
 
     public boolean isResponding() {
         try {
-            channel.basicPublish("", mqId, null, "ping".getBytes());
+            channel.basicPublish("", controlMqId, null, "ping".getBytes());
         } catch (IOException e) {
             return false;
         }

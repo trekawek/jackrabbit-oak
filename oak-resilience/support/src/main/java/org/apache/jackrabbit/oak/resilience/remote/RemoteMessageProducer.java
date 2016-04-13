@@ -49,6 +49,7 @@ public class RemoteMessageProducer {
 
         channel = connection.createChannel();
         channel.queueDeclare(queueId, false, false, false, null);
+        channel.queueDeclare(queueId + "-control", false, false, false, null);
     }
 
     public static RemoteMessageProducer getInstance() throws IOException {
@@ -62,9 +63,9 @@ public class RemoteMessageProducer {
         return instance;
     }
 
-    QueueingConsumer createConsumer() throws IOException {
+    QueueingConsumer createControlQueueConsumer() throws IOException {
         QueueingConsumer consumer = new QueueingConsumer(channel);
-        channel.basicConsume(queueId, true, consumer);
+        channel.basicConsume(queueId + "-control", true, consumer);
         return consumer;
     }
 
