@@ -1,2 +1,7 @@
 include 'jdk_oracle'
-include '::rabbitmq'
+
+class { '::rabbitmq':
+  config_variables => {
+    'loopback_users' => "[]"
+  }
+}
