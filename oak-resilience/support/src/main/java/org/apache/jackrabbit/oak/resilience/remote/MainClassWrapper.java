@@ -1,5 +1,7 @@
 package org.apache.jackrabbit.oak.resilience.remote;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -19,7 +21,8 @@ public class MainClassWrapper {
             mainArgs[i] = args[i + 1];
         }
 
-        final QueueingConsumer consumer = RemoteMessageProducer.getInstance().createConsumer();
+        RemoteMessageProducer producer = RemoteMessageProducer.getInstance();
+        final QueueingConsumer consumer = producer.createConsumer();
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -35,6 +38,8 @@ public class MainClassWrapper {
                 }
             }
         }).start();
+
+        producer.publish(Integer.toString(getPid()));
 
         Method method = clazz.getMethod("main", args.getClass());
         try {
@@ -55,6 +60,10 @@ public class MainClassWrapper {
         if (runnable != null) {
             new Thread(runnable, "JvmOperation [" + message + "]").start();
         }
+    }
+
+    public static int getPid() throws IOException {
+        return Integer.parseInt(new File("/proc/self").getCanonicalFile().getName());
     }
 
     private enum JvmOperation {

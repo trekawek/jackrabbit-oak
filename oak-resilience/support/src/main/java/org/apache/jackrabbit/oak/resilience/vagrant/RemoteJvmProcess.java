@@ -22,6 +22,8 @@ public class RemoteJvmProcess {
     private final String mqId;
 
     public RemoteJvmProcess(Process process, Channel channel, String mqId) throws IOException {
+    private final int pid;
+
         this.process = process;
         this.consumer = new QueueingConsumer(channel);
         this.channel = channel;
@@ -29,6 +31,7 @@ public class RemoteJvmProcess {
 
         channel.queueDeclare(mqId, false, false, false, null);
         channel.basicConsume(mqId, true, consumer);
+        pid = Integer.valueOf(getMessage());
 
         stdoutLogger = new Thread(new StreamLogger(process.getInputStream()));
         stdoutLogger.start();
