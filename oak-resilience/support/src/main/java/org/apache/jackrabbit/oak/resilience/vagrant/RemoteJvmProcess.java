@@ -117,6 +117,10 @@ public class RemoteJvmProcess {
         vm.ssh("sudo", "prlimit", "--nofile=" + limit, "-p", String.valueOf(pid));
     }
 
+    public void exhaustDescriptors() throws IOException {
+        channel.basicPublish("", controlMqId, null, "exhaust_descriptors".getBytes());
+    }
+
     public boolean isResponding() {
         try {
             channel.basicPublish("", controlMqId, null, "ping".getBytes());

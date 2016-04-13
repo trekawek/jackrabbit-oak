@@ -6,6 +6,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.jackrabbit.oak.resilience.remote.operations.ExhaustDescriptorsOperation;
 import org.apache.jackrabbit.oak.resilience.remote.operations.FillMemoryOperation;
 
 import com.rabbitmq.client.QueueingConsumer;
@@ -77,6 +78,12 @@ public class MainClassWrapper {
             @Override
             protected Runnable getRunnable(String[] message) {
                 return null;
+            }
+        },
+        EXHAUST_DESCRIPTORS {
+            @Override
+            protected Runnable getRunnable(String[] message) {
+                return new ExhaustDescriptorsOperation();
             }
         };
         protected abstract Runnable getRunnable(String[] message);
