@@ -38,7 +38,7 @@ public class TreeNodeWriterTest {
     @Test
     public void simpleTest() {
         int nodesFound = traverseRecursively(ns.getRoot(), 0);
-        assertEquals(5000000, nodesFound);
+        assertEquals(58000, nodesFound);
         System.out.println("nodes traversed");
     }
 

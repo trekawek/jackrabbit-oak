@@ -20,7 +20,7 @@ public class TreeNodeWriter {
         File oakDir = new File(System.getProperty("OAK_DIR"));
         oakDir.mkdirs();
 
-        SegmentStore store = FileStore.newFileStore(oakDir).create();
+        SegmentStore store = FileStore.newFileStore(oakDir).withMaxFileSize(1).create();
         SegmentNodeStore ns = SegmentNodeStore.newSegmentNodeStore(store).create();
 
         TreeNodeWriter writer = new TreeNodeWriter(ns, 2, Integer.parseInt(args[0]));
@@ -63,14 +63,14 @@ public class TreeNodeWriter {
             NodeBuilder child = builder.child(String.format("child_%d_%d", level, i));
             child.setProperty("key", "xyz");
             createdNodes++;
-            if (createdNodes % 1000 == 0) {
-                ns.merge(rootBuilder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
-                System.out.println("Merged. Created nodes: " + createdNodes + ". Last builder: " + child);
-            }
-            if (createdNodes == nodesToCreate / 20) {
+            if (createdNodes == 59000) {
                 System.out.println("Sending message");
                 RemoteMessageProducer.getInstance().publish("go");
                 Thread.sleep(5000);
+            }
+            if (createdNodes % 1000 == 0) {
+                ns.merge(rootBuilder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
+                System.out.println("Merged. Created nodes: " + createdNodes + ". Last builder: " + child);
             }
             if (level < treeLevel - 1) {
                 createTree(level + 1, child);

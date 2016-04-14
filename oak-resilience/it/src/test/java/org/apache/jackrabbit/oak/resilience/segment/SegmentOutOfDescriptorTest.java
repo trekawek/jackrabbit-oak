@@ -45,7 +45,6 @@ public class SegmentOutOfDescriptorTest {
         RemoteJvmProcess process = itJar.runClass(TreeNodeWriter.class.getName(), PROPS, "5000000");
         process.waitForMessage("go", 600);
         process.setDescriptorLimit(1);
-        process.exhaustDescriptors();
         process.waitForFinish();
 
         JunitProcess junit = itJar.runJunit(TreeNodeWriterTest.class.getName(), PROPS);
