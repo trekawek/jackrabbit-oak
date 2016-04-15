@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class TreeNodeWriterTest {
 
@@ -37,6 +38,8 @@ public class TreeNodeWriterTest {
 
     @Test
     public void simpleTest() {
+        assertTrue(ns.getRoot().getChildNodeEntries().iterator().hasNext());
+
         int nodesFound = traverseRecursively(ns.getRoot(), 0);
         assertEquals(58000, nodesFound);
         System.out.println("nodes traversed");
