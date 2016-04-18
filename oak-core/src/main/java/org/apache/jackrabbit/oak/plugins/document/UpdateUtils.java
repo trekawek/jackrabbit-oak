@@ -24,6 +24,7 @@ import java.util.Map.Entry;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.base.Function;
 import com.google.common.base.Objects;
 
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Condition;
@@ -35,6 +36,16 @@ import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Operation;
  * {@link Document}s.
  */
 public class UpdateUtils {
+
+    /**
+     * Function that transforms the UpdateOp into its id.
+     */
+    public static final Function<UpdateOp, String> GET_ID = new Function<UpdateOp, String>() {
+        @Override
+        public String apply(UpdateOp input) {
+            return input.getId();
+        }
+    };
 
     /**
      * Apply the changes to the in-memory document.
