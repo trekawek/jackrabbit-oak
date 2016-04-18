@@ -35,6 +35,7 @@ public class CacheChangesTracker {
         this.changeTrackers = changeTrackers;
         this.keyFilter = keyFilter;
         this.lazyBloomFilter = new LazyBloomFilter();
+        changeTrackers.add(this);
     }
 
     public void putDocument(String key) {
