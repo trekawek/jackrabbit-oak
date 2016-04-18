@@ -18,16 +18,23 @@ package org.apache.jackrabbit.oak.plugins.document.cache;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Collections2;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import org.apache.jackrabbit.oak.cache.CacheStats;
@@ -36,10 +43,12 @@ import org.apache.jackrabbit.oak.plugins.document.Document;
 import org.apache.jackrabbit.oak.plugins.document.NodeDocument;
 import org.apache.jackrabbit.oak.plugins.document.locks.NodeDocumentLocks;
 import org.apache.jackrabbit.oak.plugins.document.util.StringValue;
+import org.apache.jackrabbit.oak.plugins.document.util.Utils;
 
 import com.google.common.base.Objects;
 import com.google.common.cache.Cache;
 
+import static java.util.Collections.synchronizedSet;
 import static org.apache.jackrabbit.oak.plugins.document.util.Utils.isLeafPreviousDocId;
 
 /**
@@ -61,6 +70,8 @@ public class NodeDocumentCache implements Closeable {
 
     private final NodeDocumentLocks locks;
 
+    private final List<CacheChangesTracker> changeTrackers;
+
     public NodeDocumentCache(@Nonnull Cache<CacheValue, NodeDocument> nodeDocumentsCache,
                              @Nonnull CacheStats nodeDocumentsCacheStats,
                              @Nonnull Cache<StringValue, NodeDocument> prevDocumentsCache,
@@ -71,6 +82,7 @@ public class NodeDocumentCache implements Closeable {
         this.prevDocumentsCache = prevDocumentsCache;
         this.prevDocumentsCacheStats = prevDocumentsCacheStats;
         this.locks = locks;
+        this.changeTrackers = new CopyOnWriteArrayList<CacheChangesTracker>();
     }
 
     /**
@@ -85,6 +97,10 @@ public class NodeDocumentCache implements Closeable {
                 prevDocumentsCache.invalidate(new StringValue(key));
             } else {
                 nodeDocumentsCache.invalidate(new StringValue(key));
+            }
+
+            for (CacheChangesTracker tracker : changeTrackers) {
+                tracker.invalidateDocument(key);
             }
         } finally {
             lock.unlock();
@@ -319,6 +335,79 @@ public class NodeDocumentCache implements Closeable {
         }
     }
 
+    /**
+     * Registers a new CacheChangesTracker that records all puts and
+     * invalidations related to children of the given parent.
+     *
+     * @param parentId children of this parent will be tracked
+     * @return new tracker
+     */
+    public CacheChangesTracker registerTracker(final String parentId) {
+        return new CacheChangesTracker(new Predicate<String>() {
+            @Override
+            public boolean apply(@Nullable String input) {
+                return input != null && parentId.equals(Utils.getParentId(input));
+            }
+        }, changeTrackers);
+    }
+
+    /**
+     * Registers a new CacheChangesTracker that records all puts and
+     * invalidations related to the given documents
+     *
+     * @param keys these documents will be tracked
+     * @return new tracker
+     */
+    public CacheChangesTracker registerTracker(final Set<String> keys) {
+        return new CacheChangesTracker(new Predicate<String>() {
+            @Override
+            public boolean apply(@Nullable String input) {
+                return input != null && keys.contains(input);
+            }
+        }, changeTrackers);
+    }
+
+    /**
+     * Updates the cache with all the documents that:
+     *
+     * (1) currently have their older versions in the cache or
+     * (2) have been neither put nor invalidated during the tracker lifetime.
+     *
+     * We can't cache documents that has been invalidated during the tracker
+     * lifetime, as it's possible that the invalidated version was newer than
+     * the one passed in the docs parameter.
+     *
+     * If the document has been added during the tracker lifetime, but it is not
+     * present in the cache anymore, it means it may have been evicted, so we
+     * can't re-add it for the same reason as above.
+     *
+     * @param tracker
+     *            used to decide whether the docs should be put into cache
+     * @param docs
+     *            to put into cache
+     */
+    public void putNonConflictingDocs(CacheChangesTracker tracker, List<NodeDocument> docs) {
+        for (NodeDocument d : docs) {
+            if (d == null || d == NodeDocument.NULL) {
+                continue;
+            }
+            String id = d.getId();
+            Lock lock = locks.acquire(id);
+            try {
+                // if an old document is present in the cache, we can simply update it
+                if (getIfPresent(id) != null) {
+                    putIfNewer(d);
+                // if the document hasn't been invalidated or added during the tracker lifetime,
+                // we can put it as well
+                } else if (!tracker.mightBeenAffected(id)) {
+                    putIfNewer(d);
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
     //----------------------------< internal >----------------------------------
 
     /**
@@ -331,6 +420,9 @@ public class NodeDocumentCache implements Closeable {
             prevDocumentsCache.put(new StringValue(doc.getId()), doc);
         } else {
             nodeDocumentsCache.put(new StringValue(doc.getId()), doc);
+        }
+        for (CacheChangesTracker tracker : changeTrackers) {
+            tracker.putDocument(doc.getId());
         }
     }
 }

@@ -23,6 +23,7 @@ import static com.google.common.collect.Iterables.filter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 
 import org.apache.jackrabbit.oak.plugins.document.util.Utils;
@@ -38,6 +39,11 @@ public class StripedNodeDocumentLocks implements NodeDocumentLocks {
      */
     private final Striped<Lock> locks = Striped.lock(4096);
     private final Lock rootLock = Striped.lock(1).get(ROOT);
+
+    /**
+     * Counts how many times {@link TreeLock}s were acquired.
+     */
+    private volatile AtomicLong lockAcquisitionCounter;
 
     @Override
     public Lock acquire(String key) {
@@ -58,5 +64,16 @@ public class StripedNodeDocumentLocks implements NodeDocumentLocks {
         Lock lock = new BulkLock(lockList);
         lock.lock();
         return lock;
+    }
+
+    public void resetLockAcquisitionCount() {
+        lockAcquisitionCounter = new AtomicLong();
+    }
+
+    public long getLockAcquisitionCount() {
+        if (lockAcquisitionCounter == null) {
+            throw new IllegalStateException("The counter hasn't been initialized");
+        }
+        return lockAcquisitionCounter.get();
     }
 }
