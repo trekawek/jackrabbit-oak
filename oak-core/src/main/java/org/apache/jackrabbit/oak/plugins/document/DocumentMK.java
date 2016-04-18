@@ -90,13 +90,13 @@ import org.slf4j.LoggerFactory;
  * data in a {@link DocumentStore}. It is used for testing purpose only.
  */
 public class DocumentMK {
-    
+
     static final Logger LOG = LoggerFactory.getLogger(DocumentMK.class);
-    
+
     /**
      * The path where the persistent cache is stored.
      */
-    static final String DEFAULT_PERSISTENT_CACHE_URI = 
+    static final String DEFAULT_PERSISTENT_CACHE_URI =
             System.getProperty("oak.documentMK.persCache");
 
     /**
@@ -109,7 +109,7 @@ public class DocumentMK {
      * Enable or disable the LIRS cache (null to use the default setting for this configuration).
      */
     static final Boolean LIRS_CACHE;
-    
+
     static {
         String s = System.getProperty("oak.documentMK.lirsCache");
         LIRS_CACHE = s == null ? null : Boolean.parseBoolean(s);
@@ -512,6 +512,7 @@ public class DocumentMK {
         private boolean timing;
         private boolean logging;
         private boolean leaseCheck = true; // OAK-2739 is enabled by default also for non-osgi
+        private boolean isReadOnlyMode = false;
         private Weigher<CacheValue, CacheValue> weigher = new EmpiricalWeigher();
         private long memoryCacheSize = DEFAULT_MEMORY_CACHE_SIZE;
         private int nodeCachePercentage = DEFAULT_NODE_CACHE_PERCENTAGE;
@@ -637,11 +638,7 @@ public class DocumentMK {
          * @return this
          */
         public Builder setRDBConnection(DataSource ds) {
-            this.documentStore = new RDBDocumentStore(ds, this);
-            if(this.blobStore == null) {
-                this.blobStore = new RDBBlobStore(ds);
-                configureBlobStore(blobStore);
-            }
+            setRDBConnection(ds, new RDBOptions());
             return this;
         }
 
@@ -661,16 +658,6 @@ public class DocumentMK {
         }
 
         /**
-         * Sets the persistent cache option.
-         *
-         * @return this
-         */
-        public Builder setPersistentCache(String persistentCache) {
-            this.persistentCacheURI = persistentCache;
-            return this;
-        }
-
-        /**
          * Sets a {@link DataSource}s to use for the RDB document and blob
          * stores.
          *
@@ -680,6 +667,16 @@ public class DocumentMK {
             this.documentStore = new RDBDocumentStore(documentStoreDataSource, this);
             this.blobStore = new RDBBlobStore(blobStoreDataSource);
             configureBlobStore(blobStore);
+            return this;
+        }
+
+        /**
+         * Sets the persistent cache option.
+         *
+         * @return this
+         */
+        public Builder setPersistentCache(String persistentCache) {
+            this.persistentCacheURI = persistentCache;
             return this;
         }
 
@@ -706,25 +703,34 @@ public class DocumentMK {
         public boolean getLogging() {
             return logging;
         }
-        
+
         public Builder setLeaseCheck(boolean leaseCheck) {
             this.leaseCheck = leaseCheck;
             return this;
         }
-        
+
         public boolean getLeaseCheck() {
             return leaseCheck;
+        }
+
+        public Builder setReadOnlyMode() {
+            this.isReadOnlyMode = true;
+            return this;
+        }
+
+        public boolean getReadOnlyMode() {
+            return isReadOnlyMode;
         }
 
         public Builder setLeaseFailureHandler(LeaseFailureHandler leaseFailureHandler) {
             this.leaseFailureHandler = leaseFailureHandler;
             return this;
         }
-        
+
         public LeaseFailureHandler getLeaseFailureHandler() {
             return leaseFailureHandler;
         }
-        
+
         /**
          * Set the document store to use. By default an in-memory store is used.
          *
@@ -792,12 +798,12 @@ public class DocumentMK {
             this.clusterId = clusterId;
             return this;
         }
-        
+
         public Builder setCacheSegmentCount(int cacheSegmentCount) {
             this.cacheSegmentCount = cacheSegmentCount;
             return this;
         }
-        
+
         public Builder setCacheStackMoveDistance(int cacheSegmentCount) {
             this.cacheStackMoveDistance = cacheSegmentCount;
             return this;
@@ -836,7 +842,7 @@ public class DocumentMK {
             this.memoryCacheSize = memoryCacheSize;
             return this;
         }
-        
+
         public Builder memoryCacheDistribution(int nodeCachePercentage,
                                                int prevDocCachePercentage,
                                                int childrenCachePercentage,
@@ -1014,19 +1020,19 @@ public class DocumentMK {
         public DocumentMK open() {
             return new DocumentMK(this);
         }
-        
+
         public Cache<PathRev, DocumentNodeState> buildNodeCache(DocumentNodeStore store) {
             return buildCache(CacheType.NODE, getNodeCacheSize(), store, null);
         }
-        
+
         public Cache<PathRev, DocumentNodeState.Children> buildChildrenCache() {
-            return buildCache(CacheType.CHILDREN, getChildrenCacheSize(), null, null);            
+            return buildCache(CacheType.CHILDREN, getChildrenCacheSize(), null, null);
         }
-        
+
         public Cache<StringValue, NodeDocument.Children> buildDocChildrenCache() {
             return buildCache(CacheType.DOC_CHILDREN, getDocChildrenCacheSize(), null, null);
         }
-        
+
         public Cache<PathRev, StringValue> buildMemoryDiffCache() {
             return buildCache(CacheType.DIFF, getMemoryDiffCacheSize(), null, null);
         }
@@ -1078,7 +1084,7 @@ public class DocumentMK {
             }
             return cache;
         }
-        
+
         public PersistentCache getPersistentCache() {
             if (persistentCacheURI == null) {
                 return null;
@@ -1093,7 +1099,7 @@ public class DocumentMK {
             }
             return persistentCache;
         }
-        
+
         private <K extends CacheValue, V extends CacheValue> Cache<K, V> buildCache(
                 String module,
                 long maxWeight,
@@ -1164,5 +1170,5 @@ public class DocumentMK {
         }
 
     }
-    
+
 }

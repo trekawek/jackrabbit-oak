@@ -37,12 +37,12 @@ import org.apache.jackrabbit.api.JackrabbitRepository;
 import org.apache.jackrabbit.commons.cnd.CndImporter;
 import org.apache.jackrabbit.oak.jcr.Jcr;
 import org.apache.jackrabbit.oak.plugins.segment.SegmentStore;
+import org.apache.jackrabbit.oak.plugins.segment.file.FileStore;
 import org.junit.Test;
 
 import net.lingala.zip4j.core.ZipFile;
 
-import static org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore.newSegmentNodeStore;
-import static org.apache.jackrabbit.oak.plugins.segment.file.FileStore.newFileStore;
+import static org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore.builder;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -62,8 +62,8 @@ public class UpgradeTest {
         repoZip.extractAll(testFolder.getPath());
         tmpZip.delete();
 
-        SegmentStore store = newFileStore(repoHome).create();
-        Repository repo = new Jcr(newSegmentNodeStore(store).create()).createRepository();
+        SegmentStore store = FileStore.builder(repoHome).build();
+        Repository repo = new Jcr(builder(store).build()).createRepository();
         Session s = repo.login(new SimpleCredentials("admin", "admin".toCharArray()));
 
         Node myType = s.getNode("/jcr:system/jcr:nodeTypes/test:MyType");

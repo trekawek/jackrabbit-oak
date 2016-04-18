@@ -355,6 +355,40 @@ public class ClusterNodeInfo {
     }
 
     /**
+     * Create a dummy cluster node info instance to be utilized for read only access to underlying store.
+     * @param store
+     * @return the cluster node info
+     */
+    public static ClusterNodeInfo getReadOnlyInstance(DocumentStore store) {
+        return new ClusterNodeInfo(0, store, MACHINE_ID, WORKING_DIR, ClusterNodeState.ACTIVE,
+                RecoverLockState.NONE, null, true) {
+            @Override
+            public void dispose() {
+            }
+
+            @Override
+            public long getLeaseTime() {
+                return Long.MAX_VALUE;
+            }
+
+            @Override
+            public void performLeaseCheck() {
+            }
+
+            @Override
+            public boolean renewLease() {
+                return false;
+            }
+
+            @Override
+            public void setInfo(Map<String, String> info) {}
+
+            @Override
+            public void setLeaseFailureHandler(LeaseFailureHandler leaseFailureHandler) {}
+        };
+    }
+
+    /**
      * Create a cluster node info instance for the store, with the
      *
      * @param store the document store (for the lease)
@@ -556,7 +590,7 @@ public class ClusterNodeInfo {
             LOG.info("Waiting for cluster node " + key + "'s lease to expire: " + (waitUntil - getCurrentTime()) / 1000 + "s left");
 
             try {
-                Thread.sleep(5000);
+                clock.waitUntil(getCurrentTime() + 5000);
             } catch (InterruptedException e) {
                 // ignored
             }
@@ -662,6 +696,11 @@ public class ClusterNodeInfo {
                     break;
                 }
             }
+            if (leaseCheckFailed) {
+                // someone else won and marked leaseCheckFailed - so we only log/throw
+                LOG.error(LEASE_CHECK_FAILED_MSG);
+                throw new AssertionError(LEASE_CHECK_FAILED_MSG);
+            }
             leaseCheckFailed = true; // make sure only one thread 'wins', ie goes any further
         }
 
@@ -715,6 +754,11 @@ public class ClusterNodeInfo {
      */
     public boolean renewLease() {
         long now = getCurrentTime();
+
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("renewLease - leaseEndTime: " + leaseEndTime + ", leaseTime: " + leaseTime + ", leaseUpdateInterval: " + leaseUpdateInterval);
+        }
+
         if (now < leaseEndTime - leaseTime + leaseUpdateInterval) {
             // no need to renew the lease - it is still within 'leaseUpdateInterval'
             return false;
@@ -763,9 +807,12 @@ public class ClusterNodeInfo {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Renewing lease for for cluster id " + id + " with UpdateOp " + update);
+            LOG.debug("Renewing lease for cluster id " + id + " with UpdateOp " + update);
         }
         ClusterNodeInfoDocument doc = store.findAndUpdate(Collection.CLUSTER_NODES, update);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Lease renewal for cluster id " + id + " resulted in: " + doc);
+        }
  
         if (doc == null) { // should not occur when leaseCheckDisabled
             // OAK-3398 : someone else either started recovering or is already through with that.
