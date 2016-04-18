@@ -41,8 +41,10 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.base.Predicates;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.UncheckedExecutionException;
@@ -67,6 +69,8 @@ import org.apache.jackrabbit.oak.plugins.document.UpdateOp;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Condition;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Key;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Operation;
+import org.apache.jackrabbit.oak.plugins.document.bulk.BulkOperationStrategy;
+import org.apache.jackrabbit.oak.plugins.document.bulk.HistoricBulkOperationStrategy;
 import org.apache.jackrabbit.oak.plugins.document.UpdateUtils;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheInvalidationStats;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
@@ -136,6 +140,8 @@ public class MongoDocumentStore implements DocumentStore {
     private final NodeDocumentCache nodesCache;
 
     private final TreeNodeDocumentLocks nodeLocks;
+
+    private final BulkOperationStrategy bulkOperationStrategy;
 
     private Clock clock = Clock.SIMPLE;
 
@@ -242,6 +248,8 @@ public class MongoDocumentStore implements DocumentStore {
 
         this.nodeLocks = new TreeNodeDocumentLocks();
         this.nodesCache = builder.buildNodeDocumentCache(this, nodeLocks);
+
+        this.bulkOperationStrategy = new HistoricBulkOperationStrategy(clock);
 
         LOG.info("Configuration maxReplicationLagMillis {}, " +
                 "maxDeltaForModTimeIdxSecs {}, disableIndexHint {}, {}",
@@ -883,7 +891,14 @@ public class MongoDocumentStore implements DocumentStore {
                     break;
                 }
                 for (List<UpdateOp> partition : Lists.partition(Lists.newArrayList(operationsToCover.values()), bulkSize)) {
-                    Map<UpdateOp, T> successfulUpdates = bulkUpdate(collection, partition, oldDocs);
+                    Iterable<UpdateOp> filteredUpdates;
+                    if (collection == Collection.NODES) {
+                        filteredUpdates = Iterables.filter(partition, Predicates.compose(bulkOperationStrategy, UpdateUtils.GET_ID));
+                    } else {
+                        filteredUpdates = partition;
+                    }
+
+                    Map<UpdateOp, T> successfulUpdates = bulkUpdate(collection, filteredUpdates, oldDocs);
                     results.putAll(successfulUpdates);
                     operationsToCover.values().removeAll(successfulUpdates.keySet());
                 }
@@ -925,7 +940,7 @@ public class MongoDocumentStore implements DocumentStore {
     }
 
     private <T extends Document> Map<UpdateOp, T> bulkUpdate(Collection<T> collection,
-                                                             List<UpdateOp> updateOperations,
+                                                             Iterable<UpdateOp> updateOperations,
                                                              Map<String, T> oldDocs) {
         Map<String, UpdateOp> bulkOperations = createMap(updateOperations);
         Set<String> lackingDocs = difference(bulkOperations.keySet(), oldDocs.keySet());
@@ -940,6 +955,14 @@ public class MongoDocumentStore implements DocumentStore {
             BulkUpdateResult bulkResult = sendBulkUpdate(collection, bulkOperations.values(), oldDocs);
 
             if (collection == Collection.NODES) {
+                for (String id : bulkOperations.keySet()) {
+                    if (bulkResult.failedUpdates.contains(id)) {
+                        bulkOperationStrategy.updateConflicted(id);
+                    } else {
+                        bulkOperationStrategy.updateApplied(id);
+                    }
+                }
+
                 for (UpdateOp op : filterKeys(bulkOperations, in(bulkResult.upserts)).values()) {
                     NodeDocument doc = Collection.NODES.newDocument(this);
                     UpdateUtils.applyChanges(doc, op);
@@ -975,7 +998,7 @@ public class MongoDocumentStore implements DocumentStore {
         }
     }
 
-    private static Map<String, UpdateOp> createMap(List<UpdateOp> updateOps) {
+    private static Map<String, UpdateOp> createMap(Iterable<UpdateOp> updateOps) {
         return Maps.uniqueIndex(updateOps, new Function<UpdateOp, String>() {
             @Override
             public String apply(UpdateOp input) {

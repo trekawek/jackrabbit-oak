@@ -17,8 +17,11 @@
 package org.apache.jackrabbit.oak.plugins.document.rdb;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Predicates.compose;
+import static com.google.common.collect.Iterables.filter;
 import static com.google.common.collect.Lists.newArrayList;
 import static com.google.common.collect.Lists.partition;
+import static org.apache.jackrabbit.oak.plugins.document.UpdateUtils.GET_ID;
 import static org.apache.jackrabbit.oak.plugins.document.UpdateUtils.checkConditions;
 import static org.apache.jackrabbit.oak.plugins.document.rdb.RDBJDBCTools.closeResultSet;
 import static org.apache.jackrabbit.oak.plugins.document.rdb.RDBJDBCTools.closeStatement;
@@ -75,6 +78,8 @@ import org.apache.jackrabbit.oak.plugins.document.UpdateOp;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Condition;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Key;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Operation;
+import org.apache.jackrabbit.oak.plugins.document.bulk.BulkOperationStrategy;
+import org.apache.jackrabbit.oak.plugins.document.bulk.HistoricBulkOperationStrategy;
 import org.apache.jackrabbit.oak.plugins.document.UpdateUtils;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheInvalidationStats;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
@@ -347,7 +352,13 @@ public class RDBDocumentStore implements DocumentStore {
             }
 
             for (List<UpdateOp> partition : partition(newArrayList(operationsToCover.values()), CHUNKSIZE)) {
-                Map<UpdateOp, T> successfulUpdates = bulkUpdate(collection, partition, oldDocs, upsert);
+                Iterable<UpdateOp> filteredUpdates;
+                if (collection == Collection.NODES) {
+                    filteredUpdates = filter(partition, compose(bulkOperationStrategy, GET_ID));
+                } else {
+                    filteredUpdates = partition;
+                }
+                Map<UpdateOp, T> successfulUpdates = bulkUpdate(collection, filteredUpdates, oldDocs, upsert);
                 results.putAll(successfulUpdates);
                 operationsToCover.values().removeAll(successfulUpdates.keySet());
             }
@@ -422,7 +433,7 @@ public class RDBDocumentStore implements DocumentStore {
         return result;
     }
 
-    private <T extends Document> Map<UpdateOp, T> bulkUpdate(Collection<T> collection, List<UpdateOp> updates, Map<String, T> oldDocs, boolean upsert) {
+    private <T extends Document> Map<UpdateOp, T> bulkUpdate(Collection<T> collection, Iterable<UpdateOp> updates, Map<String, T> oldDocs, boolean upsert) {
         Set<String> missingDocs = new HashSet<String>();
         for (UpdateOp op : updates) {
             if (!oldDocs.containsKey(op.getId())) {
@@ -436,7 +447,7 @@ public class RDBDocumentStore implements DocumentStore {
             }
         }
 
-        List<T> docsToUpdate = new ArrayList<T>(updates.size());
+        List<T> docsToUpdate = new ArrayList<T>();
         Set<String> keysToUpdate = new HashSet<String>();
         for (UpdateOp update : updates) {
             String id = update.getId();
@@ -468,6 +479,9 @@ public class RDBDocumentStore implements DocumentStore {
                         } else {
                             nodesCache.putIfAbsent((NodeDocument) doc);
                         }
+                        bulkOperationStrategy.updateApplied(id);
+                    } else {
+                        bulkOperationStrategy.updateConflicted(id);
                     }
                 }
             }
@@ -753,6 +767,7 @@ public class RDBDocumentStore implements DocumentStore {
 
         this.locks = new StripedNodeDocumentLocks();
         this.nodesCache = builder.buildNodeDocumentCache(this, locks);
+        this.bulkOperationStrategy = new HistoricBulkOperationStrategy();
 
         Connection con = this.ch.getRWConnection();
 
@@ -1833,6 +1848,8 @@ public class RDBDocumentStore implements DocumentStore {
     private NodeDocumentCache nodesCache;
 
     private NodeDocumentLocks locks;
+
+    private BulkOperationStrategy bulkOperationStrategy;
 
     @CheckForNull
     private static NodeDocument unwrap(@Nonnull NodeDocument doc) {
