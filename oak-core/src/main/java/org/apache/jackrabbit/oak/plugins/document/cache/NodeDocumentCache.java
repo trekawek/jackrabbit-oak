@@ -157,12 +157,26 @@ public class NodeDocumentCache implements Closeable {
      * @return document matching given key
      */
     @Nonnull
-    public NodeDocument get(@Nonnull String key, @Nonnull Callable<NodeDocument> valueLoader)
+    public NodeDocument get(@Nonnull final String key, @Nonnull final Callable<NodeDocument> valueLoader)
             throws ExecutionException {
-        if (isLeafPreviousDocId(key)) {
-            return prevDocumentsCache.get(new StringValue(key), valueLoader);
-        } else {
-            return nodeDocumentsCache.get(new StringValue(key), valueLoader);
+        Callable<NodeDocument> wrappedLoader = new Callable<NodeDocument>() {
+            @Override
+            public NodeDocument call() throws Exception {
+                for (CacheChangesTracker tracker : changeTrackers) {
+                    tracker.putDocument(key);
+                }
+                return valueLoader.call();
+            }
+        };
+        Lock lock = locks.acquire(key);
+        try {
+            if (isLeafPreviousDocId(key)) {
+                return prevDocumentsCache.get(new StringValue(key), valueLoader);
+            } else {
+                return nodeDocumentsCache.get(new StringValue(key), valueLoader);
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
