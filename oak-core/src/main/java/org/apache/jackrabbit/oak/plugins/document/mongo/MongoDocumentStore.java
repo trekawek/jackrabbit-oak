@@ -106,6 +106,7 @@ import static com.google.common.base.Predicates.in;
 import static com.google.common.base.Predicates.not;
 import static com.google.common.base.Predicates.notNull;
 import static com.google.common.collect.Iterables.filter;
+import static com.google.common.collect.Iterables.isEmpty;
 import static com.google.common.collect.Maps.filterKeys;
 import static com.google.common.collect.Maps.filterValues;
 import static com.google.common.collect.Sets.difference;
@@ -898,6 +899,9 @@ public class MongoDocumentStore implements DocumentStore {
                         filteredUpdates = Iterables.filter(partition, Predicates.compose(bulkOperationStrategy, UpdateUtils.GET_ID));
                     } else {
                         filteredUpdates = partition;
+                    }
+                    if (isEmpty(filteredUpdates)) {
+                        continue;
                     }
 
                     Map<UpdateOp, T> successfulUpdates = bulkUpdate(collection, filteredUpdates, oldDocs);
