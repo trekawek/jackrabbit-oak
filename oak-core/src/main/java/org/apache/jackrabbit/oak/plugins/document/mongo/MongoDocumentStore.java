@@ -70,7 +70,7 @@ import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Condition;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Key;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Operation;
 import org.apache.jackrabbit.oak.plugins.document.bulk.BulkOperationStrategy;
-import org.apache.jackrabbit.oak.plugins.document.bulk.HistoricBulkOperationStrategy;
+import org.apache.jackrabbit.oak.plugins.document.bulk.DummyBulkOperationStrategy;
 import org.apache.jackrabbit.oak.plugins.document.UpdateUtils;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheChangesTracker;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheInvalidationStats;
@@ -271,7 +271,7 @@ public class MongoDocumentStore implements DocumentStore {
         this.nodeLocks = new StripedNodeDocumentLocks();
         this.nodesCache = builder.buildNodeDocumentCache(this, nodeLocks);
 
-        this.bulkOperationStrategy = new HistoricBulkOperationStrategy(clock);
+        this.bulkOperationStrategy = new DummyBulkOperationStrategy();
 
         LOG.info("Configuration maxReplicationLagMillis {}, " +
                 "maxDeltaForModTimeIdxSecs {}, disableIndexHint {}, {}",
