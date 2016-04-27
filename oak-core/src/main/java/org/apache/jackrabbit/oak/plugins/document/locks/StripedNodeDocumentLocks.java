@@ -37,7 +37,7 @@ public class StripedNodeDocumentLocks implements NodeDocumentLocks {
     /**
      * Locks to ensure cache consistency on reads, writes and invalidation.
      */
-    private final Striped<Lock> locks = Striped.lock(4096);
+    private final Striped<Lock> locks = Striped.lock(16384);
     private final Lock rootLock = Striped.lock(1).get(ROOT);
 
     /**
