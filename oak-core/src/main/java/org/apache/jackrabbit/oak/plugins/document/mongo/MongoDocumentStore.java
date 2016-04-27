@@ -893,6 +893,7 @@ public class MongoDocumentStore implements DocumentStore {
                     // in bulk mode wouldn't result in any performance gain
                     break;
                 }
+                LOG.trace("createOrUpdate retry {}, documents to be updated: {}", i, operationsToCover.keySet());
                 for (List<UpdateOp> partition : Lists.partition(Lists.newArrayList(operationsToCover.values()), bulkSize)) {
                     Iterable<UpdateOp> filteredUpdates;
                     if (collection == Collection.NODES) {
@@ -910,6 +911,7 @@ public class MongoDocumentStore implements DocumentStore {
                 }
             }
 
+            LOG.trace("createOrUpdate documents to be updated sequentially: {}", operationsToCover.keySet());
             // if there are some changes left, we'll apply them one after another
             Iterator<UpdateOp> it = Iterators.concat(operationsToCover.values().iterator(), duplicates.iterator());
             while (it.hasNext()) {
@@ -950,6 +952,8 @@ public class MongoDocumentStore implements DocumentStore {
                                                              Map<String, T> oldDocs) {
         Map<String, UpdateOp> bulkOperations = createMap(updateOperations);
         Set<String> lackingDocs = difference(bulkOperations.keySet(), oldDocs.keySet());
+
+        LOG.trace("bulkUpdate finding missing documents: {}", lackingDocs);
         oldDocs.putAll(findDocuments(collection, lackingDocs));
 
         CacheChangesTracker tracker = null;
@@ -958,6 +962,7 @@ public class MongoDocumentStore implements DocumentStore {
         }
 
         try {
+            LOG.trace("bulkUpdate sending bulk operation for: {}", bulkOperations.keySet());
             BulkUpdateResult bulkResult = sendBulkUpdate(collection, bulkOperations.values(), oldDocs);
 
             if (collection == Collection.NODES) {
@@ -984,7 +989,9 @@ public class MongoDocumentStore implements DocumentStore {
                     }
                 }
 
+                LOG.trace("bulkUpdate putting documents to cache: {}", docsToCache);
                 nodesCache.putNonConflictingDocs(tracker, docsToCache);
+                LOG.trace("bulkUpdate documents cached");
             }
             oldDocs.keySet().removeAll(bulkResult.failedUpdates);
 
