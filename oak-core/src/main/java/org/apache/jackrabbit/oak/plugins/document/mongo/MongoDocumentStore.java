@@ -505,7 +505,7 @@ public class MongoDocumentStore implements DocumentStore {
             ReadPreference readPreference = getMongoReadPreference(collection, null, key, docReadPref);
 
             if(readPreference.isSlaveOk()){
-                LOG.trace("Routing call to secondary for fetching [{}]", key);
+                LOG.info("Routing call to secondary for fetching [{}]", key);
                 isSlaveOk = true;
             }
 
@@ -608,7 +608,7 @@ public class MongoDocumentStore implements DocumentStore {
 
             if(readPreference.isSlaveOk()){
                 isSlaveOk = true;
-                LOG.trace("Routing call to secondary for fetching children from [{}] to [{}]", fromKey, toKey);
+                LOG.info("Routing call to secondary for fetching children from [{}] to [{}]", fromKey, toKey);
             }
 
             cursor.setReadPreference(readPreference);
