@@ -989,6 +989,10 @@ public class MongoDocumentStore implements DocumentStore {
                     }
                 }
 
+                for (NodeDocument doc : docsToCache) {
+                    localChanges.add(doc.getId(), doc.getLastRev().values());
+                }
+
                 LOG.trace("bulkUpdate putting documents to cache: {}", docsToCache);
                 nodesCache.putNonConflictingDocs(tracker, docsToCache);
                 LOG.trace("bulkUpdate documents cached");
