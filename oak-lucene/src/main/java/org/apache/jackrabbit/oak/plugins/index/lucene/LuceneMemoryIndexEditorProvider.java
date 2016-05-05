@@ -16,9 +16,6 @@
  */
 package org.apache.jackrabbit.oak.plugins.index.lucene;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.plugins.index.IndexEditor;
 import org.apache.jackrabbit.oak.plugins.index.IndexEditorProvider;
@@ -27,38 +24,38 @@ import org.apache.jackrabbit.oak.spi.commit.Editor;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
+import javax.annotation.Nonnull;
+
+import static org.apache.jackrabbit.oak.plugins.index.lucene.LuceneIndexConstants.PROP_HYBRID_INDEX;
 import static org.apache.jackrabbit.oak.plugins.index.lucene.LuceneIndexConstants.TYPE_LUCENE;
 
 /**
  * Service that provides Lucene based {@link IndexEditor}s
- * 
+ *
  * @see LuceneIndexEditor
  * @see IndexEditorProvider
- * 
+ *
  */
-public class LuceneIndexEditorProvider implements IndexEditorProvider {
-    private final IndexCopier indexCopier;
+public class LuceneMemoryIndexEditorProvider implements IndexEditorProvider {
     private final ExtractedTextCache extractedTextCache;
     private final IndexAugmentorFactory augmentorFactory;
 
-    public LuceneIndexEditorProvider() {
-        this(null);
-    }
+    private final MemoryDirectoryStorage directoryStorage;
 
-    public LuceneIndexEditorProvider(@Nullable IndexCopier indexCopier) {
+    public LuceneMemoryIndexEditorProvider(MemoryDirectoryStorage directoryStorage) {
         //Disable the cache by default in ExtractedTextCache
-        this(indexCopier, new ExtractedTextCache(0, 0));
+        this(directoryStorage, new ExtractedTextCache(0, 0));
     }
 
-    public LuceneIndexEditorProvider(@Nullable IndexCopier indexCopier,
-                                     ExtractedTextCache extractedTextCache) {
-        this(indexCopier, extractedTextCache, null);
+    public LuceneMemoryIndexEditorProvider(MemoryDirectoryStorage directoryStorage,
+                                           ExtractedTextCache extractedTextCache) {
+        this(directoryStorage, extractedTextCache, null);
     }
 
-    public LuceneIndexEditorProvider(@Nullable IndexCopier indexCopier,
-                                     ExtractedTextCache extractedTextCache,
-                                     IndexAugmentorFactory augmentorFactory) {
-        this.indexCopier = indexCopier;
+    public LuceneMemoryIndexEditorProvider(MemoryDirectoryStorage directoryStorage,
+                                           ExtractedTextCache extractedTextCache,
+                                           IndexAugmentorFactory augmentorFactory) {
+        this.directoryStorage = directoryStorage;
         this.extractedTextCache = extractedTextCache;
         this.augmentorFactory = augmentorFactory;
     }
@@ -68,17 +65,9 @@ public class LuceneIndexEditorProvider implements IndexEditorProvider {
             @Nonnull String type, @Nonnull NodeBuilder definition, @Nonnull NodeState root,
             @Nonnull IndexUpdateCallback callback)
             throws CommitFailedException {
-        if (TYPE_LUCENE.equals(type)) {
-            return new LuceneIndexEditor(root, definition, callback, indexCopier, null, extractedTextCache, augmentorFactory, false);
+        if (TYPE_LUCENE.equals(type) && definition.getBoolean(PROP_HYBRID_INDEX)) {
+            return new LuceneIndexEditor(root, definition, callback, null, directoryStorage, extractedTextCache, augmentorFactory, true);
         }
         return null;
-    }
-
-    IndexCopier getIndexCopier() {
-        return indexCopier;
-    }
-
-    ExtractedTextCache getExtractedTextCache() {
-        return extractedTextCache;
     }
 }

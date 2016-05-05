@@ -81,7 +81,9 @@ public class LuceneIndexProviderServiceTest {
         assertNotNull("CopyOnRead should be enabled by default", context.getService(CopyOnReadStatsMBean.class));
         assertNotNull(context.getService(CacheStatsMBean.class));
 
-        assertTrue(context.getService(Observer.class) instanceof BackgroundObserver);
+        Observer[] observers = context.getServices(Observer.class, null);
+        assertTrue(observers[0] instanceof MonitoringBackgroundObserver);
+        assertTrue(observers[1] instanceof BackgroundObserver);
         assertEquals(InfoStream.NO_OUTPUT, InfoStream.getDefault());
 
         assertEquals(1024, BooleanQuery.getMaxClauseCount());
@@ -95,7 +97,9 @@ public class LuceneIndexProviderServiceTest {
         config.put("enableOpenIndexAsync", false);
         MockOsgi.activate(service, context.bundleContext(), config);
 
-        assertTrue(context.getService(Observer.class) instanceof LuceneIndexProvider);
+        Observer[] observers = context.getServices(Observer.class, null);
+        assertTrue(observers[0] instanceof MonitoringBackgroundObserver);
+        assertTrue(observers[1] instanceof LuceneIndexProvider);
 
         MockOsgi.deactivate(service);
     }

@@ -53,6 +53,7 @@ import static org.apache.jackrabbit.JcrConstants.JCR_SCORE;
 import static org.apache.jackrabbit.oak.commons.PathUtils.getAncestorPath;
 import static org.apache.jackrabbit.oak.commons.PathUtils.getDepth;
 import static org.apache.jackrabbit.oak.commons.PathUtils.getParentPath;
+import static org.apache.jackrabbit.oak.plugins.index.lucene.LucenePropertyIndex.ATTR_IN_MEMORY;
 import static org.apache.jackrabbit.oak.spi.query.Filter.PropertyRestriction;
 import static org.apache.jackrabbit.oak.spi.query.QueryIndex.IndexPlan;
 import static org.apache.jackrabbit.oak.spi.query.QueryIndex.OrderEntry;
@@ -94,7 +95,12 @@ class IndexPlanner {
             }
         }
 
-        return builder != null ? builder.build() : null;
+        if (builder == null) {
+            return null;
+        } else {
+            builder.setAttribute(ATTR_IN_MEMORY, indexNode.isInMemory());
+            return builder.build();
+        }
     }
 
     @Override

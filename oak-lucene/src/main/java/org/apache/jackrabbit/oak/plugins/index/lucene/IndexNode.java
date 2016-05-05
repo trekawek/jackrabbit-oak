@@ -42,12 +42,17 @@ import org.apache.lucene.store.FSDirectory;
 
 class IndexNode {
 
-    static IndexNode open(String indexPath, NodeState root, NodeState defnNodeState, @Nullable IndexCopier cloner)
+    static IndexNode open(String indexPath, NodeState root, NodeState defnNodeState, @Nullable IndexCopier cloner,
+                          @Nullable MemoryDirectoryStorage directoryStorage, boolean inMemory)
             throws IOException {
         Directory directory = null;
         IndexDefinition definition = new IndexDefinition(root, defnNodeState);
         NodeState data = defnNodeState.getChildNode(INDEX_DATA_CHILD_NAME);
-        if (data.exists()) {
+        if (inMemory) {
+            if (directoryStorage != null) {
+                directory = directoryStorage.getDirectory(indexPath);
+            }
+        } else if (data.exists()) {
             directory = new OakDirectory(new ReadOnlyBuilder(defnNodeState), definition, true);
             if (cloner != null) {
                 directory = cloner.wrapForRead(indexPath, definition, directory);
@@ -66,7 +71,7 @@ class IndexNode {
                     suggestDirectory = new OakDirectory(defnNodeState.builder(), ":suggest-data", definition, false);
                 }
 
-                IndexNode index = new IndexNode(PathUtils.getName(indexPath), definition, directory, suggestDirectory);
+                IndexNode index = new IndexNode(PathUtils.getName(indexPath), definition, directory, suggestDirectory, inMemory);
                 directory = null; // closed in Index.close()
                 return index;
             } finally {
@@ -95,9 +100,11 @@ class IndexNode {
 
     private final AnalyzingInfixSuggester lookup;
 
+    private final boolean inMemory;
+
     private boolean closed = false;
 
-    IndexNode(String name, IndexDefinition definition, Directory directory, final OakDirectory suggestDirectory)
+    IndexNode(String name, IndexDefinition definition, Directory directory, final OakDirectory suggestDirectory, boolean inMemory)
             throws IOException {
         this.name = name;
         this.definition = definition;
@@ -110,6 +117,7 @@ class IndexNode {
         } else {
             this.lookup = null;
         }
+        this.inMemory = inMemory;
     }
 
     String getName() {
@@ -130,6 +138,10 @@ class IndexNode {
 
     AnalyzingInfixSuggester getLookup() {
         return lookup;
+    }
+
+    boolean isInMemory() {
+        return inMemory;
     }
 
     boolean acquire() {

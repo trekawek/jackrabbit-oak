@@ -45,7 +45,6 @@ import org.apache.jackrabbit.oak.plugins.index.lucene.Aggregate.Matcher;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.StringPropertyState;
 import org.apache.jackrabbit.oak.plugins.tree.TreeFactory;
-import org.apache.jackrabbit.oak.query.QueryImpl;
 import org.apache.jackrabbit.oak.spi.commit.Editor;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
@@ -122,15 +121,17 @@ public class LuceneIndexEditor implements IndexEditor, Aggregate.AggregateRoot {
     private final PathFilter.Result pathFilterResult;
 
     LuceneIndexEditor(NodeState root, NodeBuilder definition,
-                        IndexUpdateCallback updateCallback,
-                        @Nullable IndexCopier indexCopier,
-                        ExtractedTextCache extractedTextCache,
-                      IndexAugmentorFactory augmentorFactory) throws CommitFailedException {
+                      IndexUpdateCallback updateCallback,
+                      @Nullable IndexCopier indexCopier,
+                      @Nullable MemoryDirectoryStorage directoryStorage,
+                      ExtractedTextCache extractedTextCache,
+                      IndexAugmentorFactory augmentorFactory,
+                      boolean inMemory) throws CommitFailedException {
         this.parent = null;
         this.name = null;
         this.path = "/";
         this.context = new LuceneIndexEditorContext(root, definition,
-                updateCallback, indexCopier, extractedTextCache, augmentorFactory);
+                updateCallback, indexCopier, directoryStorage, extractedTextCache, augmentorFactory, inMemory);
         this.root = root;
         this.isDeleted = false;
         this.matcherState = MatcherState.NONE;

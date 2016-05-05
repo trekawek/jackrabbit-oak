@@ -145,6 +145,8 @@ public class LuceneIndexEditorContext {
 
     private Directory directory;
 
+    private MemoryDirectoryStorage directoryStorage;
+
     private final TextExtractionStats textExtractionStats = new TextExtractionStats();
 
     private final ExtractedTextCache extractedTextCache;
@@ -152,6 +154,9 @@ public class LuceneIndexEditorContext {
     private final IndexAugmentorFactory augmentorFactory;
 
     private final NodeState root;
+
+    private final boolean inMemory;
+
     /**
      * The media types supported by the parser used.
      */
@@ -162,13 +167,15 @@ public class LuceneIndexEditorContext {
     private static Clock clock = Clock.SIMPLE;
 
     LuceneIndexEditorContext(NodeState root, NodeBuilder definition, IndexUpdateCallback updateCallback,
-                             @Nullable IndexCopier indexCopier, ExtractedTextCache extractedTextCache,
-                             IndexAugmentorFactory augmentorFactory) {
+                             @Nullable IndexCopier indexCopier, @Nullable MemoryDirectoryStorage directoryStorage,
+                             ExtractedTextCache extractedTextCache, IndexAugmentorFactory augmentorFactory,
+                             boolean inMemory) {
         configureUniqueId(definition);
         this.root = root;
         this.definitionBuilder = definition;
         this.indexCopier = indexCopier;
         this.definition = new IndexDefinition(root, definition);
+        this.directoryStorage = directoryStorage;
         this.indexedNodes = 0;
         this.updateCallback = updateCallback;
         this.extractedTextCache = extractedTextCache;
@@ -177,6 +184,7 @@ public class LuceneIndexEditorContext {
             IndexDefinition.updateDefinition(definition);
         }
         this.facetsConfig = FacetHelper.getFacetsConfig(definition);
+        this.inMemory = inMemory;
     }
 
     Parser getParser() {
@@ -189,7 +197,11 @@ public class LuceneIndexEditorContext {
     IndexWriter getWriter() throws IOException {
         if (writer == null) {
             final long start = PERF_LOGGER.start();
-            directory = newIndexDirectory(definition, definitionBuilder);
+            if (inMemory) {
+                directory = directoryStorage.getOrCreateDirectory(this.definition.getIndexPathFromConfig());
+            } else {
+                directory = newIndexDirectory(definition, definitionBuilder);
+            }
             IndexWriterConfig config;
             if (indexCopier != null){
                 directory = indexCopier.wrapForWrite(definition, directory, reindex);

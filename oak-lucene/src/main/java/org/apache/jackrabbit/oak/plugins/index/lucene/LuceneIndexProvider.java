@@ -48,11 +48,19 @@ public class LuceneIndexProvider implements QueryIndexProvider, Observer, Closea
     IndexAugmentorFactory augmentorFactory;
 
     public LuceneIndexProvider() {
-        this(new IndexTracker());
+        this(new MemoryDirectoryStorage());
+    }
+
+    public LuceneIndexProvider(MemoryDirectoryStorage directoryStorage) {
+        this(directoryStorage, null);
     }
 
     public LuceneIndexProvider(IndexCopier indexCopier) {
-        this(new IndexTracker(indexCopier));
+        this(null, indexCopier);
+    }
+
+    public LuceneIndexProvider(MemoryDirectoryStorage directoryStorage, IndexCopier indexCopier) {
+        this(new IndexTracker(directoryStorage, indexCopier, null));
     }
 
     public LuceneIndexProvider(IndexTracker tracker) {

@@ -234,6 +234,8 @@ public final class IndexDefinition implements Aggregate.AggregateMapper {
     @Nullable
     private final String uid;
 
+    private final boolean isHybridIndex;
+
     public IndexDefinition(NodeState root, NodeBuilder defn) {
         this(root, defn.getBaseState(), defn);
     }
@@ -303,6 +305,8 @@ public final class IndexDefinition implements Aggregate.AggregateMapper {
         this.secureFacets = defn.hasChildNode(FACETS) && getOptionalValue(defn.getChildNode(FACETS), PROP_SECURE_FACETS, true);
         this.suggestEnabled = evaluateSuggestionEnabled();
         this.spellcheckEnabled = evaluateSpellcheckEnabled();
+
+        this.isHybridIndex = getOptionalValue(defn, LuceneIndexConstants.PROP_HYBRID_INDEX, false);
     }
 
     public NodeState getDefinitionNodeState() {
@@ -435,6 +439,10 @@ public final class IndexDefinition implements Aggregate.AggregateMapper {
     @CheckForNull
     public String getUniqueId() {
         return uid;
+    }
+
+    public boolean isHybridIndex() {
+        return isHybridIndex;
     }
 
     @Override

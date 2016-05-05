@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.collect.AbstractIterator;
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
@@ -189,6 +190,8 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
 
     static final String ATTR_PLAN_RESULT = "oak.lucene.planResult";
 
+    static final String ATTR_IN_MEMORY = "oak.lucene.inMemory";
+
     /**
      * Batch size for fetching results from Lucene queries.
      */
@@ -235,12 +238,22 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
         List<IndexPlan> plans = Lists.newArrayListWithCapacity(indexPaths.size());
         for (String path : indexPaths) {
             IndexNode indexNode = null;
+            IndexNode memoryIndexNode = null;
             try {
                 indexNode = tracker.acquireIndexNode(path);
 
                 if (indexNode != null) {
                     IndexPlan plan = new IndexPlanner(indexNode, path, filter, sortOrder).getPlan();
                     if (plan != null) {
+                        if (indexNode.getDefinition().isHybridIndex()) {
+                            memoryIndexNode = tracker.acquireIndexNode(path, true);
+                            if (memoryIndexNode != null) {
+                                IndexPlan memoryPlan = new IndexPlanner(memoryIndexNode, path, filter, sortOrder).getPlan();
+                                if (memoryPlan != null) {
+                                    plan = enhanceWithMemoryIndexPlan(plan, memoryPlan);
+                                }
+                            }
+                        }
                         plans.add(plan);
                     }
                 }
@@ -248,9 +261,16 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
                 if (indexNode != null) {
                     indexNode.release();
                 }
+                if (memoryIndexNode != null) {
+                    memoryIndexNode.release();
+                }
             }
         }
         return plans;
+    }
+
+    private IndexPlan enhanceWithMemoryIndexPlan(IndexPlan plan, IndexPlan memoryPlan) {
+        return new HybridIndexPlan(plan, memoryPlan);
     }
 
     @Override
@@ -271,11 +291,18 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
         try {
             FullTextExpression ft = filter.getFullTextConstraint();
             StringBuilder sb = new StringBuilder("lucene:");
-            String path = getPlanResult(plan).indexPath;
-            sb.append(getIndexName(plan))
-                    .append("(")
-                    .append(path)
-                    .append(") ");
+            if (plan instanceof HybridIndexPlan) {
+                HybridIndexPlan hybridPlan = (HybridIndexPlan) plan;
+                IndexPlan asyncPlan = hybridPlan.getAsyncLucenePlan();
+                IndexPlan memoryPlan = hybridPlan.getMemoryLucenePlan();
+                sb.append("hybrid:[")
+                        .append(getBasicPlanDescription(plan))
+                        .append(":").append(asyncPlan.getEstimatedEntryCount())
+                        .append(",").append(memoryPlan.getEstimatedEntryCount())
+                        .append("] ");
+           } else {
+                sb.append(getBasicPlanDescription(plan)).append(" ");
+            }
             sb.append(getLuceneRequest(plan, augmentorFactory, null));
             if (plan.getSortOrder() != null && !plan.getSortOrder().isEmpty()) {
                 sb.append(" ordering:").append(plan.getSortOrder());
@@ -289,6 +316,16 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
         }
     }
 
+    private static String getBasicPlanDescription(IndexPlan plan) {
+        StringBuilder sb = new StringBuilder();
+        String path = getPlanResult(plan).indexPath;
+        sb.append(getIndexName(plan))
+                .append("(")
+                .append(path)
+                .append(")");
+        return sb.toString();
+    }
+
     @Override
     public Cursor query(final Filter filter, final NodeState root) {
         throw new UnsupportedOperationException("Not supported as implementing AdvancedQueryIndex");
@@ -296,11 +333,43 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
 
     @Override
     public Cursor query(final IndexPlan plan, NodeState rootState) {
+        Filter filter = plan.getFilter();
+        QueryEngineSettings settings = filter.getQueryEngineSettings();
+
+        Iterator<LuceneResultRow> itr;
+        SizeEstimator sizeEstimator;
+        if (plan instanceof HybridIndexPlan) {
+            HybridIndexPlan hybridPlan = (HybridIndexPlan) plan;
+            Iterator<LuceneResultRow> luceneIterator = getResultRowIterator(hybridPlan.getAsyncLucenePlan());
+            Iterator<LuceneResultRow> memoryIterator = getResultRowIterator(hybridPlan.getMemoryLucenePlan());
+            itr = Iterators.concat(luceneIterator, memoryIterator);
+
+            final SizeEstimator asyncSizeEstimator = getSizeEstimator(hybridPlan.getAsyncLucenePlan());
+            final SizeEstimator memorySizeEstimator = getSizeEstimator(hybridPlan.getMemoryLucenePlan());
+            sizeEstimator = new SizeEstimator() {
+                @Override
+                public long getSize() {
+                    long asyncSize = asyncSizeEstimator.getSize();
+                    long memorySize = memorySizeEstimator.getSize();
+                    if (asyncSize == -1 || memorySize == 1) {
+                        return -1;
+                    } else {
+                        return asyncSize + memorySize;
+                    }
+                }
+            };
+        } else {
+            itr = getResultRowIterator(plan);
+            sizeEstimator = getSizeEstimator(plan);
+        }
+        return new LucenePathCursor(itr, plan, settings, sizeEstimator);
+    }
+
+    private Iterator<LuceneResultRow> getResultRowIterator(final IndexPlan plan) {
         final Filter filter = plan.getFilter();
         final Sort sort = getSort(plan);
         final PlanResult pr = getPlanResult(plan);
-        QueryEngineSettings settings = filter.getQueryEngineSettings();
-        Iterator<LuceneResultRow> itr = new AbstractIterator<LuceneResultRow>() {
+        return new AbstractIterator<LuceneResultRow>() {
             private final Deque<LuceneResultRow> queue = Queues.newArrayDeque();
             private final Set<String> seenPaths = Sets.newHashSet();
             private ScoreDoc lastDoc;
@@ -353,6 +422,7 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
 
             /**
              * Loads the lucene documents in batches
+             *
              * @return true if any document is loaded
              */
             private boolean loadDocs() {
@@ -364,7 +434,9 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
                 ScoreDoc lastDocToRecord = null;
 
                 final IndexNode indexNode = acquireIndexNode(plan);
-                checkState(indexNode != null);
+                if (indexNode == null) {
+                    return false;
+                }
                 try {
                     IndexSearcher searcher = indexNode.getSearcher();
                     LuceneRequestFacade luceneRequestFacade = getLuceneRequest(plan, augmentorFactory, searcher.getIndexReader());
@@ -532,11 +604,16 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
                 this.lastSearchIndexerVersion = currentVersion;
             }
         };
-        SizeEstimator sizeEstimator = new SizeEstimator() {
+    }
+
+    private SizeEstimator getSizeEstimator(final IndexPlan plan) {
+        return new SizeEstimator() {
             @Override
             public long getSize() {
                 IndexNode indexNode = acquireIndexNode(plan);
-                checkState(indexNode != null);
+                if (indexNode == null) {
+                    return 0;
+                }
                 try {
                     IndexSearcher searcher = indexNode.getSearcher();
                     LuceneRequestFacade luceneRequestFacade = getLuceneRequest(plan, augmentorFactory, searcher.getIndexReader());
@@ -557,7 +634,6 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
                 return -1;
             }
         };
-        return new LucenePathCursor(itr, plan, settings, sizeEstimator);
     }
 
     private static Query addDescendantClauseIfRequired(Query query, IndexPlan plan) {
@@ -667,7 +743,13 @@ public class LucenePropertyIndex implements AdvancedQueryIndex, QueryIndex, Nati
     }
 
     private IndexNode acquireIndexNode(IndexPlan plan) {
-        return tracker.acquireIndexNode(getPlanResult(plan).indexPath);
+        String indexPath = getPlanResult(plan).indexPath;
+        boolean inMemory = Boolean.TRUE.equals(plan.getAttribute(ATTR_IN_MEMORY));
+        IndexNode node = tracker.acquireIndexNode(indexPath, inMemory);
+        if (!inMemory) {
+            checkState(node != null);
+        }
+        return node;
     }
 
     private static Sort getSort(IndexPlan plan) {

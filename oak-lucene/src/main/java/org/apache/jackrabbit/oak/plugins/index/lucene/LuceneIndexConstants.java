@@ -16,9 +16,7 @@
  */
 package org.apache.jackrabbit.oak.plugins.index.lucene;
 
-import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.analysis.util.AbstractAnalysisFactory;
 import org.apache.lucene.util.Version;
 
@@ -140,6 +138,8 @@ public interface LuceneIndexConstants {
     String PROP_ORDERED = "ordered";
 
     String PROP_SCORER_PROVIDER = "scorerProviderName";
+
+    String PROP_HYBRID_INDEX = "hybridIndex";
 
     /**
      * Integer property indicating that LuceneIndex should be

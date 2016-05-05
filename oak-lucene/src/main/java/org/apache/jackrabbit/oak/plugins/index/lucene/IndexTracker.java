@@ -25,11 +25,13 @@ import static com.google.common.collect.Maps.filterKeys;
 import static com.google.common.collect.Maps.filterValues;
 import static com.google.common.collect.Maps.newHashMap;
 import static java.util.Collections.emptyMap;
+import static org.apache.jackrabbit.oak.plugins.index.lucene.LuceneIndexConstants.PROP_HYBRID_INDEX;
 import static org.apache.jackrabbit.oak.plugins.index.lucene.LuceneIndexConstants.TYPE_LUCENE;
 import static org.apache.jackrabbit.oak.plugins.index.lucene.util.LuceneIndexHelper.isLuceneIndexNode;
 import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,20 +57,36 @@ class IndexTracker {
     private static final PerfLogger PERF_LOGGER =
             new PerfLogger(LoggerFactory.getLogger(IndexTracker.class.getName() + ".perf"));
 
+    private final MemoryDirectoryStorage directoryStorage;
+
     private final IndexCopier cloner;
+
+    private final MonitoringBackgroundObserver memoryIndexObserver;
 
     private NodeState root = EMPTY_NODE;
 
     private volatile Map<String, IndexNode> indices = emptyMap();
 
+    private volatile Map<String, IndexNode> memoryIndices = emptyMap();
+
     private volatile boolean refresh;
 
     IndexTracker() {
-        this(null);
+        this(null, null, null);
     }
 
-    IndexTracker(IndexCopier cloner){
+    IndexTracker(MemoryDirectoryStorage directoryStorage) {
+        this(directoryStorage, null, null);
+    }
+
+    IndexTracker(IndexCopier cloner) {
+        this(null, cloner, null);
+    }
+
+    IndexTracker(MemoryDirectoryStorage directoryStorage, IndexCopier cloner, MonitoringBackgroundObserver memoryIndexObserver) {
+        this.directoryStorage = directoryStorage;
         this.cloner = cloner;
+        this.memoryIndexObserver = memoryIndexObserver;
     }
 
     synchronized void close() {
@@ -91,12 +109,13 @@ class IndexTracker {
             refresh = false;
             log.info("Refreshed the opened indexes");
         } else {
-            diffAndUpdate(root);
+            diffAndUpdate(this.root, root, false);
+            this.root = root;
         }
     }
 
-    private synchronized void diffAndUpdate(final NodeState root) {
-        Map<String, IndexNode> original = indices;
+    void diffAndUpdate(final NodeState before, final NodeState after, final boolean inMemory) {
+        final Map<String, IndexNode> original = getIndices(inMemory);
         final Map<String, IndexNode> updates = newHashMap();
 
         List<Editor> editors = newArrayListWithCapacity(original.size());
@@ -108,7 +127,7 @@ class IndexTracker {
                 public void leave(NodeState before, NodeState after) {
                     try {
                         long start = PERF_LOGGER.start();
-                        IndexNode index = IndexNode.open(path, root, after, cloner);
+                        IndexNode index = IndexNode.open(path, root, after, cloner, directoryStorage, inMemory);
                         PERF_LOGGER.end(start, -1, "[{}] Index found to be updated. Reopening the IndexNode", path);
                         updates.put(path, index); // index can be null
                     } catch (IOException e) {
@@ -118,14 +137,31 @@ class IndexTracker {
             }, Iterables.toArray(PathUtils.elements(path), String.class)));
         }
 
-        EditorDiff.process(CompositeEditor.compose(editors), this.root, root);
-        this.root = root;
+        EditorDiff.process(CompositeEditor.compose(editors), before, after);
 
         if (!updates.isEmpty()) {
-            indices = ImmutableMap.<String, IndexNode>builder()
+            Set<String> purged = new HashSet<String>();
+            for (String path : updates.keySet()) {
+                IndexNode index = original.get(path);
+
+                if (!inMemory && index.getDefinition().isHybridIndex()) {
+                    purgeMemoryIndex(path);
+                    purged.add(path);
+                }
+            }
+
+            Map<String, IndexNode> result = ImmutableMap.<String, IndexNode>builder()
                     .putAll(filterKeys(original, not(in(updates.keySet()))))
                     .putAll(filterValues(updates, notNull()))
                     .build();
+
+            setIndices(result, inMemory);
+
+            if (!purged.isEmpty()) {
+                memoryIndices = ImmutableMap.<String, IndexNode>builder()
+                    .putAll(filterKeys(memoryIndices, not(in(purged))))
+                    .build();
+            }
 
             //This might take some time as close need to acquire the
             //write lock which might be held by current running searches
@@ -147,11 +183,23 @@ class IndexTracker {
     }
 
     IndexNode acquireIndexNode(String path) {
-        IndexNode index = indices.get(path);
+        return acquireIndexNode(path, false);
+    }
+
+
+    IndexNode acquireIndexNode(String path, boolean inMemory) {
+        if (inMemory && memoryIndexObserver != null) {
+            try {
+                memoryIndexObserver.waitUntilProcessingIsFinished();
+            } catch (InterruptedException e) {
+                log.error("The memory index may not contain the recent changes", e);
+            }
+        }
+        IndexNode index = getIndices(inMemory).get(path);
         if (index != null && index.acquire()) {
             return index;
         } else {
-            return findIndexNode(path);
+            return findIndexNode(path, inMemory);
         }
     }
 
@@ -159,11 +207,11 @@ class IndexTracker {
         return indices.keySet();
     }
 
-    private synchronized IndexNode findIndexNode(String path) {
+    private synchronized IndexNode findIndexNode(String path, boolean inMemory) {
         // Retry the lookup from acquireIndexNode now that we're
         // synchronized. The acquire() call is guaranteed to succeed
         // since the close() method is also synchronized.
-        IndexNode index = indices.get(path);
+        IndexNode index = getIndices(inMemory).get(path);
         if (index != null) {
             checkState(index.acquire());
             return index;
@@ -175,14 +223,11 @@ class IndexTracker {
         }
 
         try {
-            if (isLuceneIndexNode(node)) {
-                index = IndexNode.open(path, root, node, cloner);
+            if (isLuceneIndexNode(node) && (!inMemory || node.getBoolean(PROP_HYBRID_INDEX))) {
+                index = IndexNode.open(path, root, node, cloner, directoryStorage, inMemory);
                 if (index != null) {
                     checkState(index.acquire());
-                    indices = ImmutableMap.<String, IndexNode>builder()
-                            .putAll(indices)
-                            .put(path, index)
-                            .build();
+                    putIndex(path, index, inMemory);
                     return index;
                 }
             } else if (node.exists()) {
@@ -194,4 +239,36 @@ class IndexTracker {
 
         return null;
     }
+
+    private void purgeMemoryIndex(String indexPath) {
+        directoryStorage.purge(indexPath);
+        IndexNode node = memoryIndices.get(indexPath);
+        try {
+            if (node != null) {
+                node.close();
+            }
+        } catch (IOException e) {
+            log.error("Can't close node", e);
+        }
+    }
+
+    private void setIndices(Map<String, IndexNode> indices, boolean inMemory) {
+        if (inMemory) {
+            this.memoryIndices = indices;
+        } else {
+            this.indices = indices;
+        }
+    }
+
+    private Map<String, IndexNode> getIndices(boolean inMemory) {
+        return inMemory ? memoryIndices : indices;
+    }
+
+    private void putIndex(String path, IndexNode index, boolean inMemory) {
+        setIndices(ImmutableMap.<String, IndexNode>builder()
+                .putAll(getIndices(inMemory))
+                .put(path, index)
+                .build(), inMemory);
+    }
+
 }

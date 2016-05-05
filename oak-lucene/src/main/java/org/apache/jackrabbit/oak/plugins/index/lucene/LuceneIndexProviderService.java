@@ -59,6 +59,7 @@ import org.apache.jackrabbit.oak.spi.gc.GCMonitor;
 import org.apache.jackrabbit.oak.spi.query.QueryIndexProvider;
 import org.apache.jackrabbit.oak.spi.whiteboard.Registration;
 import org.apache.jackrabbit.oak.spi.whiteboard.Whiteboard;
+import org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils;
 import org.apache.lucene.analysis.util.CharFilterFactory;
 import org.apache.lucene.analysis.util.TokenFilterFactory;
 import org.apache.lucene.analysis.util.TokenizerFactory;
@@ -107,6 +108,12 @@ public class LuceneIndexProviderService {
             description = "Enables debug logging in Lucene. After enabling this actual logging can be " +
             "controlled via changing log level for category 'oak.lucene' to debug")
     private static final String PROP_DEBUG = "debug";
+
+    @Property(
+            boolValue = true,
+            label = "Enable Hybrid Index",
+            description = "Adds support for the " + LuceneIndexConstants.PROP_HYBRID_INDEX + " property")
+    private static final String PROP_HYBRID = "enableHybridIndexSupport";
 
     @Property(
             boolValue = true,
@@ -231,7 +238,22 @@ public class LuceneIndexProviderService {
         whiteboard = new OsgiWhiteboard(bundleContext);
         threadPoolSize = PropertiesUtil.toInteger(config.get(PROP_THREAD_POOL_SIZE), PROP_THREAD_POOL_SIZE_DEFAULT);
         initializeExtractedTextCache(bundleContext, config);
-        indexProvider = new LuceneIndexProvider(createTracker(bundleContext, config), scorerFactory, augmentorFactory);
+
+        IndexTracker tracker;
+
+        boolean hybridSupportEnabled = PropertiesUtil.toBoolean(config.get(PROP_HYBRID), true);
+        if (hybridSupportEnabled) {
+            MemoryDirectoryStorage directoryStorage = new MemoryDirectoryStorage();
+            MonitoringBackgroundObserver monitoringMemoryObserver = new MonitoringBackgroundObserver(getExecutorService());
+            tracker = createTracker(bundleContext, config, directoryStorage, monitoringMemoryObserver);
+            LuceneMemoryUpdater memoryObserver = new LuceneMemoryUpdater(directoryStorage, tracker);
+            monitoringMemoryObserver.addObserver(memoryObserver);
+            oakRegs.add(WhiteboardUtils.registerObserver(whiteboard, monitoringMemoryObserver));
+        } else {
+            tracker = createTracker(bundleContext, config, null, null);
+        }
+
+        indexProvider = new LuceneIndexProvider(tracker, scorerFactory, augmentorFactory);
         initializeLogging(config);
         initialize();
 
@@ -326,15 +348,15 @@ public class LuceneIndexProviderService {
                 "TextExtraction statistics"));
     }
 
-    private IndexTracker createTracker(BundleContext bundleContext, Map<String, ?> config) throws IOException {
+    private IndexTracker createTracker(BundleContext bundleContext, Map<String, ?> config, MemoryDirectoryStorage directoryStorage, MonitoringBackgroundObserver memoryIndexObserver) throws IOException {
         boolean enableCopyOnRead = PropertiesUtil.toBoolean(config.get(PROP_COPY_ON_READ), true);
         if (enableCopyOnRead){
             initializeIndexCopier(bundleContext, config);
             log.info("Enabling CopyOnRead support. Index files would be copied under {}", indexDir.getAbsolutePath());
-            return new IndexTracker(indexCopier);
+            return new IndexTracker(directoryStorage, indexCopier, memoryIndexObserver);
         }
 
-        return new IndexTracker();
+        return new IndexTracker(directoryStorage, null, memoryIndexObserver);
     }
 
     private void initializeIndexCopier(BundleContext bundleContext, Map<String, ?> config) throws IOException {

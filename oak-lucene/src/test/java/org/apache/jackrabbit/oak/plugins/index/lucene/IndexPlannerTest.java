@@ -586,11 +586,11 @@ public class IndexPlannerTest {
     //------ END - Suggestion/spellcheck plan tests
 
     private IndexNode createIndexNode(IndexDefinition defn, long numOfDocs) throws IOException {
-        return new IndexNode("foo", defn, createSampleDirectory(numOfDocs), null);
+        return new IndexNode("foo", defn, createSampleDirectory(numOfDocs), null, false);
     }
 
     private IndexNode createIndexNode(IndexDefinition defn) throws IOException {
-        return new IndexNode("foo", defn, createSampleDirectory(), null);
+        return new IndexNode("foo", defn, createSampleDirectory(), null, false);
     }
 
     private FilterImpl createFilter(String nodeTypeName) {
