@@ -53,6 +53,7 @@ import org.apache.jackrabbit.oak.api.Result;
 import org.apache.jackrabbit.oak.api.ResultRow;
 import org.apache.jackrabbit.oak.api.Tree;
 import org.apache.jackrabbit.oak.api.Type;
+import org.apache.jackrabbit.oak.commons.concurrent.ExecutorCloser;
 import org.apache.jackrabbit.oak.plugins.index.IndexConstants;
 import org.apache.jackrabbit.oak.plugins.index.fulltext.ExtractedText;
 import org.apache.jackrabbit.oak.plugins.index.fulltext.ExtractedText.ExtractionResult;
@@ -131,6 +132,11 @@ public class LucenePropertyIndexTest extends AbstractQueryTest {
     private String cowDir = null;
 
     private LuceneIndexEditorProvider editorProvider;
+
+    @After
+    public void after() {
+        new ExecutorCloser(executorService).close();
+    }
 
     @Override
     protected void createTestIndexNode() throws Exception {
@@ -1996,33 +2002,6 @@ public class LucenePropertyIndexTest extends AbstractQueryTest {
         String propabQuery = "select [jcr:path] from [mix:title] where [jcr:content/type] = 'foo-a'";
         assertThat(explain(propabQuery), containsString("lucene:test1(/oak:index/test1)"));
         assertQuery(propabQuery, asList("/test/a"));
-    }
-
-    //OAK-4024
-    @Test
-    public void reindexWithCOWWithIndexPath() throws Exception {
-        Tree idx = createIndex("test1", of("propa", "propb"));
-        idx.setProperty(LuceneIndexConstants.INDEX_PATH, "/oak:index/test1");
-        Tree props = TestUtil.newRulePropTree(idx, "mix:title");
-        Tree prop1 = props.addChild(TestUtil.unique("prop"));
-        prop1.setProperty(LuceneIndexConstants.PROP_NAME, "jcr:title");
-        prop1.setProperty(LuceneIndexConstants.PROP_PROPERTY_INDEX, true);
-        root.commit();
-
-        //force CoR
-        executeQuery("SELECT * FROM [mix:title]", SQL2);
-
-        assertNotNull(corDir);
-        String localPathBeforeReindex = corDir;
-
-        //CoW with re-indexing
-        idx.setProperty("reindex", true);
-        root.commit();
-
-        assertNotNull(cowDir);
-        String localPathAfterReindex = cowDir;
-
-        assertNotEquals("CoW should write to different dir on reindexing", localPathBeforeReindex, localPathAfterReindex);
     }
 
     @Test

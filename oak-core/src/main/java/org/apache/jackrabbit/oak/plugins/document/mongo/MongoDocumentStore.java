@@ -47,7 +47,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.mongodb.MongoClientURI;
-import com.mongodb.MongoExecutionTimeoutException;
 import com.mongodb.QueryOperators;
 import com.mongodb.ReadPreference;
 
@@ -69,11 +68,13 @@ import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Condition;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Key;
 import org.apache.jackrabbit.oak.plugins.document.UpdateOp.Operation;
 import org.apache.jackrabbit.oak.plugins.document.UpdateUtils;
+import org.apache.jackrabbit.oak.plugins.document.cache.CacheChangesTracker;
 import org.apache.jackrabbit.oak.plugins.document.cache.CacheInvalidationStats;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
-import org.apache.jackrabbit.oak.plugins.document.locks.TreeNodeDocumentLocks;
 import org.apache.jackrabbit.oak.plugins.document.mongo.replica.LocalChanges;
 import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo;
+import org.apache.jackrabbit.oak.plugins.document.locks.NodeDocumentLocks;
+import org.apache.jackrabbit.oak.plugins.document.locks.StripedNodeDocumentLocks;
 import org.apache.jackrabbit.oak.plugins.document.util.Utils;
 import org.apache.jackrabbit.oak.stats.Clock;
 import org.apache.jackrabbit.oak.util.PerfLogger;
@@ -138,7 +139,7 @@ public class MongoDocumentStore implements DocumentStore {
 
     private final NodeDocumentCache nodesCache;
 
-    private final TreeNodeDocumentLocks nodeLocks;
+    private final NodeDocumentLocks nodeLocks;
 
     private Clock clock = Clock.SIMPLE;
 
@@ -179,17 +180,6 @@ public class MongoDocumentStore implements DocumentStore {
             Long.getLong("oak.mongo.maxQueryTimeMS", TimeUnit.MINUTES.toMillis(1));
 
     /**
-     * Duration in milliseconds after a mongo query with an additional
-     * constraint (e.g. _modified) on the NODES collection times out and is
-     * executed again without holding a {@link TreeNodeDocumentLocks.TreeLock}
-     * and without updating the cache with data retrieved from MongoDB.
-     * <p>
-     * Default is 3000 (three seconds).
-     */
-    private long maxLockedQueryTimeMS =
-            Long.getLong("oak.mongo.maxLockedQueryTimeMS", TimeUnit.SECONDS.toMillis(3));
-
-    /**
      * How often in milliseconds the MongoDocumentStore should estimate the
      * replication lag.
      * <p>
@@ -205,6 +195,15 @@ public class MongoDocumentStore implements DocumentStore {
      */
     private int bulkSize =
             Integer.getInteger("oak.mongo.bulkSize", 30);
+
+    /**
+     * How many times should be the bulk update request retries in case of
+     * a conflict.
+     * <p>
+     * Default is 0 (no retries).
+     */
+    private int bulkRetries =
+            Integer.getInteger("oak.mongo.bulkRetries", 0);
 
     private String lastReadWriteMode;
 
@@ -263,7 +262,7 @@ public class MongoDocumentStore implements DocumentStore {
         // index on _modified for journal entries
         createIndex(journal, JournalEntry.MODIFIED, true, false, false);
 
-        this.nodeLocks = new TreeNodeDocumentLocks();
+        this.nodeLocks = new StripedNodeDocumentLocks();
         this.nodesCache = builder.buildNodeDocumentCache(this, nodeLocks);
 
         LOG.info("Configuration maxReplicationLagMillis {}, " +
@@ -536,27 +535,11 @@ public class MongoDocumentStore implements DocumentStore {
                                               String indexedProperty,
                                               long startValue,
                                               int limit) {
-        boolean withLock = true;
-        if (collection == Collection.NODES && indexedProperty != null) {
-            long maxQueryTime;
-            if (maxQueryTimeMS > 0) {
-                maxQueryTime = Math.min(maxQueryTimeMS, maxLockedQueryTimeMS);
-            } else {
-                maxQueryTime = maxLockedQueryTimeMS;
-            }
-            try {
-                return queryInternal(collection, fromKey, toKey, indexedProperty,
-                        startValue, limit, maxQueryTime, true);
-            } catch (MongoExecutionTimeoutException e) {
-                LOG.info("query timed out after {} milliseconds and will be retried without lock {}",
-                        maxQueryTime, Lists.newArrayList(fromKey, toKey, indexedProperty, startValue, limit));
-                withLock = false;
-            }
-        }
         return queryInternal(collection, fromKey, toKey, indexedProperty,
-                startValue, limit, maxQueryTimeMS, withLock);
+                startValue, limit, maxQueryTimeMS);
     }
 
+    @SuppressWarnings("unchecked")
     @Nonnull
     <T extends Document> List<T> queryInternal(Collection<T> collection,
                                                        String fromKey,
@@ -564,8 +547,7 @@ public class MongoDocumentStore implements DocumentStore {
                                                        String indexedProperty,
                                                        long startValue,
                                                        int limit,
-                                                       long maxQueryTime,
-                                                       boolean withLock) {
+                                                       long maxQueryTime) {
         log("query", fromKey, toKey, indexedProperty, startValue, limit);
         DBCollection dbCollection = getDBCollection(collection);
         QueryBuilder queryBuilder = QueryBuilder.start(Document.ID);
@@ -597,11 +579,14 @@ public class MongoDocumentStore implements DocumentStore {
         String parentId = Utils.getParentIdFromLowerLimit(fromKey);
         long lockTime = -1;
         final Stopwatch watch  = startWatch();
-        Lock lock = withLock ? nodeLocks.acquireExclusive(parentId != null ? parentId : "") : null;
+
         boolean isSlaveOk = false;
         int resultSize = 0;
+        CacheChangesTracker cacheChangesTracker = null;
+        if (parentId != null && collection == Collection.NODES) {
+            cacheChangesTracker = nodesCache.registerTracker(fromKey, toKey);
+        }
         try {
-            lockTime = withLock ? watch.elapsed(TimeUnit.MILLISECONDS) : -1;
             DBCursor cursor = dbCollection.find(query).sort(BY_ID_ASC);
             if (!disableIndexHint && !hasModifiedIdCompoundIndex) {
                 cursor.hint(hint);
@@ -626,22 +611,22 @@ public class MongoDocumentStore implements DocumentStore {
                 for (int i = 0; i < limit && cursor.hasNext(); i++) {
                     DBObject o = cursor.next();
                     T doc = convertFromDBObject(collection, o);
-                    if (collection == Collection.NODES
-                            && doc != null
-                            && lock != null) {
-                        nodesCache.putIfNewer((NodeDocument) doc);
-                        updateLatestAccessedRevs(doc);
-                    }
+                    updateLatestAccessedRevs(doc);
                     list.add(doc);
                 }
                 resultSize = list.size();
             } finally {
                 cursor.close();
             }
+
+            if (cacheChangesTracker != null) {
+                nodesCache.putNonConflictingDocs(cacheChangesTracker, (List<NodeDocument>) list);
+            }
+
             return list;
         } finally {
-            if (lock != null) {
-                lock.unlock();
+            if (cacheChangesTracker != null) {
+                cacheChangesTracker.close();
             }
             stats.doneQuery(watch.elapsed(TimeUnit.NANOSECONDS), collection, fromKey, toKey,
                     indexedProperty != null , resultSize, lockTime, isSlaveOk);
@@ -892,7 +877,7 @@ public class MongoDocumentStore implements DocumentStore {
                 oldDocs.putAll((Map<String, T>) getCachedNodes(operationsToCover.keySet()));
             }
 
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i <= bulkRetries; i++) {
                 if (operationsToCover.size() <= 2) {
                     // bulkUpdate() method invokes Mongo twice, so sending 2 updates
                     // in bulk mode wouldn't result in any performance gain
@@ -947,29 +932,30 @@ public class MongoDocumentStore implements DocumentStore {
         Set<String> lackingDocs = difference(bulkOperations.keySet(), oldDocs.keySet());
         oldDocs.putAll(findDocuments(collection, lackingDocs));
 
-        Lock lock = null;
+        CacheChangesTracker tracker = null;
         if (collection == Collection.NODES) {
-            lock = nodeLocks.acquire(bulkOperations.keySet());
+            tracker = nodesCache.registerTracker(bulkOperations.keySet());
         }
 
         try {
             BulkUpdateResult bulkResult = sendBulkUpdate(collection, bulkOperations.values(), oldDocs);
 
             if (collection == Collection.NODES) {
+                List<NodeDocument> docsToCache = new ArrayList<NodeDocument>();
                 for (UpdateOp op : filterKeys(bulkOperations, in(bulkResult.upserts)).values()) {
                     NodeDocument doc = Collection.NODES.newDocument(this);
                     UpdateUtils.applyChanges(doc, op);
-                    nodesCache.put(doc);
+                    docsToCache.add(doc);
                 }
 
                 for (String key : difference(bulkOperations.keySet(), bulkResult.failedUpdates)) {
                     T oldDoc = oldDocs.get(key);
                     if (oldDoc != null) {
                         NodeDocument newDoc = (NodeDocument) applyChanges(collection, oldDoc, bulkOperations.get(key));
-                        nodesCache.put(newDoc);
-                        oldDoc.seal();
+                        docsToCache.add(newDoc);
                     }
                 }
+                nodesCache.putNonConflictingDocs(tracker, docsToCache);
             }
             oldDocs.keySet().removeAll(bulkResult.failedUpdates);
 
@@ -985,8 +971,8 @@ public class MongoDocumentStore implements DocumentStore {
             }
             return result;
         } finally {
-            if (lock != null) {
-                lock.unlock();
+            if (tracker != null) {
+                tracker.close();
             }
         }
     }
@@ -1032,7 +1018,7 @@ public class MongoDocumentStore implements DocumentStore {
             T oldDoc = oldDocs.get(id);
             DBObject update;
             if (oldDoc == null) {
-                query.not().exists(Document.MOD_COUNT);
+                query.and(Document.MOD_COUNT).exists(false);
                 update = createUpdate(updateOp, true);
             } else {
                 query.and(Document.MOD_COUNT).is(oldDoc.getModCount());
@@ -1542,18 +1528,6 @@ public class MongoDocumentStore implements DocumentStore {
         this.clock = clock;
     }
 
-    void setMaxLockedQueryTimeMS(long maxLockedQueryTimeMS) {
-        this.maxLockedQueryTimeMS = maxLockedQueryTimeMS;
-    }
-
-    void resetLockAcquisitionCount() {
-        nodeLocks.resetLockAcquisitionCount();
-    }
-
-    long getLockAcquisitionCount() {
-        return nodeLocks.getLockAcquisitionCount();
-    }
-
     NodeDocumentCache getNodeDocumentCache() {
         return nodesCache;
     }
@@ -1579,6 +1553,14 @@ public class MongoDocumentStore implements DocumentStore {
         // assumption here: server returns UTC - ie the returned
         // date object is correctly taking care of time zones.
         final Date serverLocalTime = db.command("serverStatus").getDate("localTime");
+        if (serverLocalTime == null) {
+        	// OAK-4107 : looks like this can happen - at least
+        	// has been seen once on mongo 3.0.9
+        	// let's handle this gently and issue a log.warn
+        	// instead of throwing a NPE
+        	LOG.warn("determineServerTimeDifferenceMillis: db.serverStatus.localTime returned null - cannot determine time difference - assuming 0ms");
+        	return 0;
+        }
         final long end = System.currentTimeMillis();
 
         final long midPoint = (start + end) / 2;

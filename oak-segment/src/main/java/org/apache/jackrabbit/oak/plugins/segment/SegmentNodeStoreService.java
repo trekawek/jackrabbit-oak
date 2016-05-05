@@ -280,6 +280,10 @@ public class SegmentNodeStoreService extends ProxyNodeStore
     private WhiteboardExecutor executor;
     private boolean customBlobStore;
 
+    private Registration discoveryLiteDescriptorRegistration;
+
+    private Registration clusterIdDescriptorRegistration;
+
     /**
      * Blob modified before this time duration would be considered for Blob GC
      */
@@ -546,7 +550,18 @@ public class SegmentNodeStoreService extends ProxyNodeStore
         clusterIdDesc.put(ClusterRepositoryInfo.OAK_CLUSTERID_REPOSITORY_DESCRIPTOR_KEY,
                 new SimpleValueFactory().createValue(
                         ClusterRepositoryInfo.getOrCreateId(segmentNodeStore)), true, false);
-        whiteboard.register(Descriptors.class, clusterIdDesc, Collections.emptyMap());
+        clusterIdDescriptorRegistration = whiteboard.register(
+                Descriptors.class,
+                clusterIdDesc,
+                Collections.emptyMap()
+        );
+
+        // Register "discovery lite" descriptors
+        discoveryLiteDescriptorRegistration = whiteboard.register(
+                Descriptors.class,
+                new SegmentDiscoveryLiteDescriptors(segmentNodeStore),
+                Collections.emptyMap()
+        );
 
         // If a shared data store register the repo id in the data store
         String repoId = "";
@@ -583,6 +598,14 @@ public class SegmentNodeStoreService extends ProxyNodeStore
     }
 
     private void unregisterNodeStore() {
+        if (discoveryLiteDescriptorRegistration != null) {
+            discoveryLiteDescriptorRegistration.unregister();
+            discoveryLiteDescriptorRegistration = null;
+        }
+        if (clusterIdDescriptorRegistration != null) {
+            clusterIdDescriptorRegistration.unregister();
+            clusterIdDescriptorRegistration = null;
+        }
         if (segmentCacheMBean != null) {
             segmentCacheMBean.unregister();
             segmentCacheMBean = null;
@@ -591,11 +614,11 @@ public class SegmentNodeStoreService extends ProxyNodeStore
             stringCacheMBean.unregister();
             stringCacheMBean = null;
         }
-        if(providerRegistration != null){
+        if (providerRegistration != null) {
             providerRegistration.unregister();
             providerRegistration = null;
         }
-        if(storeRegistration != null){
+        if (storeRegistration != null) {
             storeRegistration.unregister();
             storeRegistration = null;
         }

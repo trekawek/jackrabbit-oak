@@ -26,6 +26,8 @@ import org.apache.jackrabbit.oak.spi.state.NodeStore;
 
 import com.google.common.io.Files;
 
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_OLD_PREFIX;
+
 public class SegmentNodeStoreContainer implements NodeStoreContainer {
 
     private final File directory;
@@ -73,7 +75,7 @@ public class SegmentNodeStoreContainer implements NodeStoreContainer {
 
     @Override
     public String getDescription() {
-        return directory.getPath();
+        return SEGMENT_OLD_PREFIX + directory.getPath();
     }
 
 }
