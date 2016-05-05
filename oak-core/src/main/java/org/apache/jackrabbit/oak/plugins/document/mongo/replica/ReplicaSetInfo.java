@@ -18,6 +18,7 @@ package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 
 import static com.google.common.base.Predicates.in;
 import static com.google.common.collect.ImmutableSet.of;
+import static com.google.common.collect.Iterables.isEmpty;
 import static com.google.common.collect.Iterables.transform;
 import static com.google.common.collect.Maps.filterKeys;
 import static com.google.common.collect.Sets.union;
@@ -231,7 +232,11 @@ public class ReplicaSetInfo implements Runnable {
             Iterable<Timestamped<RevisionVector>> secondaryRevisions = filterKeys(vectors, in(secondaries)).values();
 
             rootRevisions = pmin(transform(secondaryRevisions, Timestamped.<RevisionVector>getExtractFunction()));
-            secondariesSafeTimestamp = getSecondariesSafeTimestamp(primaryRevision, secondaryRevisions);
+            if (rootRevisions == null || primaryRevision == null || isEmpty(secondaryRevisions)) {
+                secondariesSafeTimestamp = 0;
+            } else {
+                secondariesSafeTimestamp = getSecondariesSafeTimestamp(primaryRevision, secondaryRevisions);
+            }
         }
 
         LOG.debug("Minimum root revisions: {}. Current lag: {}", rootRevisions, getLag());
