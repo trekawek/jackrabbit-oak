@@ -955,6 +955,11 @@ public class MongoDocumentStore implements DocumentStore {
                         docsToCache.add(newDoc);
                     }
                 }
+
+                for (NodeDocument doc : docsToCache) {
+                    localChanges.add(doc.getId(), doc.getLastRev().values());
+                }
+
                 nodesCache.putNonConflictingDocs(tracker, docsToCache);
             }
             oldDocs.keySet().removeAll(bulkResult.failedUpdates);
