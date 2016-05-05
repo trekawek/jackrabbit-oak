@@ -1614,8 +1614,8 @@ public class MongoDocumentStore implements DocumentStore {
             } else {
                 mostRecentAccessedRevisions = mostRecentAccessedRevisions.pmax(accessedRevs);
             }
-            if (LOG.isDebugEnabled() && !mostRecentAccessedRevisions.equals(previousValue)) {
-                LOG.debug("Most recent accessed revisions: {}", mostRecentAccessedRevisions);
+            if (LOG.isInfoEnabled() && !mostRecentAccessedRevisions.equals(previousValue)) {
+                LOG.info("Most recent accessed revisions: {}", mostRecentAccessedRevisions);
             }
         }
     }
