@@ -118,7 +118,7 @@ import static org.apache.jackrabbit.oak.plugins.document.mongo.MongoUtils.hasInd
  */
 public class MongoDocumentStore implements DocumentStore {
 
-    private static final Logger SLOW_LOG = LoggerFactory.getLogger(MongoDocumentStore.class + ".slow");
+    private static final Logger SLOW_LOG = LoggerFactory.getLogger(MongoDocumentStore.class.getName() + ".slow");
     private static final Logger LOG = LoggerFactory.getLogger(MongoDocumentStore.class);
     private static final PerfLogger PERFLOG = new PerfLogger(
             LoggerFactory.getLogger(MongoDocumentStore.class.getName()
