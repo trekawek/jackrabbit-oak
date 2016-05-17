@@ -17,6 +17,7 @@
 package org.apache.jackrabbit.oak.plugins.document.mongo;
 
 import java.io.IOException;
+import java.sql.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -516,9 +517,9 @@ public class MongoDocumentStore implements DocumentStore {
             DBObject obj = dbCollection.findOne(getByKeyQuery(key).get(), null, null, readPreference);
             long time = dbwatch.elapsed(TimeUnit.MILLISECONDS);
             numFindUncached += 1;
-            if (time > 500) {
+            if (time > 400) {
                 slowFindUncached += 1;
-                SLOW_LOG.debug("findUncached: Slow findUncached for key " + key + " took=" + time + "ms");
+                SLOW_LOG.debug("findUncached: Slow findUncached for key " + key + " took=" + time);
 
                 if (slowFindUncached % 100 == 0) {
                     SLOW_LOG.debug("findUncached: Slow log percentage: " + slowFindUncached + " of " + numFindUncached + " ~ " + (double)slowFindUncached/numFindUncached);
@@ -1169,7 +1170,19 @@ public class MongoDocumentStore implements DocumentStore {
             try {
                 Stopwatch slowWatch = startWatch();
                 dbCollection.insert(inserts);
-                SLOW_LOG.debug("createTimer: Mongo insert " + inserts.length + " documents took " + slowWatch.elapsed(TimeUnit.MILLISECONDS));
+
+                // ---- PROFILE
+                long elapsed = slowWatch.elapsed(TimeUnit.MILLISECONDS);
+                StringBuilder sb;
+                if (elapsed > 200)  {
+                    sb = new StringBuilder();
+                    for (DBObject d: inserts) {
+                        sb.append(d.get("_id"));
+                        sb.append(" ");
+                    }
+                    SLOW_LOG.debug("create: Mongo insert in " + collection + " - " + inserts.length + "(" + sb.toString() + ") took=" + elapsed);
+                }
+                // ---- PROFILE end
 
                 if (collection == Collection.NODES) {
                     slowWatch = startWatch();
@@ -1177,7 +1190,18 @@ public class MongoDocumentStore implements DocumentStore {
                         nodesCache.putIfAbsent((NodeDocument) doc);
                         localChanges.add(doc.getId(), ((NodeDocument) doc).getLastRev().values());
                     }
-                    SLOW_LOG.debug("createTimer: Update node cache " + inserts.length + " took " + slowWatch.elapsed(TimeUnit.MILLISECONDS));
+
+                    // ---- PROFILE
+                    elapsed = slowWatch.elapsed(TimeUnit.MILLISECONDS);
+                    if (elapsed > 10)  {
+                        sb = new StringBuilder();
+                        for (DBObject d: inserts) {
+                            sb.append(d.get("_id"));
+                            sb.append(" ");
+                        }
+                        SLOW_LOG.debug("create: Update node cache " + inserts.length + "( " + sb.toString() + ") took=" + elapsed);
+                    }
+                    // ---- PROFILE end
                 }
                 insertSuccess = true;
                 return true;
@@ -1212,7 +1236,18 @@ public class MongoDocumentStore implements DocumentStore {
             try {
                 Stopwatch slowWatch = startWatch();
                 dbCollection.update(query.get(), update, false, true);
-                SLOW_LOG.debug("update: Db update with " + keys.size() + " took " + slowWatch.elapsed(TimeUnit.MILLISECONDS));
+
+                // ---- PROFILE
+                long elapsed = slowWatch.elapsed(TimeUnit.MILLISECONDS);
+                if (elapsed > 200) {
+                    StringBuilder sb = new StringBuilder();
+                    for(String s: keys) {
+                        sb.append(s);
+                        sb.append(" ");
+                    }
+                    SLOW_LOG.debug("update: Db update with " + keys.size() + "( " + sb.toString() + ") took=" + elapsed);
+                }
+                // ---- PROFILE end
 
                 if (collection == Collection.NODES) {
                     Map<String, Long> modCounts = getModCounts(filterValues(cachedDocs, notNull()).keySet());
@@ -1240,7 +1275,18 @@ public class MongoDocumentStore implements DocumentStore {
                             }
                         } finally {
                             lock.unlock();
-                            SLOW_LOG.debug("update: Update cached docs " + keys.size() + " took " + slowWatch.elapsed(TimeUnit.MILLISECONDS));
+
+                            // ---- PROFILE
+                            elapsed = slowWatch.elapsed(TimeUnit.MILLISECONDS);
+                            if (elapsed > 10) {
+                                StringBuilder sb = new StringBuilder();
+                                for(String s: keys) {
+                                    sb.append(s);
+                                    sb.append(" ");
+                                }
+                                SLOW_LOG.debug("update: Update cached docs " + keys.size() + "( " + sb.toString() + ") took=" + elapsed);
+                            }
+                            // ---- PROFILE end
                         }
                     }
                 }
