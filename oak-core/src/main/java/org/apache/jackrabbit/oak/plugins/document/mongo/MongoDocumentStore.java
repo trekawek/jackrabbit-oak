@@ -125,7 +125,7 @@ public class MongoDocumentStore implements DocumentStore {
         PRIMARY,
         PREFER_PRIMARY,
         PREFER_SECONDARY,
-        PREFER_SECONDARY_IF_UP_TO_DATE
+        PREFER_SECONDARY_IF_OLD_ENOUGH
     }
 
     public static final int IN_CLAUSE_BATCH_SIZE = 500;
@@ -1235,12 +1235,12 @@ public class MongoDocumentStore implements DocumentStore {
         } else if(maxCacheAge == Integer.MAX_VALUE){
             return DocumentReadPreference.PREFER_SECONDARY;
         } else {
-           return DocumentReadPreference.PREFER_SECONDARY_IF_UP_TO_DATE;
+           return DocumentReadPreference.PREFER_SECONDARY_IF_OLD_ENOUGH;
         }
     }
 
     DocumentReadPreference getDefaultReadPreference(Collection col){
-        return col == Collection.NODES ? DocumentReadPreference.PREFER_SECONDARY_IF_UP_TO_DATE : DocumentReadPreference.PRIMARY;
+        return col == Collection.NODES ? DocumentReadPreference.PREFER_SECONDARY_IF_OLD_ENOUGH : DocumentReadPreference.PRIMARY;
     }
 
     <T extends Document> ReadPreference getMongoReadPreference(@Nonnull Collection<T> collection,
@@ -1254,7 +1254,7 @@ public class MongoDocumentStore implements DocumentStore {
                 return ReadPreference.primaryPreferred();
             case PREFER_SECONDARY :
                 return getConfiguredReadPreference(collection);
-            case PREFER_SECONDARY_IF_UP_TO_DATE:
+            case PREFER_SECONDARY_IF_OLD_ENOUGH:
                 if(collection != Collection.NODES){
                     return ReadPreference.primary();
                 }
