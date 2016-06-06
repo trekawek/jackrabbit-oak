@@ -26,7 +26,6 @@ import static com.google.common.collect.Sets.newConcurrentHashSet;
 import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.Futures.immediateCancelledFuture;
 import static com.google.common.util.concurrent.MoreExecutors.listeningDecorator;
-import static java.lang.Boolean.getBoolean;
 import static java.lang.Integer.MAX_VALUE;
 import static java.lang.String.valueOf;
 import static java.lang.System.getProperty;
@@ -74,10 +73,10 @@ import org.apache.jackrabbit.oak.commons.jmx.AnnotatedStandardMBean;
 import org.apache.jackrabbit.oak.plugins.commit.ConflictHook;
 import org.apache.jackrabbit.oak.plugins.commit.DefaultConflictHandler;
 import org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions;
+import org.apache.jackrabbit.oak.segment.compaction.SegmentRevisionGC;
 import org.apache.jackrabbit.oak.segment.compaction.SegmentRevisionGCMBean;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreGCMonitor;
-import org.apache.jackrabbit.oak.segment.compaction.SegmentRevisionGC;
 import org.apache.jackrabbit.oak.segment.file.GCMonitorMBean;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -113,7 +112,6 @@ import org.slf4j.LoggerFactory;
  * <p>TODO Leverage longevity test support from OAK-2771 once we have it.</p>
  */
 public class SegmentCompactionIT {
-    private static final boolean PERSIST_COMPACTION_MAP = !getBoolean("in-memory-compaction-map");
 
     /** Only run if explicitly asked to via -Dtest=SegmentCompactionIT */
     private static final boolean ENABLED =
@@ -232,10 +230,10 @@ public class SegmentCompactionIT {
                 .withGCMonitor(gcMonitor)
                 .withGCOptions(gcOptions)
                 .build();
-        nodeStore = SegmentNodeStore.builder(fileStore).build();
+        nodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
 
-        CacheStats segmentCacheStats = fileStore.getTracker().getSegmentCacheStats();
-        CacheStats stringCacheStats = fileStore.getTracker().getStringCacheStats();
+        CacheStats segmentCacheStats = fileStore.getSegmentCacheStats();
+        CacheStats stringCacheStats = fileStore.getStringCacheStats();
         List<Registration> registrations = newArrayList();
         registrations.add(registerMBean(segmentCompactionMBean,
                 new ObjectName("IT:TYPE=Segment Compaction")));
@@ -243,8 +241,7 @@ public class SegmentCompactionIT {
                 new ObjectName("IT:TYPE=Segment Revision GC")));
         registrations.add(registerMBean(fileStoreGCMonitor,
                 new ObjectName("IT:TYPE=GC Monitor")));
-        registrations.add(registerMBean(segmentCacheStats,
-                new ObjectName("IT:TYPE=" + segmentCacheStats.getName())));
+        registrations.add(registerMBean(segmentCacheStats, new ObjectName("IT:TYPE=" + segmentCacheStats.getName())));
         if (stringCacheStats != null) {
             registrations.add(registerMBean(stringCacheStats,
                     new ObjectName("IT:TYPE=" + stringCacheStats.getName())));

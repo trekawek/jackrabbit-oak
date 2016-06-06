@@ -40,7 +40,7 @@ public class FileStoreTest {
     public void containsSegment() throws IOException {
         FileStore fileStore = FileStore.builder(getFileStoreFolder()).build();
         try {
-            SegmentId id = new SegmentId(fileStore.getTracker(), 0, 0);
+            SegmentId id = new SegmentId(fileStore, 0, 0);
             if (fileStore.containsSegment(id)) {
                 fileStore.readSegment(id);
             }

@@ -29,7 +29,7 @@ import static org.apache.jackrabbit.oak.api.Type.STRING;
 import static org.apache.jackrabbit.oak.api.Type.STRINGS;
 import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE;
 import static org.apache.jackrabbit.oak.segment.ListRecord.LEVEL_SIZE;
-import static org.apache.jackrabbit.oak.segment.Segment.readString;
+import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -46,32 +46,46 @@ import java.util.Map;
 import java.util.Random;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableMap;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.memory.MemoryStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 public class RecordTest {
+    @Rule
+    public TemporaryFolder folder = new TemporaryFolder();
 
-    private final String hello = "Hello, World!";
+    private static final String HELLO_WORLD = "Hello, World!";
 
-    private final byte[] bytes = hello.getBytes(Charsets.UTF_8);
+    private final byte[] bytes = HELLO_WORLD.getBytes(Charsets.UTF_8);
 
-    private final SegmentStore store;
+    private FileStore store;
 
-    private final SegmentWriter writer;
+    private SegmentWriter writer;
 
     private final Random random = new Random(0xcafefaceL);
 
-    public RecordTest() throws IOException {
-        store = new MemoryStore();
-        writer = store.getTracker().getWriter();
+    @Before
+    public void setup() throws IOException {
+        store = FileStore.builder(folder.getRoot()).build();
+        writer = store.getWriter();
+    }
+
+    @After
+    public void tearDown() {
+        store.close();
     }
 
     @Test
@@ -84,14 +98,14 @@ public class RecordTest {
             for (int i = 0; i + n <= bytes.length; i++) {
                 Arrays.fill(bytes, i, i + n, (byte) '.');
                 assertEquals(n, block.read(i, bytes, i, n));
-                assertEquals(hello, new String(bytes, Charsets.UTF_8));
+                assertEquals(HELLO_WORLD, new String(bytes, Charsets.UTF_8));
             }
         }
 
         // Check reading with a too long length
         byte[] large = new byte[bytes.length * 2];
         assertEquals(bytes.length, block.read(0, large, 0, large.length));
-        assertEquals(hello, new String(large, 0, bytes.length, Charsets.UTF_8));
+        assertEquals(HELLO_WORLD, new String(large, 0, bytes.length, Charsets.UTF_8));
     }
 
     @Test
@@ -195,10 +209,10 @@ public class RecordTest {
 
         Segment segment = large.getSegmentId().getSegment();
 
-        assertEquals("", readString(empty));
-        assertEquals(" ", readString(space));
-        assertEquals("Hello, World!", readString(hello));
-        assertEquals(builder.toString(), readString(large));
+        assertEquals("", store.getReader().readString(empty));
+        assertEquals(" ", store.getReader().readString(space));
+        assertEquals("Hello, World!", store.getReader().readString(hello));
+        assertEquals(builder.toString(), store.getReader().readString(large));
     }
 
     @Test
@@ -381,7 +395,7 @@ public class RecordTest {
         byte[] data = new byte[Segment.MEDIUM_LIMIT + 1];
         random.nextBytes(data);
 
-        SegmentNodeStore extStore = SegmentNodeStore.builder(new MemoryStore()).build();
+        SegmentNodeStore extStore = SegmentNodeStoreBuilders.builder(new MemoryStore()).build();
         NodeBuilder extRootBuilder = extStore.getRoot().builder();
         Blob extBlob = extRootBuilder.createBlob(new ByteArrayInputStream(data));
         extRootBuilder.setProperty("binary", extBlob, BINARY);
@@ -415,6 +429,15 @@ public class RecordTest {
         builder.setProperty("jcr:mixinTypes", singletonList("foo"), STRINGS);
         NodeState state = writer.writeNode(builder.getNodeState());
         assertNotNull(state.getProperty("jcr:mixinTypes"));
+    }
+
+    @Test
+    public void testCancel() throws IOException {
+        NodeBuilder builder = EMPTY_NODE.builder();
+        SegmentBufferWriter bufferWriter = new SegmentBufferWriter(store, store.getTracker(),
+                store.getReader(), LATEST_VERSION, "test", 0);
+        NodeState state = writer.writeNode(builder.getNodeState(), bufferWriter, Suppliers.ofInstance(true));
+        assertNull(state);
     }
 
 }

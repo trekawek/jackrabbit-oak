@@ -82,6 +82,15 @@ public class SegmentGCOptions {
 
     private int retainedGenerations = RETAINED_GENERATIONS_DEFAULT;
 
+    private boolean offline = false;
+
+    private boolean ocBinDeduplication = Boolean
+            .getBoolean("oak.segment.compaction.binaryDeduplication");
+
+    private long ocBinMaxSize = Long.getLong(
+            "oak.segment.compaction.binaryDeduplicationMaxSize",
+            100 * 1024 * 1024);
+
     public SegmentGCOptions(boolean paused, int memoryThreshold, int gainThreshold,
                             int retryCount, boolean forceAfterFail, int lockWaitTime) {
         this.paused = paused;
@@ -238,14 +247,22 @@ public class SegmentGCOptions {
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "{" +
-                "paused=" + paused +
-                ", memoryThreshold=" + memoryThreshold +
-                ", gainThreshold=" + gainThreshold +
-                ", retryCount=" + retryCount +
-                ", forceAfterFail=" + forceAfterFail +
-                ", lockWaitTime=" + lockWaitTime +
-                ", retainedGenerations=" + retainedGenerations + '}';
+        if (offline) {
+            return getClass().getSimpleName() + "{" +
+                    "offline=" + offline +
+                    ", retainedGenerations=" + retainedGenerations +
+                    ", ocBinDeduplication=" + ocBinDeduplication +
+                    ", ocBinMaxSize=" + ocBinMaxSize + "}";
+        } else {
+            return getClass().getSimpleName() + "{" +
+                    "paused=" + paused +
+                    ", memoryThreshold=" + memoryThreshold +
+                    ", gainThreshold=" + gainThreshold +
+                    ", retryCount=" + retryCount +
+                    ", forceAfterFail=" + forceAfterFail +
+                    ", lockWaitTime=" + lockWaitTime +
+                    ", retainedGenerations=" + retainedGenerations + "}";
+        }
     }
 
     /**
@@ -262,4 +279,49 @@ public class SegmentGCOptions {
         return availableDiskSpace > 0.25 * repositoryDiskSpace;
     }
 
+    public boolean isOffline() {
+        return offline;
+    }
+
+    /**
+     * Enables the offline compaction mode, allowing for certain optimizations,
+     * like reducing the retained generation to 1.
+     * @return this instance
+     */
+    public SegmentGCOptions setOffline() {
+        this.offline = true;
+        this.retainedGenerations = 1;
+        return this;
+    }
+
+    /**
+     * Offline compaction only. Enables content based de-duplication of
+     * binaries. Involves a fair amount of I/O when reading/comparing
+     * potentially equal blobs. set via the
+     * 'oak.segment.compaction.binaryDeduplication' system property
+     * @return this instance.
+     */
+    public SegmentGCOptions withBinaryDeduplication() {
+        this.ocBinDeduplication = true;
+        return this;
+    }
+
+    public boolean isBinaryDeduplication() {
+        return this.ocBinDeduplication;
+    }
+
+    /**
+     * Offline compaction only. Set the upper bound for the content based
+     * de-duplication checks.
+     * @param binMaxSize
+     * @return this instance
+     */
+    public SegmentGCOptions setBinaryDeduplicationMaxSize(long binMaxSize) {
+        this.ocBinMaxSize = binMaxSize;
+        return this;
+    }
+
+    public long getBinaryDeduplicationMaxSize() {
+        return this.ocBinMaxSize;
+    }
 }

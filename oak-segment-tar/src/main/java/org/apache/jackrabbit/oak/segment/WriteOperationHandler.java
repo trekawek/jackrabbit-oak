@@ -21,6 +21,8 @@ package org.apache.jackrabbit.oak.segment;
 
 import java.io.IOException;
 
+import javax.annotation.Nonnull;
+
 /**
  * A {@code WriteOperationHandler} executes {@link WriteOperation WriteOperation}s and as
  * such serves as a bridge between {@link SegmentWriter} and {@link SegmentBufferWriter}.
@@ -41,7 +43,8 @@ interface WriteOperationHandler {
          * @return        {@code RecordId} that resulted from persisting the changes.
          * @throws IOException
          */
-        RecordId execute(SegmentBufferWriter writer) throws IOException;
+        @Nonnull
+        RecordId execute(@Nonnull SegmentBufferWriter writer) throws IOException;
     }
 
     /**
@@ -50,13 +53,11 @@ interface WriteOperationHandler {
      * @return                {@code RecordId} that resulted from persisting the changes.
      * @throws IOException
      */
-    RecordId execute(WriteOperation writeOperation) throws IOException;
+    @Nonnull
+    RecordId execute(@Nonnull WriteOperation writeOperation) throws IOException;
 
     /**
      * Flush any pending changes on any {@link SegmentBufferWriter} managed by this instance.
-     * This method <em>does not block</em> to wait for concurrent write operations. However, if
-     * a write operation is currently in progress a call to this method ensures the respective
-     * changes are properly flushed at the end of that call.
      * @throws IOException
      */
     void flush() throws IOException;

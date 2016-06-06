@@ -18,12 +18,12 @@ package org.apache.jackrabbit.oak.spi.security.authentication.external.basic;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -71,8 +71,6 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
     private ValueFactory valueFactory;
     private DefaultSyncContext syncCtx;
 
-    private List<String> authorizableIds = new ArrayList<String>();
-
     @Before
     public void before() throws Exception {
         super.before();
@@ -86,13 +84,6 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
         try {
             syncCtx.close();
             root.refresh();
-            for (String id : authorizableIds) {
-                Authorizable a = userManager.getAuthorizable(id);
-                if (a != null) {
-                    a.remove();
-                }
-            }
-            root.commit();
         } finally {
             super.after();
         }
@@ -104,9 +95,7 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
     }
 
     private Group createTestGroup() throws Exception {
-        Group gr = userManager.createGroup("group" + UUID.randomUUID());
-        authorizableIds.add(gr.getID());
-        return gr;
+        return userManager.createGroup("group" + UUID.randomUUID());
     }
 
     /**
@@ -380,8 +369,6 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
         // mark a regular repo user as external user from the test IDP
         User u = userManager.createUser("test" + UUID.randomUUID(), null);
         String userId = u.getID();
-        authorizableIds.add(userId);
-
         setExternalID(u, idp.getName());
 
         // test sync with 'keepmissing' = true
@@ -484,7 +471,7 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
 
     @Test
     public void testSyncByForeignId2() throws Exception {
-        User u = getTestUser();
+        User u = userManager.getAuthorizable(getTestUser().getID(), User.class);
         setExternalID(u, "differentIDP");
 
         SyncResult result = syncCtx.sync(u.getID());
@@ -585,6 +572,70 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
         // since the group is not associated with the test-IDP the group-membership
         // must NOT be modified during the sync.
         assertTrue(gr.isDeclaredMember(user));
+    }
+
+    @Test
+    public void testLostMembershipWithExpirationSet() throws Exception {
+        long expTime = 2;
+        syncConfig.user().setMembershipNestingDepth(1).setMembershipExpirationTime(expTime).setExpirationTime(expTime);
+
+        Group gr = createTestGroup();
+        setExternalID(gr, idp.getName());
+
+        SyncResult result = syncCtx.sync(idp.listUsers().next());
+        User user = (User) userManager.getAuthorizable(result.getIdentity().getId());
+        gr.addMember(user);
+        root.commit();
+
+        DefaultSyncContext newCtx = new DefaultSyncContext(syncConfig, idp, userManager, valueFactory);
+        while (!newCtx.isExpired(user, expTime, "Properties")) {
+            newCtx = new DefaultSyncContext(syncConfig, idp, userManager, valueFactory);
+        }
+
+        result = newCtx.sync(user.getID());
+        root.commit();
+        assertSame(SyncResult.Status.UPDATE, result.getStatus());
+
+        gr = (Group) userManager.getAuthorizable(gr.getID());
+        assertFalse(gr.isDeclaredMember(userManager.getAuthorizable(user.getID())));
+    }
+
+    /**
+     * @see <a href="https://issues.apache.org/jira/browse/OAK-4397">OAK-4397</a>
+     */
+    @Test
+    public void testMembershipForExistingForeignGroup() throws Exception {
+        syncConfig.user().setMembershipNestingDepth(1).setMembershipExpirationTime(-1).setExpirationTime(-1);
+        syncConfig.group().setExpirationTime(-1);
+
+        ExternalUser externalUser = idp.getUser(USER_ID);
+        ExternalIdentityRef groupRef = externalUser.getDeclaredGroups().iterator().next();
+
+        // create the group as if it had been synced by a foreign IDP
+        Group gr = userManager.createGroup(groupRef.getId());
+        setExternalID(gr, "foreignIDP");  // but don't set rep:lastSynced :-)
+        root.commit();
+
+        SyncResult result = syncCtx.sync(externalUser);
+        assertSame(SyncResult.Status.ADD, result.getStatus());
+
+        User user = userManager.getAuthorizable(externalUser.getId(), User.class);
+        assertNotNull(user);
+
+        // synchronizing the user from our IDP must _neither_ change the group
+        // members of the group belonging to a different IDP nor synchronizing
+        // that foreign group with information retrieved from this IDP (e.g.
+        // properties and as such must _not_ set the last-synced property.
+
+        // -> verify group last-synced has not been added
+        assertFalse(gr.hasProperty(DefaultSyncContext.REP_LAST_SYNCED));
+
+        // -> verify group membership has not changed
+        assertFalse(gr.isDeclaredMember(user));
+        Iterator<Group> declared = user.declaredMemberOf();
+        while (declared.hasNext()) {
+            assertFalse(gr.getID().equals(declared.next().getID()));
+        }
     }
 
     @Test
@@ -1138,7 +1189,7 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
 
     @Test
     public void testIsSameIDPNull() throws Exception {
-        assertFalse(syncCtx.isSameIDP(null));
+        assertFalse(syncCtx.isSameIDP((Authorizable) null));
     }
 
     @Test
@@ -1184,6 +1235,16 @@ public class DefaultSyncContextTest extends AbstractExternalAuthTest {
         setExternalID(gr, "some_other_idp");
 
         assertFalse(syncCtx.isSameIDP(gr));
+    }
+
+    @Test
+    public void testIsSameIDPExternalIdentityRef() throws Exception {
+        assertFalse(syncCtx.isSameIDP(new TestIdentityProvider.ForeignExternalUser().getExternalId()));
+        assertFalse(syncCtx.isSameIDP(new TestIdentityProvider.ForeignExternalGroup().getExternalId()));
+
+        assertTrue(syncCtx.isSameIDP(new TestIdentityProvider.TestIdentity().getExternalId()));
+        assertTrue(syncCtx.isSameIDP(idp.listGroups().next().getExternalId()));
+        assertTrue(syncCtx.isSameIDP(idp.listUsers().next().getExternalId()));
     }
 
     private final class ExternalUserWithDeclaredGroup extends TestIdentityProvider.TestIdentity implements ExternalUser {

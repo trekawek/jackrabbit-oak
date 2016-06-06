@@ -22,11 +22,15 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.jcr.Repository;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
 import javax.security.auth.Subject;
 
+import com.google.common.base.Function;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Iterators;
 import org.apache.jackrabbit.api.JackrabbitRepository;
 import org.apache.jackrabbit.api.JackrabbitSession;
 import org.apache.jackrabbit.api.security.user.UserManager;
@@ -117,33 +121,34 @@ final class Delegatee {
     }
 
     /**
-     * @see SynchronizationMBean#syncUsers(String[], boolean, boolean)
+     * @see SynchronizationMBean#syncUsers(String[], boolean)
      */
     @Nonnull
-    String[] syncUsers(@Nonnull String[] userIds, boolean purge, boolean forceGroupSync) {
+    String[] syncUsers(@Nonnull String[] userIds, boolean purge) {
         context.setKeepMissing(!purge)
-                .setForceGroupSync(forceGroupSync)
+                .setForceGroupSync(true)
                 .setForceUserSync(true);
         List<String> list = new ArrayList<String>();
-        for (String userId: userIds) {
+        for (String userId : userIds) {
             try {
                 append(list, syncUser(userId));
             } catch (SyncException e) {
                 log.warn(ERROR_SYNC_USER, userId, e);
+                append(list, new DefaultSyncedIdentity(userId, null, false, -1), e);
             }
         }
         return list.toArray(new String[list.size()]);
     }
 
     /**
-     * @see SynchronizationMBean#syncAllUsers(boolean, boolean)
+     * @see SynchronizationMBean#syncAllUsers(boolean)
      */
     @Nonnull
-    String[] syncAllUsers(boolean purge, boolean forceGroupSync) {
+    String[] syncAllUsers(boolean purge) {
         try {
             List<String> list = new ArrayList<String>();
             context.setKeepMissing(!purge)
-                    .setForceGroupSync(forceGroupSync)
+                    .setForceGroupSync(true)
                     .setForceUserSync(true);
             Iterator<SyncedIdentity> iter = handler.listIdentities(userMgr);
             while (iter.hasNext()) {
@@ -164,44 +169,48 @@ final class Delegatee {
     }
 
     /**
-     * @see SynchronizationMBean#syncExternalUsers(String[], boolean)
+     * @see SynchronizationMBean#syncExternalUsers(String[])
      */
     @Nonnull
-    String[] syncExternalUsers(@Nonnull String[] externalIds, boolean forceGroupSync) {
+    String[] syncExternalUsers(@Nonnull String[] externalIds) {
         List<String> list = new ArrayList<String>();
-        context.setForceGroupSync(forceGroupSync).setForceUserSync(true);
+        context.setForceGroupSync(true).setForceUserSync(true);
         for (String externalId : externalIds) {
             ExternalIdentityRef ref = ExternalIdentityRef.fromString(externalId);
-            try {
-                ExternalIdentity id = idp.getIdentity(ref);
-                SyncResult r;
-                if (id != null) {
-                    r = syncUser(id);
-                } else {
-                    r = new DefaultSyncResultImpl(
-                            new DefaultSyncedIdentity("", ref, false, -1),
-                            SyncResult.Status.NO_SUCH_IDENTITY
-                    );
+            if (!idp.getName().equals(ref.getProviderName())) {
+                append(list, new DefaultSyncResultImpl(new DefaultSyncedIdentity(ref.getId(), ref, false, -1), SyncResult.Status.FOREIGN));
+            } else {
+                try {
+                    ExternalIdentity id = idp.getIdentity(ref);
+                    SyncResult r;
+                    if (id != null) {
+                        r = syncUser(id);
+                    } else {
+                        r = new DefaultSyncResultImpl(
+                                new DefaultSyncedIdentity("", ref, false, -1),
+                                SyncResult.Status.NO_SUCH_IDENTITY
+                        );
+                    }
+                    append(list, r);
+                } catch (ExternalIdentityException e) {
+                    log.warn("error while fetching the external identity {}", externalId, e);
+                    append(list, ref, e);
+                } catch (SyncException e) {
+                    log.error(ERROR_SYNC_USER, ref, e);
+                    append(list, ref, e);
                 }
-                append(list, r);
-            } catch (ExternalIdentityException e) {
-                log.warn("error while fetching the external identity {}", externalId, e);
-                append(list, ref, e);
-            } catch (SyncException e) {
-                log.error(ERROR_SYNC_USER, ref, e);
-                append(list, ref, e);
             }
         }
         return list.toArray(new String[list.size()]);
     }
 
     /**
-     * @see SynchronizationMBean#syncAllExternalUsers(boolean)
+     * @see SynchronizationMBean#syncAllExternalUsers()
      */
     @Nonnull
-    String[] syncAllExternalUsers(boolean forceGroupSync) {
+    String[] syncAllExternalUsers() {
         List<String> list = new ArrayList<String>();
-        context.setForceGroupSync(forceGroupSync).setForceUserSync(true);
+        context.setForceGroupSync(true).setForceUserSync(true);
         try {
             Iterator<ExternalUser> iter = idp.listUsers();
             while (iter.hasNext()) {
@@ -234,27 +243,7 @@ final class Delegatee {
      */
     @Nonnull
     String[] listOrphanedUsers() {
-        List<String> list = new ArrayList<String>();
-        try {
-            Iterator<SyncedIdentity> iter = handler.listIdentities(userMgr);
-            while (iter.hasNext()) {
-                SyncedIdentity id = iter.next();
-                if (isMyIDP(id)) {
-                    try {
-                        ExternalIdentityRef ref = id.getExternalIdRef();
-                        ExternalIdentity extId = (ref == null) ? null : idp.getIdentity(ref);
-                        if (extId == null) {
-                            list.add(id.getId());
-                        }
-                    } catch (ExternalIdentityException e) {
-                        log.error("Error while fetching external identity {}", id, e);
-                    }
-                }
-            }
-        } catch (RepositoryException e) {
-            log.error("Error while listing orphaned users", e);
-        }
-        return list.toArray(new String[list.size()]);
+        return Iterators.toArray(internalListOrphanedIdentities(), String.class);
     }
 
     /**
@@ -264,11 +253,14 @@ final class Delegatee {
     String[] purgeOrphanedUsers() {
         context.setKeepMissing(false);
         List<String> list = new ArrayList<String>();
-        for (String userId : listOrphanedUsers()) {
+        Iterator<String> orphanedIdentities = internalListOrphanedIdentities();
+        while (orphanedIdentities.hasNext()) {
+            String userId = orphanedIdentities.next();
             try {
                 append(list, syncUser(userId));
             } catch (SyncException e) {
                 log.warn(ERROR_SYNC_USER, userId, e);
+                append(list, new DefaultSyncedIdentity(userId, new ExternalIdentityRef(userId, idp.getName()), false, -1), e);
             }
         }
         return list.toArray(new String[list.size()]);
@@ -305,6 +297,34 @@ final class Delegatee {
         }
     }
 
+    @Nonnull
+    private Iterator<String> internalListOrphanedIdentities() {
+        try {
+            Iterator<SyncedIdentity> iter = handler.listIdentities(userMgr);
+            return Iterators.filter(Iterators.transform(iter, new Function<SyncedIdentity, String>() {
+                @Nullable
+                @Override
+                public String apply(@Nullable SyncedIdentity syncedIdentity) {
+                    if (syncedIdentity != null && isMyIDP(syncedIdentity)) {
+                        ExternalIdentityRef ref = syncedIdentity.getExternalIdRef();
+                        try {
+                            ExternalIdentity extId = (ref == null) ? null : idp.getIdentity(ref);
+                            if (extId == null) {
+                                return syncedIdentity.getId();
+                            }
+                        } catch (ExternalIdentityException e) {
+                            log.error("Error while fetching external identity {}", syncedIdentity, e);
+                        }
+                    }
+                    return null;
+                }
+            }), Predicates.notNull());
+        } catch (RepositoryException e) {
+            log.error("Error while listing orphaned users", e);
+            return Iterators.emptyIterator();
+        }
+    }
+
     private static void append(@Nonnull List<String> list, @Nonnull SyncResult r) {
         SyncedIdentity syncedIdentity = r.getIdentity();
         String uid = JsonUtil.getJsonString((syncedIdentity == null ? null : syncedIdentity.getId()));
@@ -315,9 +335,10 @@ final class Delegatee {
     }
 
     private static void append(@Nonnull List<String> list, @Nonnull ExternalIdentityRef idRef, @Nonnull Exception e) {
+        String uid = JsonUtil.getJsonString(idRef.getId());
         String eid = JsonUtil.getJsonString(idRef.getString());
         String msg = JsonUtil.getJsonString(e.toString());
-        String jsonStr = String.format("{op:\"ERR\",uid:\"\",eid:%s,msg:%s}", eid, msg);
+        String jsonStr = String.format("{op:\"ERR\",uid:%s,eid:%s,msg:%s}", uid, eid, msg);
         list.add(jsonStr);
     }
 

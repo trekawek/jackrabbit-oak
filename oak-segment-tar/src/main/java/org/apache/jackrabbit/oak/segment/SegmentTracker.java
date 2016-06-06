@@ -18,47 +18,22 @@
  */
 package org.apache.jackrabbit.oak.segment;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.Sets.newHashSet;
-import static java.lang.Boolean.getBoolean;
 
 import java.security.SecureRandom;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
 import com.google.common.base.Predicate;
-import com.google.common.cache.RemovalCause;
-import org.apache.jackrabbit.oak.cache.CacheLIRS;
-import org.apache.jackrabbit.oak.cache.CacheLIRS.EvictionCallback;
-import org.apache.jackrabbit.oak.cache.CacheStats;
-import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Tracker of references to segment identifiers and segment instances
- * that are currently kept in memory.
- * <p>
- * It is also responsible to cache segment objects in memory.
+ * that are currently kept in memory and factory for creating {@link SegmentId}
+ * instances.
  */
 public class SegmentTracker {
-
-    /** Logger instance */
-    private static final Logger log =
-            LoggerFactory.getLogger(SegmentTracker.class);
-
-    /**
-     * Disable the {@link #stringCache} if {@code true} and fall back to
-     * the previous {@link Segment#strings} caching mechanism.
-     */
-    private static final boolean DISABLE_STRING_CACHE = getBoolean("oak.segment.disableStringCache");
-
-    static final String STRING_CACHE_SIZE = "oak.segment.stringCache";
-
     private static final long MSB_MASK = ~(0xfL << 12);
 
     private static final long VERSION = (0x4L << 12);
@@ -69,18 +44,11 @@ public class SegmentTracker {
 
     private static final long BULK = 0xBL << 60;
 
-    private static final long MB = 1024 * 1024;
-
-    private static final int DEFAULT_MEMORY_CACHE_SIZE = 256;
-
     /**
      * The random number source for generating new segment identifiers.
      */
+    @Nonnull
     private final SecureRandom random = new SecureRandom();
-
-    private final SegmentStore store;
-
-    private final SegmentWriter writer;
 
     /**
      * Hash table of weak references to segment identifiers that are
@@ -91,169 +59,27 @@ public class SegmentTracker {
      * (when there are no matching identifiers) or a list of weak references
      * to the matching identifiers.
      */
+    @Nonnull
     private final SegmentIdTable[] tables = new SegmentIdTable[32];
 
     /**
-     * Cache for string records
+     * Number of segment tracked since this tracker was instantiated
      */
-    private final StringCache stringCache;
-
-    /**
-     * Cache of recently accessed segments
-     */
-    private final CacheLIRS<SegmentId, Segment> segmentCache;
-
-    /**
-     * Number of segments
-     */
+    @Nonnull
     private final AtomicInteger segmentCounter = new AtomicInteger();
 
-    private final SegmentVersion segmentVersion;
-
-    public SegmentTracker(SegmentStore store, int cacheSizeMB, SegmentVersion version) {
-        checkArgument(SegmentVersion.isValid(version));
-        this.segmentVersion = version;
-
+    public SegmentTracker(@Nonnull SegmentStore store) {
         for (int i = 0; i < tables.length; i++) {
-            tables[i] = new SegmentIdTable(this);
-        }
-
-        this.store = store;
-        this.writer = new SegmentWriter(store, version,
-                            new SegmentBufferWriterPool(store, version, "sys"));
-        StringCache c;
-        if (DISABLE_STRING_CACHE) {
-            c = null;
-        } else {
-            long cache = Long.getLong(STRING_CACHE_SIZE, (long) cacheSizeMB);
-            c = new StringCache(cache * MB);
-        }
-        stringCache = c;
-        segmentCache = CacheLIRS.<SegmentId, Segment>newBuilder()
-            .module("SegmentTracker")
-            .maximumWeight((long) cacheSizeMB * MB)
-            .averageWeight(Segment.MAX_SEGMENT_SIZE/2)
-            .evictionCallback(new EvictionCallback<SegmentId, Segment>() {
-                @Override
-                public void evicted(SegmentId segmentId, Segment segment, RemovalCause cause) {
-                    if (segment != null) {
-                        segmentId.setSegment(null);
-                    }
-                }
-            })
-            .build();
-    }
-
-    public SegmentTracker(SegmentStore store, SegmentVersion version) {
-        this(store, DEFAULT_MEMORY_CACHE_SIZE, version);
-    }
-
-    public SegmentTracker(SegmentStore store) {
-        this(store, DEFAULT_MEMORY_CACHE_SIZE, SegmentVersion.LATEST_VERSION);
-    }
-
-    /**
-     * Increment and get the number of segments
-     * @return
-     */
-    int getNextSegmentNo() {
-        return segmentCounter.incrementAndGet();
-    }
-
-    public boolean isTracking(SegmentId segmentId) {
-        return this == segmentId.getTracker();
-    }
-
-    @Nonnull
-    public CacheStats getSegmentCacheStats() {
-        return new CacheStats(segmentCache, "Segment Cache", null, -1);
-    }
-
-    @CheckForNull
-    public CacheStats getStringCacheStats() {
-        return stringCache == null
-            ? null
-            : stringCache.getStats();
-    }
-
-    public SegmentWriter getWriter() {
-        return writer;
-    }
-
-    public SegmentStore getStore() {
-        return store;
-    }
-
-    public SegmentVersion getSegmentVersion() {
-        return segmentVersion;
-    }
-
-    /**
-     * Clear the caches
-     */
-    public synchronized void clearCache() {
-        segmentCache.invalidateAll();
-        if (stringCache != null) {
-            stringCache.clear();
+            tables[i] = new SegmentIdTable(store);
         }
     }
 
     /**
-     * Get the string cache, if there is one.
-     *
-     * @return the string cache or {@code null} if none is configured
+     * Number of segment tracked since this tracker was instantiated
+     * @return count
      */
-    StringCache getStringCache() {
-        return stringCache;
-    }
-
-    /**
-     * Get a segment from the cache
-     * @param id  segment id
-     * @return  segment with the given {@code id} or {@code null} if not in the cache
-     */
-    Segment getCachedSegment(SegmentId id) {
-        try {
-            return segmentCache.get(id);
-        } catch (ExecutionException e) {
-            log.error("Error reading from segment cache", e);
-            return null;
-        }
-    }
-
-    /**
-     * Read a segment from the underlying segment store.
-     * @param id  segment id
-     * @return  segment with the given id
-     * @throws SegmentNotFoundException  if no segment with the given {@code id} exists.
-     */
-    Segment readSegment(SegmentId id) {
-        try {
-            Segment segment = store.readSegment(id);
-            setSegment(id, segment);
-            return segment;
-        } catch (SegmentNotFoundException snfe) {
-            long delta = System.currentTimeMillis() - id.getCreationTime();
-            log.error("Segment not found: {}. Creation date delta is {} ms.",
-                    id, delta, snfe);
-            throw snfe;
-        }
-    }
-
-    void setSegment(SegmentId id, Segment segment) {
-        id.setSegment(segment);
-        segmentCache.put(id, segment, segment.size());
-    }
-
-    // FIXME OAK-4102: Break cyclic dependency of FileStore and SegmentTracker
-    // Improve retrieving current GC generation. (OAK-4102)
-    // See also the comments in FileStore regarding initialisation and cyclic dependencies.
-    public int getGcGen() {
-        if (store instanceof FileStore) {
-            return ((FileStore) store).getGcGen();
-        } else {
-            return 0;
-        }
+    int getSegmentCount() {
+        return segmentCounter.get();
     }
 
     /**
@@ -270,25 +96,39 @@ public class SegmentTracker {
     }
 
     /**
-     * 
-     * @param msb
-     * @param lsb
+     * Get an existing {@code SegmentId} with the given {@code msb} and {@code lsb}
+     * or create a new one if no such id exists with this tracker.
+     * @param msb  most significant bits of the segment id
+     * @param lsb  least  significant bits of the segment id
      * @return the segment id
      */
+    @Nonnull
     public SegmentId getSegmentId(long msb, long lsb) {
         int index = ((int) msb) & (tables.length - 1);
         return tables[index].getSegmentId(msb, lsb);
     }
 
+    /**
+     * Create and track a new segment id for data segments.
+     * @return the segment id
+     */
+    @Nonnull
     SegmentId newDataSegmentId() {
         return newSegmentId(DATA);
     }
 
+    /**
+     * Create and track a new segment id for bulk segments.
+     * @return the segment id
+     */
+    @Nonnull
     SegmentId newBulkSegmentId() {
         return newSegmentId(BULK);
     }
 
+    @Nonnull
     private SegmentId newSegmentId(long type) {
+        segmentCounter.incrementAndGet();
         long msb = (random.nextLong() & MSB_MASK) | VERSION;
         long lsb = (random.nextLong() & LSB_MASK) | type;
         return getSegmentId(msb, lsb);
@@ -297,6 +137,8 @@ public class SegmentTracker {
     // FIXME OAK-4285: Align cleanup of segment id tables with the new cleanup strategy
     // ith clean brutal we need to remove those ids that have been cleaned
     // i.e. those whose segment was from an old generation
+    // Instead of removing, mark affected ids as gc'ed so the SNFE caused by
+    // any subsequent access can report a precise cause
     public synchronized void clearSegmentIdTables(Predicate<SegmentId> canRemove) {
         for (SegmentIdTable table : tables) {
             table.clearSegmentIdTables(canRemove);

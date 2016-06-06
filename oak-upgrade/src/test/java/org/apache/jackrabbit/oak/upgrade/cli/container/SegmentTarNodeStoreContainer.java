@@ -16,16 +16,16 @@
  */
 package org.apache.jackrabbit.oak.upgrade.cli.container;
 
-import com.google.common.io.Files;
-import org.apache.commons.io.FileUtils;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
-import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
-
 import java.io.File;
 import java.io.IOException;
 
-public class SegmentNextNodeStoreContainer implements NodeStoreContainer {
+import com.google.common.io.Files;
+import org.apache.commons.io.FileUtils;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
+import org.apache.jackrabbit.oak.segment.file.FileStore;
+import org.apache.jackrabbit.oak.spi.state.NodeStore;
+
+public class SegmentTarNodeStoreContainer implements NodeStoreContainer {
 
     private final File directory;
 
@@ -33,16 +33,16 @@ public class SegmentNextNodeStoreContainer implements NodeStoreContainer {
 
     private FileStore fs;
 
-    public SegmentNextNodeStoreContainer() {
+    public SegmentTarNodeStoreContainer() {
         this(Files.createTempDir());
     }
 
-    public SegmentNextNodeStoreContainer(File directory) {
+    public SegmentTarNodeStoreContainer(File directory) {
         this.blob = null;
         this.directory = directory;
     }
 
-    public SegmentNextNodeStoreContainer(BlobStoreContainer blob) {
+    public SegmentTarNodeStoreContainer(BlobStoreContainer blob) {
         this.blob = blob;
         this.directory = Files.createTempDir();
     }
@@ -54,7 +54,7 @@ public class SegmentNextNodeStoreContainer implements NodeStoreContainer {
             builder.withBlobStore(blob.open());
         }
         fs = builder.build();
-        return SegmentNodeStore.builder(fs).build();
+        return SegmentNodeStoreBuilders.builder(fs).build();
     }
 
     @Override

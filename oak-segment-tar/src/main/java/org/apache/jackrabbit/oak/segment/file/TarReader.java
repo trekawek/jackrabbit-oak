@@ -30,7 +30,7 @@ import static com.google.common.collect.Sets.newHashSetWithExpectedSize;
 import static java.nio.ByteBuffer.wrap;
 import static java.util.Collections.singletonList;
 import static org.apache.jackrabbit.oak.segment.Segment.REF_COUNT_OFFSET;
-import static org.apache.jackrabbit.oak.segment.Segment.getGcGen;
+import static org.apache.jackrabbit.oak.segment.Segment.getGcGeneration;
 import static org.apache.jackrabbit.oak.segment.SegmentId.isDataSegmentId;
 import static org.apache.jackrabbit.oak.segment.file.TarWriter.GRAPH_MAGIC;
 
@@ -218,7 +218,7 @@ class TarReader implements Closeable {
         for (Map.Entry<UUID, byte[]> entry : entries.entrySet()) {
             UUID uuid = entry.getKey();
             byte[] data = entry.getValue();
-            int generation = getGcGen(wrap(data));
+            int generation = getGcGeneration(wrap(data), uuid);
             writer.writeEntry(
                     uuid.getMostSignificantBits(),
                     uuid.getLeastSignificantBits(),
@@ -717,8 +717,6 @@ class TarReader implements Closeable {
      *
      * @throws IOException
      */
-    // FIXME OAK-4288: TarReader.calculateForwardReferences only used by oak-run graph tool
-    // Can we move this somewhere else?
     void calculateForwardReferences(Set<UUID> referencedIds) throws IOException {
         Map<UUID, List<UUID>> graph = getGraph(false);
         TarEntry[] entries = getEntries();

@@ -1329,13 +1329,8 @@ public class RDBDocumentStore implements DocumentStore {
 
             for (List<String> chunkedIds : Lists.partition(ids, CHUNKSIZE)) {
 
-                Map<String, NodeDocument> cachedDocs = Collections.emptyMap();
-
                 if (collection == Collection.NODES) {
-                    // remember what we already have in the cache
-                    cachedDocs = new HashMap<String, NodeDocument>();
                     for (String key : chunkedIds) {
-                        cachedDocs.put(key, nodesCache.getIfPresent(key));
                         nodesCache.invalidate(key);
                     }
                 }
@@ -1550,9 +1545,6 @@ public class RDBDocumentStore implements DocumentStore {
         String data = null;
         try {
             connection = this.ch.getRWConnection();
-            Operation modOperation = update.getChanges().get(MODIFIEDKEY);
-            long modified = getModifiedFromOperation(modOperation);
-            boolean modifiedIsConditional = modOperation == null || modOperation.type != UpdateOp.Operation.Type.SET;
             Number flagB = (Number) document.get(NodeDocument.HAS_BINARY_FLAG);
             Boolean hasBinary = flagB != null && flagB.intValue() == NodeDocument.HAS_BINARY_VAL;
             Boolean flagD = (Boolean) document.get(NodeDocument.DELETED_ONCE);
@@ -1567,6 +1559,9 @@ public class RDBDocumentStore implements DocumentStore {
                 String appendData = ser.asString(update);
                 if (appendData.length() < tmd.getDataLimitInOctets() / CHAR2OCTETRATIO) {
                     try {
+                        Operation modOperation = update.getChanges().get(MODIFIEDKEY);
+                        long modified = getModifiedFromOperation(modOperation);
+                        boolean modifiedIsConditional = modOperation == null || modOperation.type != UpdateOp.Operation.Type.SET;
                         success = db.appendingUpdate(connection, tmd, document.getId(), modified, modifiedIsConditional, hasBinary,
                                 deletedOnce, modcount, cmodcount, oldmodcount, appendData);
                         // if we get here, a retry is not going to help (the SQL
@@ -1584,6 +1579,8 @@ public class RDBDocumentStore implements DocumentStore {
             }
             if (!success && shouldRetry) {
                 data = ser.asString(document);
+                Object m = document.get(MODIFIED);
+                long modified = (m instanceof Long) ? ((Long)m).longValue() : 0;
                 success = db.update(connection, tmd, document.getId(), modified, hasBinary, deletedOnce, modcount, cmodcount,
                         oldmodcount, data);
                 connection.commit();
@@ -1619,6 +1616,9 @@ public class RDBDocumentStore implements DocumentStore {
             Arrays.asList(new Key[] { new Key(NodeDocument.HAS_BINARY_FLAG, null), new Key(NodeDocument.DELETED_ONCE, null) }));
 
     private static boolean isAppendableUpdate(UpdateOp update, boolean batched) {
+        if (NOAPPEND) {
+            return false;
+        }
         if (batched) {
             // Detect update operations not supported when doing batch updates
             for (Key key : update.getChanges().keySet()) {
@@ -1705,6 +1705,9 @@ public class RDBDocumentStore implements DocumentStore {
     // Whether to use GZIP compression
     private static final boolean NOGZIP = Boolean
             .getBoolean("org.apache.jackrabbit.oak.plugins.document.rdb.RDBDocumentStore.NOGZIP");
+    // Whether to use append operations (string concatenation) in the DATA column
+    private static final boolean NOAPPEND = Boolean
+            .getBoolean("org.apache.jackrabbit.oak.plugins.document.rdb.RDBDocumentStore.NOAPPEND");
     // Number of documents to insert at once for batch create
     private static final int CHUNKSIZE = Integer.getInteger(
             "org.apache.jackrabbit.oak.plugins.document.rdb.RDBDocumentStore.CHUNKSIZE", 64);
@@ -1822,7 +1825,7 @@ public class RDBDocumentStore implements DocumentStore {
     // keeping track of CLUSTER_NODES updates
     private Map<String, Long> cnUpdates = new ConcurrentHashMap<String, Long>();
 
-    private void maintainUpdateStats(Collection collection, String key) {
+    private <T extends Document> void maintainUpdateStats(Collection<T> collection, String key) {
         if (collection == Collection.CLUSTER_NODES) {
             synchronized (this) {
                 Long old = cnUpdates.get(key);

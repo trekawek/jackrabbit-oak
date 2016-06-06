@@ -26,26 +26,25 @@ import static com.google.common.collect.Lists.newArrayListWithCapacity;
 import static com.google.common.collect.Maps.newConcurrentMap;
 import static java.lang.Boolean.getBoolean;
 import static org.apache.jackrabbit.oak.commons.IOUtils.closeQuietly;
+import static org.apache.jackrabbit.oak.segment.SegmentBlob.readBlobId;
+import static org.apache.jackrabbit.oak.segment.SegmentId.isDataSegmentId;
+import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
 import static org.apache.jackrabbit.oak.segment.SegmentVersion.isValid;
 import static org.apache.jackrabbit.oak.segment.SegmentWriter.BLOCK_SIZE;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 
 import javax.annotation.CheckForNull;
-import javax.annotation.Nullable;
+import javax.annotation.Nonnull;
 
 import com.google.common.base.Charsets;
-import com.google.common.base.Function;
-import com.google.common.base.Preconditions;
 import org.apache.commons.io.HexDump;
 import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.jackrabbit.oak.api.PropertyState;
@@ -123,71 +122,58 @@ public class Segment {
 
     static final int BLOBREF_COUNT_OFFSET = 8;
 
-    public static final int GC_GEN_OFFSET = 10;
+    public static final int GC_GENERATION_OFFSET = 10;
 
+    @Nonnull
     private final SegmentTracker tracker;
 
+    @Nonnull
+    private final SegmentReader reader;
+
+    @Nonnull
     private final SegmentId id;
 
+    @Nonnull
     private final ByteBuffer data;
 
     /**
      * Version of the segment storage format.
      */
+    @Nonnull
     private final SegmentVersion version;
 
     /**
      * Referenced segment identifiers. Entries are initialized lazily in
      * {@link #getRefId(int)}. Set to {@code null} for bulk segments.
      */
+    @CheckForNull
     private final SegmentId[] refids;
-
-    /**
-     * String records read from segment. Used to avoid duplicate
-     * copies and repeated parsing of the same strings.
-     *
-     * @deprecated  Superseded by {@link #stringCache} unless
-     * {@link SegmentTracker#DISABLE_STRING_CACHE} is {@code true}.
-     */
-    @Deprecated
-    private final ConcurrentMap<Integer, String> strings;
-
-    private final Function<Integer, String> loadString = new Function<Integer, String>() {
-        @Nullable
-        @Override
-        public String apply(Integer offset) {
-            return loadString(offset);
-        }
-    };
-
-    /**
-     * Cache for string records or {@code null} if {@link #strings} is used for caching
-     */
-    private final StringCache stringCache;
 
     /**
      * Template records read from segment. Used to avoid duplicate
      * copies and repeated parsing of the same templates.
+     * FIXME OAK-4373 move the template cache to the segment reader along side with the string cache
      */
-    private final ConcurrentMap<Integer, Template> templates;
+    @CheckForNull
+    final ConcurrentMap<Integer, Template> templates;
 
     private static final boolean DISABLE_TEMPLATE_CACHE = getBoolean("oak.segment.disableTemplateCache");
 
     /**
-     * Decode a 4 byte aligned segment offset.
+     * Unpacks a 4 byte aligned segment offset.
      * @param offset  4 byte aligned segment offset
-     * @return decoded segment offset
+     * @return unpacked segment offset
      */
-    public static int decode(short offset) {
+    public static int unpack(short offset) {
         return (offset & 0xffff) << RECORD_ALIGN_BITS;
     }
 
     /**
-     * Encode a segment offset into a 4 byte aligned address packed into a {@code short}.
+     * Packs a segment offset into a 4 byte aligned address packed into a {@code short}.
      * @param offset  segment offset
      * @return  encoded segment offset packed into a {@code short}
      */
-    public static short encode(int offset) {
+    public static short pack(int offset) {
         return (short) (offset >> RECORD_ALIGN_BITS);
     }
 
@@ -203,21 +189,14 @@ public class Segment {
         return (address + boundary - 1) & ~(boundary - 1);
     }
 
-    public Segment(SegmentTracker tracker, SegmentId id, ByteBuffer data) {
-        this(tracker, id, data, SegmentVersion.LATEST_VERSION);
-    }
-
-    public Segment(SegmentTracker tracker, final SegmentId id, final ByteBuffer data, SegmentVersion version) {
-        Preconditions.checkArgument(isValid(version));
+    public Segment(@Nonnull SegmentTracker tracker,
+                   @Nonnull SegmentReader reader,
+                   @Nonnull final SegmentId id,
+                   @Nonnull final ByteBuffer data) {
         this.tracker = checkNotNull(tracker);
+        this.reader = checkNotNull(reader);
         this.id = checkNotNull(id);
-        if (tracker.getStringCache() == null) {
-            strings = newConcurrentMap();
-            stringCache = null;
-        } else {
-            strings = null;
-            stringCache = tracker.getStringCache();
-        }
+
         if (DISABLE_TEMPLATE_CACHE) {
             templates = null;
         } else {
@@ -242,7 +221,7 @@ public class Segment {
             this.version = SegmentVersion.fromByte(segmentVersion);
         } else {
             this.refids = null;
-            this.version = version;
+            this.version = LATEST_VERSION;
         }
     }
 
@@ -258,17 +237,14 @@ public class Segment {
         }
     }
 
-    Segment(SegmentTracker tracker, byte[] buffer, String info) {
+    Segment(@Nonnull SegmentTracker tracker,
+            @Nonnull SegmentReader reader,
+            @Nonnull byte[] buffer,
+            @Nonnull String info) {
         this.tracker = checkNotNull(tracker);
+        this.reader = checkNotNull(reader);
         this.id = tracker.newDataSegmentId();
-        this.info = info;
-        if (tracker.getStringCache() == null) {
-            strings = newConcurrentMap();
-            stringCache = null;
-        } else {
-            strings = null;
-            stringCache = tracker.getStringCache();
-        }
+        this.info = checkNotNull(info);
         if (DISABLE_TEMPLATE_CACHE) {
             templates = null;
         } else {
@@ -279,10 +255,10 @@ public class Segment {
         this.refids = new SegmentId[SEGMENT_REFERENCE_LIMIT + 1];
         this.refids[0] = id;
         this.version = SegmentVersion.fromByte(buffer[3]);
-        this.id.setSegment(this);
+        id.loaded(this);
     }
 
-    SegmentVersion getSegmentVersion() {
+    public SegmentVersion getSegmentVersion() {
         return version;
     }
 
@@ -314,12 +290,27 @@ public class Segment {
         return data.getShort(ROOT_COUNT_OFFSET) & 0xffff;
     }
 
-    public static int getGcGen(ByteBuffer data) {
-        return data.getInt(GC_GEN_OFFSET);
+    /**
+     * Determine the gc generation a segment from its data. Note that bulk segments don't have
+     * generations (i.e. stay at 0).
+     *
+     * @param data         the date of the segment
+     * @param segmentId    the id of the segment
+     * @return  the gc generation of this segment or 0 if this is bulk segment.
+     */
+    public static int getGcGeneration(ByteBuffer data, UUID segmentId) {
+        return isDataSegmentId(segmentId.getLeastSignificantBits())
+            ? data.getInt(GC_GENERATION_OFFSET)
+            : 0;
     }
 
-    public int getGcGen() {
-        return getGcGen(data);
+    /**
+     * Determine the gc generation of this segment. Note that bulk segments don't have
+     * generations (i.e. stay at 0).
+     * @return  the gc generation of this segment or 0 if this is bulk segment.
+     */
+    public int getGcGeneration() {
+        return getGcGeneration(data, id.asUUID());
     }
 
     public RecordType getRootType(int index) {
@@ -400,31 +391,6 @@ public class Segment {
         return data.remaining();
     }
 
-    public long getCacheSize() {
-        int size = 1024;
-        if (!data.isDirect()) {
-            size += size();
-        }
-        if (id.isDataSegmentId()) {
-            size += size();
-        }
-        return size;
-    }
-
-    /**
-     * Writes this segment to the given output stream.
-     *
-     * @param stream stream to which this segment will be written
-     * @throws IOException on an IO error
-     */
-    public void writeTo(OutputStream stream) throws IOException {
-        ByteBuffer buffer = data.duplicate();
-        WritableByteChannel channel = Channels.newChannel(stream);
-        while (buffer.hasRemaining()) {
-            channel.write(buffer);
-        }
-    }
-
     public void collectBlobReferences(ReferenceCollector collector) {
         int refcount = getRefCount();
         int rootcount =
@@ -434,9 +400,8 @@ public class Segment {
         int blobrefpos = data.position() + refcount * 16 + rootcount * 3;
 
         for (int i = 0; i < blobrefcount; i++) {
-            int offset = (data.getShort(blobrefpos + i * 2) & 0xffff) << 2;
-            SegmentBlob blob = new SegmentBlob(new RecordId(id, offset));
-            collector.addReference(blob.getBlobId(), null);
+            int offset = (data.getShort(blobrefpos + i * 2) & 0xffff) << RECORD_ALIGN_BITS;
+            collector.addReference(readBlobId(this, offset), null);
         }
     }
 
@@ -484,40 +449,8 @@ public class Segment {
         return new RecordId(refid, offset << RECORD_ALIGN_BITS);
     }
 
-    static String readString(final RecordId id) {
-        final SegmentId segmentId = id.getSegmentId();
-        StringCache cache = segmentId.getTracker().getStringCache();
-        if (cache == null) {
-            return segmentId.getSegment().readString(id.getOffset());
-        } else {
-            long msb = segmentId.getMostSignificantBits();
-            long lsb = segmentId.getLeastSignificantBits();
-            return cache.getString(msb, lsb, id.getOffset(), new Function<Integer, String>() {
-                @Nullable
-                @Override
-                public String apply(Integer offset) {
-                    return segmentId.getSegment().loadString(offset);
-                }
-            });
-        }
-    }
-
-    private String readString(int offset) {
-        if (stringCache != null) {
-            long msb = id.getMostSignificantBits();
-            long lsb = id.getLeastSignificantBits();
-            return stringCache.getString(msb, lsb, offset, loadString);
-        } else {
-            String string = strings.get(offset);
-            if (string == null) {
-                string = loadString(offset);
-                strings.putIfAbsent(offset, string); // only keep the first copy
-            }
-            return string;
-        }
-    }
-
-    private String loadString(int offset) {
+    @Nonnull
+    String readString(int offset) {
         int pos = pos(offset, 1);
         long length = internalReadLength(pos);
         if (length < SMALL_LIMIT) {
@@ -534,41 +467,17 @@ public class Segment {
             return new String(bytes, Charsets.UTF_8);
         } else if (length < Integer.MAX_VALUE) {
             int size = (int) ((length + BLOCK_SIZE - 1) / BLOCK_SIZE);
-            ListRecord list =
-                    new ListRecord(internalReadRecordId(pos + 8), size);
-            SegmentStream stream = new SegmentStream(
-                    new RecordId(id, offset), list, length);
-            try {
+            ListRecord list = new ListRecord(internalReadRecordId(pos + 8), size);
+            try (SegmentStream stream = new SegmentStream(new RecordId(id, offset), list, length)) {
                 return stream.getString();
-            } finally {
-                stream.close();
             }
         } else {
             throw new IllegalStateException("String is too long: " + length);
         }
     }
 
-    MapRecord readMap(RecordId id) {
-        return new MapRecord(id);
-    }
-
-    Template readTemplate(final RecordId id) {
-        return id.getSegment().readTemplate(id.getOffset());
-    }
-
-    private Template readTemplate(int offset) {
-        if (templates == null) {
-            return loadTemplate(offset);
-        }
-        Template template = templates.get(offset);
-        if (template == null) {
-            template = loadTemplate(offset);
-            templates.putIfAbsent(offset, template); // only keep the first copy
-        }
-        return template;
-    }
-
-    private Template loadTemplate(int offset) {
+    @Nonnull
+    Template readTemplate(int offset) {
         int head = readInt(offset);
         boolean hasPrimaryType = (head & (1 << 31)) != 0;
         boolean hasMixinTypes = (head & (1 << 30)) != 0;
@@ -582,7 +491,7 @@ public class Segment {
         if (hasPrimaryType) {
             RecordId primaryId = readRecordId(offset);
             primaryType = PropertyStates.createProperty(
-                    "jcr:primaryType", readString(primaryId), Type.NAME);
+                    "jcr:primaryType", reader.readString(primaryId), Type.NAME);
             offset += RECORD_ID_BYTES;
         }
 
@@ -591,7 +500,7 @@ public class Segment {
             String[] mixins = new String[mixinCount];
             for (int i = 0; i < mixins.length; i++) {
                 RecordId mixinId = readRecordId(offset);
-                mixins[i] =  readString(mixinId);
+                mixins[i] =  reader.readString(mixinId);
                 offset += RECORD_ID_BYTES;
             }
             mixinTypes = PropertyStates.createProperty(
@@ -603,13 +512,13 @@ public class Segment {
             childName = Template.MANY_CHILD_NODES;
         } else if (!zeroChildNodes) {
             RecordId childNameId = readRecordId(offset);
-            childName = readString(childNameId);
+            childName = reader.readString(childNameId);
             offset += RECORD_ID_BYTES;
         }
 
         PropertyTemplate[] properties;
         properties = readProps(propertyCount, offset);
-        return new Template(primaryType, mixinTypes, properties, childName);
+        return new Template(reader, primaryType, mixinTypes, properties, childName);
     }
 
     private PropertyTemplate[] readProps(int propertyCount, int offset) {
@@ -621,7 +530,7 @@ public class Segment {
             for (int i = 0; i < propertyCount; i++) {
                 byte type = readByte(offset++);
                 properties[i] = new PropertyTemplate(i,
-                        readString(propertyNames.getEntry(i)), Type.fromTag(
+                        reader.readString(propertyNames.getEntry(i)), Type.fromTag(
                                 Math.abs(type), type < 0));
             }
         }
@@ -642,7 +551,7 @@ public class Segment {
             return length;
         } else if ((length & 0x40) == 0) {
             return ((length & 0x3f) << 8
-                    | data.get(pos++) & 0xff)
+                    | data.get(pos) & 0xff)
                     + SMALL_LIMIT;
         } else {
             return (((long) length & 0x3f) << 56
@@ -652,7 +561,7 @@ public class Segment {
                     | ((long) (data.get(pos++) & 0xff)) << 24
                     | ((long) (data.get(pos++) & 0xff)) << 16
                     | ((long) (data.get(pos++) & 0xff)) << 8
-                    | ((long) (data.get(pos++) & 0xff)))
+                    | ((long) (data.get(pos) & 0xff)))
                     + MEDIUM_LIMIT;
         }
     }
@@ -662,75 +571,71 @@ public class Segment {
     @Override
     public String toString() {
         StringWriter string = new StringWriter();
-        PrintWriter writer = new PrintWriter(string);
+        try (PrintWriter writer = new PrintWriter(string)) {
+            int length = data.remaining();
 
-        int length = data.remaining();
-
-        writer.format("Segment %s (%d bytes)%n", id, length);
-        String segmentInfo = getSegmentInfo();
-        if (segmentInfo != null) {
-            writer.format("Info: %s, Generation: %d%n", segmentInfo, getGcGen());
-        }
-        if (id.isDataSegmentId()) {
-            writer.println("--------------------------------------------------------------------------");
-            int refcount = getRefCount();
-            for (int refid = 0; refid < refcount; refid++) {
-                writer.format("reference %02x: %s%n", refid, getRefId(refid));
+            writer.format("Segment %s (%d bytes)%n", id, length);
+            String segmentInfo = getSegmentInfo();
+            if (segmentInfo != null) {
+                writer.format("Info: %s, Generation: %d%n", segmentInfo, getGcGeneration());
             }
-            int rootcount = data.getShort(ROOT_COUNT_OFFSET) & 0xffff;
-            int pos = data.position() + refcount * 16;
-            for (int rootid = 0; rootid < rootcount; rootid++) {
-                writer.format(
+            if (id.isDataSegmentId()) {
+                writer.println("--------------------------------------------------------------------------");
+                int refcount = getRefCount();
+                for (int refid = 0; refid < refcount; refid++) {
+                    writer.format("reference %02x: %s%n", refid, getRefId(refid));
+                }
+                int rootcount = data.getShort(ROOT_COUNT_OFFSET) & 0xffff;
+                int pos = data.position() + refcount * 16;
+                for (int rootid = 0; rootid < rootcount; rootid++) {
+                    writer.format(
                             "root %d: %s at %04x%n", rootid,
-                        RecordType.values()[data.get(pos + rootid * 3) & 0xff],
+                            RecordType.values()[data.get(pos + rootid * 3) & 0xff],
                             data.getShort(pos + rootid * 3 + 1) & 0xffff);
-            }
-            int blobrefcount = data.getShort(BLOBREF_COUNT_OFFSET) & 0xffff;
-            pos += rootcount * 3;
-            for (int blobrefid = 0; blobrefid < blobrefcount; blobrefid++) {
-                int offset = data.getShort(pos + blobrefid * 2) & 0xffff;
-                SegmentBlob blob = new SegmentBlob(
-                        new RecordId(id, offset << RECORD_ALIGN_BITS));
-                writer.format(
-                        "blobref %d: %s at %04x%n", blobrefid,
-                        blob.getBlobId(), offset);
-            }
-        }
-        writer.println("--------------------------------------------------------------------------");
-        int pos = data.limit() - ((length + 15) & ~15);
-        while (pos < data.limit()) {
-            writer.format("%04x: ", (MAX_SEGMENT_SIZE - data.limit() + pos) >> RECORD_ALIGN_BITS);
-            for (int i = 0; i < 16; i++) {
-                if (i > 0 && i % 4 == 0) {
-                    writer.append(' ');
                 }
-                if (pos + i >= data.position()) {
-                    byte b = data.get(pos + i);
-                    writer.format("%02x ", b & 0xff);
-                } else {
-                    writer.append("   ");
+                int blobrefcount = data.getShort(BLOBREF_COUNT_OFFSET) & 0xffff;
+                pos += rootcount * 3;
+                for (int blobrefid = 0; blobrefid < blobrefcount; blobrefid++) {
+                    int offset = data.getShort(pos + blobrefid * 2) & 0xffff;
+                    writer.format(
+                            "blobref %d: %s at %04x%n", blobrefid,
+                            readBlobId(this, offset << RECORD_ALIGN_BITS), offset);
                 }
             }
-            writer.append(' ');
-            for (int i = 0; i < 16; i++) {
-                if (pos + i >= data.position()) {
-                    byte b = data.get(pos + i);
-                    if (b >= ' ' && b < 127) {
-                        writer.append((char) b);
-                    } else {
-                        writer.append('.');
+            writer.println("--------------------------------------------------------------------------");
+            int pos = data.limit() - ((length + 15) & ~15);
+            while (pos < data.limit()) {
+                writer.format("%04x: ", (MAX_SEGMENT_SIZE - data.limit() + pos) >> RECORD_ALIGN_BITS);
+                for (int i = 0; i < 16; i++) {
+                    if (i > 0 && i % 4 == 0) {
+                        writer.append(' ');
                     }
-                } else {
-                    writer.append(' ');
+                    if (pos + i >= data.position()) {
+                        byte b = data.get(pos + i);
+                        writer.format("%02x ", b & 0xff);
+                    } else {
+                        writer.append("   ");
+                    }
                 }
+                writer.append(' ');
+                for (int i = 0; i < 16; i++) {
+                    if (pos + i >= data.position()) {
+                        byte b = data.get(pos + i);
+                        if (b >= ' ' && b < 127) {
+                            writer.append((char) b);
+                        } else {
+                            writer.append('.');
+                        }
+                    } else {
+                        writer.append(' ');
+                    }
+                }
+                writer.println();
+                pos += 16;
             }
-            writer.println();
-            pos += 16;
+            writer.println("--------------------------------------------------------------------------");
+            return string.toString();
         }
-        writer.println("--------------------------------------------------------------------------");
-
-        writer.close();
-        return string.toString();
     }
 
 }

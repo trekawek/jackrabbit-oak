@@ -17,39 +17,32 @@
 
 package org.apache.jackrabbit.oak.run;
 
-import static org.apache.jackrabbit.oak.plugins.segment.FileStoreHelper.newBasicReadOnlyBlobStore;
-import static org.apache.jackrabbit.oak.plugins.segment.FileStoreHelper.openReadOnlyFileStore;
-import static org.apache.jackrabbit.oak.run.Utils.asCloseable;
-
 import java.io.File;
 
-import com.google.common.io.Closer;
-import org.apache.jackrabbit.oak.plugins.backup.FileStoreBackup;
-import org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore;
-import org.apache.jackrabbit.oak.plugins.segment.file.FileStore;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 class BackupCommand implements Command {
 
     @Override
     public void execute(String... args) throws Exception {
-        boolean fakeBlobStore = FileStoreBackup.USE_FAKE_BLOBSTORE;
-        Closer closer = Closer.create();
-        try {
-            FileStore fs;
-            if (fakeBlobStore) {
-                fs = openReadOnlyFileStore(new File(args[0]),
-                        newBasicReadOnlyBlobStore());
-            } else {
-                fs = openReadOnlyFileStore(new File(args[0]));
-            }
-            closer.register(asCloseable(fs));
-            NodeStore store = SegmentNodeStore.builder(fs).build();
-            FileStoreBackup.backup(store, new File(args[1]));
-        } catch (Throwable e) {
-            throw closer.rethrow(e);
-        } finally {
-            closer.close();
+        OptionParser parser = new OptionParser();
+        OptionSpec segmentTar = parser.accepts("segment-tar", "Use oak-segment-tar instead of oak-segment");
+        OptionSet options = parser.parse(args);
+
+        if (options.nonOptionArguments().size() < 2) {
+            System.err.println("This command requires a source and a target folder");
+            System.exit(1);
+        }
+
+        File source = new File(options.nonOptionArguments().get(0).toString());
+        File target = new File(options.nonOptionArguments().get(1).toString());
+
+        if (options.has(segmentTar)) {
+            SegmentTarUtils.backup(source, target);
+        } else {
+            SegmentUtils.backup(source, target);
         }
     }
 

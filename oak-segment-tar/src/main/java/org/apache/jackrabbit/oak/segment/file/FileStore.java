@@ -33,9 +33,15 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.jackrabbit.oak.commons.IOUtils.humanReadableByteCount;
 import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE;
+import static org.apache.jackrabbit.oak.segment.CachingSegmentReader.DEFAULT_STRING_CACHE_MB;
 import static org.apache.jackrabbit.oak.segment.SegmentId.isDataSegmentId;
+import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
+import static org.apache.jackrabbit.oak.segment.SegmentWriters.pooledSegmentWriter;
+import static org.apache.jackrabbit.oak.segment.SegmentWriters.segmentWriter;
+import static org.apache.jackrabbit.oak.segment.file.TarRevisions.timeout;
 
 import java.io.Closeable;
 import java.io.File;
@@ -51,34 +57,38 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
+import com.google.common.base.Function;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import org.apache.jackrabbit.oak.api.Blob;
-import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
+import org.apache.jackrabbit.oak.cache.CacheStats;
 import org.apache.jackrabbit.oak.plugins.blob.ReferenceCollector;
-import org.apache.jackrabbit.oak.segment.RecordCache;
-import org.apache.jackrabbit.oak.segment.RecordCache.DeduplicationCache;
+import org.apache.jackrabbit.oak.segment.CachingSegmentReader;
 import org.apache.jackrabbit.oak.segment.RecordId;
 import org.apache.jackrabbit.oak.segment.Segment;
 import org.apache.jackrabbit.oak.segment.SegmentBufferWriter;
+import org.apache.jackrabbit.oak.segment.SegmentCache;
 import org.apache.jackrabbit.oak.segment.SegmentGraph.SegmentGraphVisitor;
+import org.apache.jackrabbit.oak.segment.Compactor;
 import org.apache.jackrabbit.oak.segment.SegmentId;
 import org.apache.jackrabbit.oak.segment.SegmentNodeState;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundException;
+import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.segment.SegmentStore;
 import org.apache.jackrabbit.oak.segment.SegmentTracker;
 import org.apache.jackrabbit.oak.segment.SegmentVersion;
@@ -95,9 +105,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The storage implementation for tar files.
  */
-public class FileStore implements SegmentStore {
-
-    /** Logger instance */
+public class FileStore implements SegmentStore, Closeable {
     private static final Logger log = LoggerFactory.getLogger(FileStore.class);
 
     private static final int MB = 1024 * 1024;
@@ -106,8 +114,6 @@ public class FileStore implements SegmentStore {
             Pattern.compile("(data|bulk)((0|[1-9][0-9]*)[0-9]{4})([a-z])?.tar");
 
     private static final String FILE_NAME_FORMAT = "data%05d%s.tar";
-
-    private static final String JOURNAL_FILE_NAME = "journal.log";
 
     private static final String LOCK_FILE_NAME = "repo.lock";
 
@@ -119,7 +125,14 @@ public class FileStore implements SegmentStore {
     static final boolean MEMORY_MAPPING_DEFAULT =
             "64".equals(System.getProperty("sun.arch.data.model", "32"));
 
+    @Nonnull
     private final SegmentTracker tracker;
+
+    @Nonnull
+    private final SegmentWriter segmentWriter;
+
+    @Nonnull
+    private final CachingSegmentReader segmentReader;
 
     private final File directory;
 
@@ -133,26 +146,16 @@ public class FileStore implements SegmentStore {
 
     private int writeNumber;
 
-    private File writeFile;
+    private volatile File writeFile;
 
-    private TarWriter writer;
-
-    private final RandomAccessFile journalFile;
+    private volatile TarWriter tarWriter;
 
     private final RandomAccessFile lockFile;
 
     private final FileLock lock;
 
-    /**
-     * The latest head state.
-     */
-    private final AtomicReference<RecordId> head;
-
-    /**
-     * The persisted head of the root journal, used to determine whether the
-     * latest {@link #head} value should be written to the disk.
-     */
-    private final AtomicReference<RecordId> persistedHead;
+    @Nonnull
+    private final TarRevisions revisions;
 
     /**
      * The background flush thread. Automatically flushes the TarMK state
@@ -218,6 +221,9 @@ public class FileStore implements SegmentStore {
 
     private final FileStoreStats stats;
 
+    @Nonnull
+    private final SegmentCache segmentCache;
+
     /**
      * Create a new instance of a {@link Builder} for a file store.
      * @param directory  directory where the tar files are stored
@@ -237,8 +243,6 @@ public class FileStore implements SegmentStore {
 
         private BlobStore blobStore;   // null ->  store blobs inline
 
-        private NodeState root = EMPTY_NODE;
-
         private int maxFileSize = 256;
 
         private int cacheSize;   // 0 -> DEFAULT_MEMORY_CACHE_SIZE
@@ -257,6 +261,8 @@ public class FileStore implements SegmentStore {
             this.directory = directory;
         }
 
+        private TarRevisions revisions;
+
         /**
          * Specify the {@link BlobStore}.
          * @param blobStore
@@ -265,17 +271,6 @@ public class FileStore implements SegmentStore {
         @Nonnull
         public Builder withBlobStore(@Nonnull BlobStore blobStore) {
             this.blobStore = checkNotNull(blobStore);
-            return this;
-        }
-
-        /**
-         * Specify the initial root node state for the file store
-         * @param root
-         * @return this instance
-         */
-        @Nonnull
-        public Builder withRoot(@Nonnull NodeState root) {
-            this.root = checkNotNull(root);
             return this;
         }
 
@@ -367,7 +362,7 @@ public class FileStore implements SegmentStore {
 
         @Nonnull
         public Builder withGCOptions(SegmentGCOptions gcOptions) {
-            this.gcOptions = gcOptions;
+            this.gcOptions = checkNotNull(gcOptions);
             return this;
         }
 
@@ -390,53 +385,82 @@ public class FileStore implements SegmentStore {
          */
         @Nonnull
         public FileStore build() throws IOException {
-            return new FileStore(this, false);
+            directory.mkdir();
+            revisions = new TarRevisions(false, directory);
+            FileStore store = new FileStore(this, false);
+            revisions.bind(store, store.getTracker(), initialNode(store));
+            return store;
         }
 
+        @Nonnull
         public ReadOnlyStore buildReadOnly() throws IOException {
-            return new ReadOnlyStore(this);
+            checkState(directory.exists() && directory.isDirectory());
+            revisions = new TarRevisions(true, directory);
+            ReadOnlyStore store = new ReadOnlyStore(this);
+            revisions.bind(store, store.getTracker(), initialNode(store));
+            return store;
         }
 
+        @Nonnull
+        private static Supplier<RecordId> initialNode(final FileStore store) {
+            return new Supplier<RecordId>() {
+                @Override
+                public RecordId get() {
+                    try {
+                        SegmentWriter writer = segmentWriter(store, LATEST_VERSION, "init", 0);
+                        NodeBuilder builder = EMPTY_NODE.builder();
+                        builder.setChildNode("root", EMPTY_NODE);
+                        SegmentNodeState node = writer.writeNode(builder.getNodeState());
+                        writer.flush();
+                        return node.getRecordId();
+                    } catch (IOException e) {
+                        String msg = "Failed to write initial node";
+                        log.error(msg, e);
+                        throw new IllegalStateException(msg, e);
+                    }
+                }
+            };
+        }
     }
 
     private FileStore(Builder builder, boolean readOnly) throws IOException {
         this.version = builder.version;
-
-        if (readOnly) {
-            checkNotNull(builder.directory);
-            checkState(builder.directory.exists() && builder.directory.isDirectory());
-        } else {
-            checkNotNull(builder.directory).mkdirs();
-        }
-
-        // FIXME OAK-4102: Break cyclic dependency of FileStore and SegmentTracker
-        // SegmentTracker and FileStore have a cyclic dependency, which we should
-        // try to break. Here we pass along a not fully initialised instances of the
-        // FileStore to the SegmentTracker, which in turn is in later invoked to write
-        // the initial node state. Notably before this instance is fully initialised!
-        // Once consequence of this is that we cannot reliably determine the current
-        // GC generation while writing the initial head state. See further below.
-        if (builder.cacheSize < 0) {
-            this.tracker = new SegmentTracker(this, 0, version);
-        } else if (builder.cacheSize > 0) {
-            this.tracker = new SegmentTracker(this, builder.cacheSize, version);
-        } else {
-            this.tracker = new SegmentTracker(this, version);
-        }
+        this.tracker = new SegmentTracker(this);
+        this.revisions = builder.revisions;
         this.blobStore = builder.blobStore;
+
+        // FIXME OAK-4373 refactor cache size configurations
+        if (builder.cacheSize < 0) {
+            this.segmentCache = new SegmentCache(0);
+        } else if (builder.cacheSize > 0) {
+            this.segmentCache = new SegmentCache(builder.cacheSize);
+        } else {
+            this.segmentCache = new SegmentCache(DEFAULT_STRING_CACHE_MB);
+        }
+        Supplier<SegmentWriter> getWriter = new Supplier<SegmentWriter>() {
+            @Override
+            public SegmentWriter get() {
+                return getWriter();
+            }
+        };
+        if (builder.cacheSize < 0) {
+            this.segmentReader = new CachingSegmentReader(getWriter, revisions, blobStore, 0);
+        } else if (builder.cacheSize > 0) {
+            this.segmentReader = new CachingSegmentReader(getWriter, revisions, blobStore, (long) builder.cacheSize);
+        } else {
+            this.segmentReader = new CachingSegmentReader(getWriter, revisions, blobStore, (long) DEFAULT_STRING_CACHE_MB);
+        }
+        this.segmentWriter = pooledSegmentWriter(this, version, "sys", new Supplier<Integer>() {
+                    @Override
+                    public Integer get() {
+                        return getGcGeneration();
+                    }
+                });
         this.directory = builder.directory;
         this.maxFileSize = builder.maxFileSize * MB;
         this.memoryMapping = builder.memoryMapping;
         this.gcMonitor = builder.gcMonitor;
         this.gcOptions = builder.gcOptions;
-
-        if (readOnly) {
-            journalFile = new RandomAccessFile(new File(directory,
-                    JOURNAL_FILE_NAME), "r");
-        } else {
-            journalFile = new RandomAccessFile(new File(directory,
-                    JOURNAL_FILE_NAME), "rw");
-        }
 
         Map<Integer, Map<Character, File>> map = collectFiles(directory);
         this.readers = newArrayListWithCapacity(map.size());
@@ -466,55 +490,19 @@ public class FileStore implements SegmentStore {
             }
             this.writeFile = new File(directory, String.format(
                     FILE_NAME_FORMAT, writeNumber, "a"));
-            this.writer = new TarWriter(writeFile, stats);
+            this.tarWriter = new TarWriter(writeFile, stats);
         }
-
-        RecordId id = null;
-        JournalReader journalReader = new JournalReader(new File(directory, JOURNAL_FILE_NAME));
-        try {
-            Iterator<String> heads = journalReader.iterator();
-            while (id == null && heads.hasNext()) {
-                String head = heads.next();
-                try {
-                    RecordId last = RecordId.fromString(tracker, head);
-                    SegmentId segmentId = last.getSegmentId();
-                    if (containsSegment(
-                            segmentId.getMostSignificantBits(),
-                            segmentId.getLeastSignificantBits())) {
-                        id = last;
-                    } else {
-                        log.warn("Unable to access revision {}, rewinding...", last);
-                    }
-                } catch (IllegalArgumentException ignore) {
-                    log.warn("Skipping invalid record id {}", head);
-                }
-            }
-        } finally {
-            journalReader.close();
-        }
-
-        journalFile.seek(journalFile.length());
 
         if (!readOnly) {
-            lockFile = new RandomAccessFile(
-                    new File(directory, LOCK_FILE_NAME), "rw");
+            lockFile = new RandomAccessFile(new File(directory, LOCK_FILE_NAME), "rw");
             lock = lockFile.getChannel().lock();
         } else {
             lockFile = null;
             lock = null;
         }
 
-        if (id != null) {
-            head = new AtomicReference<RecordId>(id);
-            persistedHead = new AtomicReference<RecordId>(id);
-        } else {
-            NodeBuilder nodeBuilder = EMPTY_NODE.builder();
-            nodeBuilder.setChildNode("root", builder.root);
-            head = new AtomicReference<RecordId>(tracker.getWriter().writeNode(
-                    nodeBuilder.getNodeState()).getRecordId());
-            persistedHead = new AtomicReference<RecordId>(null);
-        }
-
+        // FIXME OAK-3468 Replace BackgroundThread with Scheduler
+        // Externalise these background operations
         if (!readOnly) {
             flushThread = BackgroundThread.run(
                     "TarMK flush thread [" + directory + "]", 5000, // 5s interval
@@ -567,21 +555,21 @@ public class FileStore implements SegmentStore {
         log.debug("TarMK readers {}", this.readers);
     }
 
-    // FIXME OAK-4102: Break cyclic dependency of FileStore and SegmentTracker
-    // We cannot determine the current GC generation before the FileStore is fully
-    // initialised so just return 0 for now.
-    public int getGcGen() {
-        if (head == null) {
-            return 0;  // not fully initialised
-        }
-        RecordId headId = head.get();
-        if (headId == null) {
-            return 0;  // not fully initialised
-        }
-        return headId.getSegment().getGcGen();
+    private int getGcGeneration() {
+        return revisions.getHead().getSegment().getGcGeneration();
     }
 
-    public boolean maybeCompact(boolean cleanup) throws IOException {
+    @Nonnull
+    public CacheStats getSegmentCacheStats() {
+        return segmentCache.getCacheStats();
+    }
+
+    @Nonnull
+    public CacheStats getStringCacheStats() {
+        return segmentReader.getStringCacheStats();
+    }
+
+    public void maybeCompact(boolean cleanup) throws IOException {
         gcMonitor.info("TarMK GC #{}: started", GC_COUNT.incrementAndGet());
 
         Runtime runtime = Runtime.getRuntime();
@@ -601,11 +589,9 @@ public class FileStore implements SegmentStore {
             if (cleanup) {
                 cleanupNeeded.set(!gcOptions.isPaused());
             }
-            return false;
         }
 
         Stopwatch watch = Stopwatch.createStarted();
-        boolean compacted = false;
 
         int gainThreshold = gcOptions.getGainThreshold();
         boolean sufficientEstimatedGain = true;
@@ -620,7 +606,6 @@ public class FileStore implements SegmentStore {
             CompactionGainEstimate estimate = estimateCompactionGain(shutdown);
             if (shutdown.get()) {
                 gcMonitor.info("TarMK GC #{}: estimation interrupted. Skipping compaction.", GC_COUNT);
-                return false;
             }
 
             long gain = estimate.estimateCompactionGain();
@@ -654,12 +639,10 @@ public class FileStore implements SegmentStore {
                 if (compact()) {
                     cleanupNeeded.set(cleanup);
                 }
-                compacted = true;
             } else {
                 gcMonitor.skipped("TarMK GC #{}: compaction paused", GC_COUNT);
             }
         }
-        return compacted;
     }
 
     static Map<Integer, Map<Character, File>> collectFiles(File directory) {
@@ -733,7 +716,7 @@ public class FileStore implements SegmentStore {
         return dataFiles;
     }
 
-    public long size() {
+    public final long size() {
         fileStoreLock.readLock().lock();
         try {
             long size = writeFile != null ? writeFile.length() : 0;
@@ -764,8 +747,8 @@ public class FileStore implements SegmentStore {
         fileStoreLock.readLock().lock();
         try {
             int count = 0;
-            if (writer != null) {
-                count += writer.count();
+            if (tarWriter != null) {
+                count += tarWriter.count();
             }
             for (TarReader reader : readers) {
                 count += reader.count();
@@ -783,7 +766,7 @@ public class FileStore implements SegmentStore {
      * @return compaction gain estimate
      */
     CompactionGainEstimate estimateCompactionGain(Supplier<Boolean> stop) {
-        CompactionGainEstimate estimate = new CompactionGainEstimate(getHead(), count(), stop);
+        CompactionGainEstimate estimate = new CompactionGainEstimate(segmentReader.readHeadState(), count(), stop);
         fileStoreLock.readLock().lock();
         try {
             for (TarReader reader : readers) {
@@ -803,52 +786,33 @@ public class FileStore implements SegmentStore {
     }
 
     public void flush() throws IOException {
-        flush(cleanupNeeded.getAndSet(false));
-    }
-
-    public void flush(boolean cleanup) throws IOException {
-        synchronized (persistedHead) {
-            RecordId before = persistedHead.get();
-            RecordId after = head.get();
-
-            if (cleanup || !after.equals(before)) {
-                tracker.getWriter().flush();
-
+        revisions.flush(new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
                 // FIXME OAK-4291: FileStore.flush prone to races leading to corruption
                 // There is a small windows that could lead to a corrupted store:
                 // if we crash right after setting the persisted head but before any delay-flushed
                 // SegmentBufferWriter instance flushes (see SegmentBufferWriterPool.returnWriter())
                 // then that data is lost although it might be referenced from the persisted head already.
-
                 // Need a test case. Possible fix: return a future from flush() and set the persisted head
                 // in the completion handler.
-                writer.flush();
-
-                fileStoreLock.writeLock().lock();
-                try {
-                    log.debug("TarMK journal update {} -> {}", before, after);
-                    journalFile.writeBytes(after.toString10() + " root " + System.currentTimeMillis()+"\n");
-                    journalFile.getChannel().force(false);
-                    persistedHead.set(after);
-                } finally {
-                    fileStoreLock.writeLock().unlock();
-                }
-
-                if (cleanup) {
-                    // Explicitly give up reference to the previous root state
-                    // otherwise they could block cleanup. See OAK-3347
-                    before = null;
-                    after = null;
-                    pendingRemove.addAll(cleanup());
-                }
+                segmentWriter.flush();
+                tarWriter.flush();
+                return null;
             }
+        });
 
-            // remove all obsolete tar generations
+        if (cleanupNeeded.getAndSet(false)) {
+            // FIXME OAK-4138: Decouple revision cleanup from the flush thread
+            pendingRemove.addAll(cleanup());
+        }
+
+        // remove all obsolete tar generations
+        synchronized (pendingRemove) {
             Iterator<File> iterator = pendingRemove.iterator();
             while (iterator.hasNext()) {
                 File file = iterator.next();
-                log.debug("TarMK GC: Attempting to remove old file {}",
-                        file);
+                log.debug("TarMK GC: Attempting to remove old file {}", file);
                 if (!file.exists() || file.delete()) {
                     log.debug("TarMK GC: Removed old file {}", file);
                     iterator.remove();
@@ -868,7 +832,7 @@ public class FileStore implements SegmentStore {
      */
     public List<File> cleanup() throws IOException {
         return cleanup(new Predicate<Integer>() {
-            final int reclaimGeneration = getGcGen() - gcOptions.getRetainedGenerations();
+            final int reclaimGeneration = getGcGeneration() - gcOptions.getRetainedGenerations();
             @Override
             public boolean apply(Integer generation) {
                 return generation <= reclaimGeneration;
@@ -888,7 +852,7 @@ public class FileStore implements SegmentStore {
                     GC_COUNT, humanReadableByteCount(initialSize), initialSize);
 
             newWriter();
-            tracker.clearCache();
+            segmentCache.clear();
 
             // Suggest to the JVM that now would be a good time
             // to clear stale weak references in the SegmentTracker
@@ -910,7 +874,8 @@ public class FileStore implements SegmentStore {
         for (TarReader reader : cleaned.keySet()) {
             reader.mark(bulkRefs, reclaim, reclaimGeneration);
             // FIXME OAK-4165: Too verbose logging during revision gc
-            log.info("Size of bulk references/reclaim set {}/{}", bulkRefs.size(), reclaim.size());
+            log.info("{}: size of bulk references/reclaim set {}/{}",
+                    reader, bulkRefs.size(), reclaim.size());
             if (shutdown) {
                 gcMonitor.info("TarMK GC #{}: cleanup interrupted", GC_COUNT);
                 break;
@@ -961,6 +926,7 @@ public class FileStore implements SegmentStore {
         long finalSize = size();
         approximateSize.set(finalSize);
         stats.reclaimed(initialSize - finalSize);
+        // FIXME OAK-4106: Reclaimed size reported by FileStore.cleanup is off
         gcMonitor.cleaned(initialSize - finalSize, finalSize);
         gcMonitor.info("TarMK GC #{}: cleanup completed in {} ({} ms). Post cleanup size is {} ({} bytes)" +
                 " and space reclaimed {} ({} bytes).",
@@ -983,7 +949,7 @@ public class FileStore implements SegmentStore {
      * @param collector  reference collector called back for each blob reference found
      */
     public void collectBlobReferences(ReferenceCollector collector) throws IOException {
-        tracker.getWriter().flush();
+        segmentWriter.flush();
         List<TarReader> tarReaders = newArrayList();
         fileStoreLock.writeLock().lock();
         try {
@@ -993,7 +959,7 @@ public class FileStore implements SegmentStore {
             fileStoreLock.writeLock().unlock();
         }
 
-        int minGeneration = getGcGen() - gcOptions.getRetainedGenerations() + 1;
+        int minGeneration = getGcGeneration() - gcOptions.getRetainedGenerations() + 1;
         for (TarReader tarReader : tarReaders) {
             tarReader.collectBlobReferences(tracker, collector, minGeneration);
         }
@@ -1066,84 +1032,103 @@ public class FileStore implements SegmentStore {
         gcMonitor.info("TarMK GC #{}: compaction started, gc options={}", GC_COUNT, gcOptions);
         Stopwatch watch = Stopwatch.createStarted();
 
-        // FIXME OAK-4277: Finalise de-duplication caches
-        // Make the capacity and initial depth of the deduplication cache configurable
-        final DeduplicationCache<String> nodeCache = new DeduplicationCache<String>(1000000, 20);
-
-        // FIXME OAK-4280: Compaction cannot be cancelled
-        // FIXME OAK-4279: Rework offline compaction
-        // This way of compacting has not progress logging and cannot be cancelled
-        final int gcGeneration = tracker.getGcGen() + 1;
-        SegmentWriter writer = new SegmentWriter(this, tracker.getSegmentVersion(),
-            new SegmentBufferWriter(this, tracker.getSegmentVersion(), "c", gcGeneration),
-            new RecordCache<String>() {
-                @Override
-                protected Cache<String> getCache(int generation) {
-                    return nodeCache;
-                }
-            });
-
-        SegmentNodeState before = getHead();
+        SegmentNodeState before = segmentReader.readHeadState();
         long existing = before.getChildNode(SegmentNodeStore.CHECKPOINTS)
                 .getChildNodeCount(Long.MAX_VALUE);
         if (existing > 1) {
+            // FIXME OAK-4371: Overly zealous warning about checkpoints on compaction
+            // Make the number of checkpoints configurable above which the warning should be issued?
             gcMonitor.warn(
                     "TarMK GC #{}: compaction found {} checkpoints, you might need to run checkpoint cleanup",
                     GC_COUNT, existing);
         }
 
-        SegmentNodeState after = compact(writer, before);
+        final int newGeneration = getGcGeneration() + 1;
+        SegmentBufferWriter bufferWriter = new SegmentBufferWriter(
+                this, tracker, segmentReader, version, "c", newGeneration);
+        Supplier<Boolean> cancel = newCancelCompactionCondition();
+        SegmentNodeState after = compact(bufferWriter, before, cancel);
+        if (after == null) {
+            gcMonitor.info("TarMK GC #{}: compaction cancelled.", GC_COUNT);
+            return false;
+        }
+
         gcMonitor.info("TarMK GC #{}: compacted {} to {}",
                 GC_COUNT, before.getRecordId(), after.getRecordId());
 
         try {
             int cycles = 0;
             boolean success = false;
-            while (cycles++ < gcOptions.getRetryCount()
-                && !(success = setHead(before, after))) {
+            while (cycles++ < gcOptions.getRetryCount() &&
+                    !(success = revisions.setHead(before.getRecordId(), after.getRecordId()))) {
                 // Some other concurrent changes have been made.
                 // Rebase (and compact) those changes on top of the
                 // compacted state before retrying to set the head.
                 gcMonitor.info("TarMK GC #{}: compaction detected concurrent commits while compacting. " +
                     "Compacting these commits. Cycle {}", GC_COUNT, cycles);
-                SegmentNodeState head = getHead();
-                after = compact(writer, head);
+                SegmentNodeState head = segmentReader.readHeadState();
+                after = compact(bufferWriter, head, cancel);
+                if (after == null) {
+                    gcMonitor.info("TarMK GC #{}: compaction cancelled.", GC_COUNT);
+                    return false;
+                }
+
                 gcMonitor.info("TarMK GC #{}: compacted {} against {} to {}",
                         GC_COUNT, head.getRecordId(), before.getRecordId(), after.getRecordId());
                 before = head;
             }
-            if (success) {
-                tracker.getWriter().addCachedNodes(gcGeneration, nodeCache);
-                // FIXME OAK-4285: Align cleanup of segment id tables with the new cleanup strategy
-                // ith clean brutal we need to remove those ids that have been cleaned
-                // i.e. those whose segment was from an old generation
-                tracker.clearSegmentIdTables(Predicates.<SegmentId>alwaysFalse());
-                // FIXME OAK-4283: Align GCMonitor API with implementation
-                // Refactor GCMonitor: there is no more compaction map stats
-                gcMonitor.compacted(new long[]{}, new long[]{}, new long[]{});
-            } else {
+            if (!success) {
                 gcMonitor.info("TarMK GC #{}: compaction gave up compacting concurrent commits after {} cycles.",
                         GC_COUNT, cycles - 1);
                 if (gcOptions.getForceAfterFail()) {
                     gcMonitor.info("TarMK GC #{}: compaction force compacting remaining commits", GC_COUNT);
-                    if (!forceCompact(writer)) {
+                    success = forceCompact(bufferWriter, cancel);
+                    if (!success) {
                         gcMonitor.warn("TarMK GC #{}: compaction failed to force compact remaining commits. " +
-                            "Most likely compaction didn't get exclusive access to the store. Cleaning up.",
+                            "Most likely compaction didn't get exclusive access to the store or was " +
+                            "prematurely cancelled. Cleaning up.",
                             GC_COUNT);
                         cleanup(new Predicate<Integer>() {
                             @Override
                             public boolean apply(Integer generation) {
-                                return generation == gcGeneration;
+                                return generation == newGeneration;
                             }
                         });
-                        return false;
                     }
                 }
             }
 
-            gcMonitor.info("TarMK GC #{}: compaction completed in {} ({} ms), after {} cycles",
-                    GC_COUNT, watch, watch.elapsed(MILLISECONDS), cycles - 1);
-            return true;
+            if (success) {
+                segmentWriter.evictCaches(new Predicate<Integer>() {
+                    @Override
+                    public boolean apply(Integer generation) {
+                        return generation < newGeneration;
+                    }
+                });
+
+                // FIXME OAK-4285: Align cleanup of segment id tables with the new cleanup strategy
+                // ith clean brutal we need to remove those ids that have been cleaned
+                // i.e. those whose segment was from an old generation
+                tracker.clearSegmentIdTables(Predicates.<SegmentId>alwaysFalse());
+
+                // FIXME OAK-4283: Align GCMonitor API with implementation
+                // Refactor GCMonitor: there is no more compaction map stats
+                gcMonitor.compacted(new long[]{}, new long[]{}, new long[]{});
+
+                gcMonitor.info("TarMK GC #{}: compaction succeeded in {} ({} ms), after {} cycles",
+                        GC_COUNT, watch, watch.elapsed(MILLISECONDS), cycles - 1);
+                return true;
+            } else {
+                segmentWriter.evictCaches(new Predicate<Integer>() {
+                    @Override
+                    public boolean apply(Integer generation) {
+                        return generation == newGeneration;
+                    }
+                });
+                gcMonitor.info("TarMK GC #{}: compaction failed after {} ({} ms), and {} cycles",
+                        GC_COUNT, watch, watch.elapsed(MILLISECONDS), cycles - 1);
+                return false;
+            }
         } catch (InterruptedException e) {
             gcMonitor.error("TarMK GC #" + GC_COUNT + ": compaction interrupted", e);
             currentThread().interrupt();
@@ -1154,31 +1139,50 @@ public class FileStore implements SegmentStore {
         }
     }
 
-    private static SegmentNodeState compact(SegmentWriter writer, NodeState node) throws IOException {
-        SegmentNodeState compacted = writer.writeNode(node);
-        writer.flush();
-        return compacted;
+    private SegmentNodeState compact(SegmentBufferWriter bufferWriter, NodeState head,
+                                     Supplier<Boolean> cancel)
+    throws IOException {
+        if (gcOptions.isOffline()) {
+            SegmentWriter writer = new SegmentWriter(this, segmentReader, blobStore, tracker, bufferWriter);
+            return new Compactor(segmentReader, writer, blobStore, cancel, gcOptions)
+                    .compact(EMPTY_NODE, head, EMPTY_NODE);
+        } else {
+            return segmentWriter.writeNode(head, bufferWriter, cancel);
+        }
     }
 
-    private boolean forceCompact(SegmentWriter writer) throws InterruptedException, IOException {
-        if (rwLock.writeLock().tryLock(gcOptions.getLockWaitTime(), TimeUnit.SECONDS)) {
-            try {
-                SegmentNodeState head = getHead();
-                return setHead(head, compact(writer, head));
-            } finally {
-                rwLock.writeLock().unlock();
-            }
-        } else {
-            return false;
-        }
+    private boolean forceCompact(@Nonnull final SegmentBufferWriter bufferWriter,
+                                 @Nonnull final Supplier<Boolean> cancel)
+    throws InterruptedException {
+        return revisions.
+            setHead(new Function<RecordId, RecordId>() {
+                @Nullable
+                @Override
+                public RecordId apply(RecordId base) {
+                    try {
+                        SegmentNodeState after = compact(bufferWriter,
+                                segmentReader.readNode(base), cancel);
+                        if (after == null) {
+                            gcMonitor.info("TarMK GC #{}: compaction cancelled.", GC_COUNT);
+                            return null;
+                        } else {
+                            return after.getRecordId();
+                        }
+                    } catch (IOException e) {
+                        gcMonitor.error("TarMK GC #{" + GC_COUNT + "}: Error during forced compaction.", e);
+                        return null;
+                    }
+                }
+            },
+            timeout(gcOptions.getLockWaitTime(), SECONDS));
     }
 
     public Iterable<SegmentId> getSegmentIds() {
         fileStoreLock.readLock().lock();
         try {
             List<SegmentId> ids = newArrayList();
-            if (writer != null) {
-                for (UUID uuid : writer.getUUIDs()) {
+            if (tarWriter != null) {
+                for (UUID uuid : tarWriter.getUUIDs()) {
                     ids.add(tracker.getSegmentId(
                             uuid.getMostSignificantBits(),
                             uuid.getLeastSignificantBits()));
@@ -1197,30 +1201,24 @@ public class FileStore implements SegmentStore {
         }
     }
 
-    @Override
+    @Nonnull
     public SegmentTracker getTracker() {
         return tracker;
     }
 
-    @Override
-    public SegmentNodeState getHead() {
-        return new SegmentNodeState(head.get());
+    @Nonnull
+    public SegmentWriter getWriter() {
+        return segmentWriter;
     }
 
-    // FIXME OAK-4015: Expedite commits from the compactor
-    // use a lock that can expedite important commits like compaction and checkpoints.
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    @Nonnull
+    public SegmentReader getReader() {
+        return segmentReader;
+    }
 
-    @Override
-    public boolean setHead(SegmentNodeState base, SegmentNodeState head) {
-        rwLock.readLock().lock();
-        try {
-            RecordId id = this.head.get();
-            return id.equals(base.getRecordId())
-                && this.head.compareAndSet(id, head.getRecordId());
-        } finally {
-            rwLock.readLock().unlock();
-        }
+    @Nonnull
+    public TarRevisions getRevisions() {
+        return revisions;
     }
 
     @Override
@@ -1235,12 +1233,13 @@ public class FileStore implements SegmentStore {
         closeAndLogOnFail(diskSpaceThread);
         try {
             flush();
+            revisions.close();
             // FIXME OAK-4291: FileStore.flush prone to races leading to corruption
             // Replace this with a way to "close" the underlying SegmentBufferWriter(s)
             // tracker.getWriter().dropCache();
             fileStoreLock.writeLock().lock();
             try {
-                closeAndLogOnFail(writer);
+                closeAndLogOnFail(tarWriter);
 
                 List<TarReader> list = readers;
                 readers = newArrayList();
@@ -1252,7 +1251,6 @@ public class FileStore implements SegmentStore {
                     lock.release();
                 }
                 closeAndLogOnFail(lockFile);
-                closeAndLogOnFail(journalFile);
             } finally {
                 fileStoreLock.writeLock().unlock();
             }
@@ -1280,10 +1278,10 @@ public class FileStore implements SegmentStore {
             }
         }
 
-        if (writer != null) {
+        if (tarWriter != null) {
             fileStoreLock.readLock().lock();
             try {
-                if (writer.containsEntry(msb, lsb)) {
+                if (tarWriter.containsEntry(msb, lsb)) {
                     return true;
                 }
             } finally {
@@ -1303,82 +1301,107 @@ public class FileStore implements SegmentStore {
     }
 
     @Override
-    public Segment readSegment(SegmentId id) {
-        long msb = id.getMostSignificantBits();
-        long lsb = id.getLeastSignificantBits();
+    @Nonnull
+    public Segment readSegment(final SegmentId id) {
+        try {
+            return segmentCache.geSegment(id, new Callable<Segment>() {
+                @Override
+                public Segment call() throws Exception {
+                    long msb = id.getMostSignificantBits();
+                    long lsb = id.getLeastSignificantBits();
 
-        for (TarReader reader : readers) {
-            try {
-                if (reader.isClosed()) {
-                    // Cleanup might already have closed the file.
-                    // The segment should be available from another file.
-                    log.debug("Skipping closed tar file {}", reader);
-                    continue;
-                }
+                    for (TarReader reader : readers) {
+                        try {
+                            if (reader.isClosed()) {
+                                // Cleanup might already have closed the file.
+                                // The segment should be available from another file.
+                                log.debug("Skipping closed tar file {}", reader);
+                                continue;
+                            }
 
-                ByteBuffer buffer = reader.readEntry(msb, lsb);
-                if (buffer != null) {
-                    return new Segment(tracker, id, buffer);
-                }
-            } catch (IOException e) {
-                log.warn("Failed to read from tar file {}", reader, e);
-            }
-        }
-
-        if (writer != null) {
-            fileStoreLock.readLock().lock();
-            try {
-                try {
-                    ByteBuffer buffer = writer.readEntry(msb, lsb);
-                    if (buffer != null) {
-                        return new Segment(tracker, id, buffer);
+                            ByteBuffer buffer = reader.readEntry(msb, lsb);
+                            if (buffer != null) {
+                                return new Segment(tracker, segmentReader, id, buffer);
+                            }
+                        } catch (IOException e) {
+                            log.warn("Failed to read from tar file {}", reader, e);
+                        }
                     }
-                } catch (IOException e) {
-                    log.warn("Failed to read from tar file {}", writer, e);
+
+                    if (tarWriter != null) {
+                        fileStoreLock.readLock().lock();
+                        try {
+                            try {
+                                ByteBuffer buffer = tarWriter.readEntry(msb, lsb);
+                                if (buffer != null) {
+                                    return new Segment(tracker, segmentReader, id, buffer);
+                                }
+                            } catch (IOException e) {
+                                log.warn("Failed to read from tar file {}", tarWriter, e);
+                            }
+                        } finally {
+                            fileStoreLock.readLock().unlock();
+                        }
+                    }
+
+                    // the writer might have switched to a new file,
+                    // so we need to re-check the readers
+                    for (TarReader reader : readers) {
+                        try {
+                            if (reader.isClosed()) {
+                                // Cleanup might already have closed the file.
+                                // The segment should be available from another file.
+                                log.info("Skipping closed tar file {}", reader);
+                                continue;
+                            }
+
+                            ByteBuffer buffer = reader.readEntry(msb, lsb);
+                            if (buffer != null) {
+                                return new Segment(tracker, segmentReader, id, buffer);
+                            }
+                        } catch (IOException e) {
+                            log.warn("Failed to read from tar file {}", reader, e);
+                        }
+                    }
+
+                    throw new SegmentNotFoundException(id);
                 }
-            } finally {
-                fileStoreLock.readLock().unlock();
-            }
+            });
+        } catch (ExecutionException e) {
+            throw e.getCause() instanceof SegmentNotFoundException
+                ? (SegmentNotFoundException) e.getCause()
+                : new SegmentNotFoundException(id, e);
         }
-
-        // the writer might have switched to a new file,
-        // so we need to re-check the readers
-        for (TarReader reader : readers) {
-            try {
-                if (reader.isClosed()) {
-                    // Cleanup might already have closed the file.
-                    // The segment should be available from another file.
-                    log.info("Skipping closed tar file {}", reader);
-                    continue;
-                }
-
-                ByteBuffer buffer = reader.readEntry(msb, lsb);
-                if (buffer != null) {
-                    return new Segment(tracker, id, buffer);
-                }
-            } catch (IOException e) {
-                log.warn("Failed to read from tar file {}", reader, e);
-            }
-        }
-
-        throw new SegmentNotFoundException(id);
     }
 
     @Override
-    public void writeSegment(SegmentId id, byte[] data, int offset, int length) throws IOException {
+    public void writeSegment(SegmentId id, byte[] buffer, int offset, int length) throws IOException {
         fileStoreLock.writeLock().lock();
         try {
-            int generation = Segment.getGcGen(wrap(data, offset, length));
-            long size = writer.writeEntry(
+            int generation = Segment.getGcGeneration(wrap(buffer, offset, length), id.asUUID());
+            long size = tarWriter.writeEntry(
                     id.getMostSignificantBits(),
                     id.getLeastSignificantBits(),
-                    data, offset, length, generation);
+                    buffer, offset, length, generation);
             if (size >= maxFileSize) {
                 newWriter();
             }
             approximateSize.addAndGet(TarWriter.BLOCK_SIZE + length + TarWriter.getPaddingSize(length));
         } finally {
             fileStoreLock.writeLock().unlock();
+        }
+
+        // Keep this data segment in memory as it's likely to be accessed soon
+        if (id.isDataSegmentId()) {
+            ByteBuffer data;
+            if (offset > 4096) {
+                data = ByteBuffer.allocate(length);
+                data.put(buffer, offset, length);
+                data.rewind();
+            } else {
+                data = ByteBuffer.wrap(buffer, offset, length);
+            }
+            segmentCache.putSegment(new Segment(tracker, segmentReader, id, data));
         }
     }
 
@@ -1388,8 +1411,8 @@ public class FileStore implements SegmentStore {
      * @throws IOException
      */
     private void newWriter() throws IOException {
-        if (writer.isDirty()) {
-            writer.close();
+        if (tarWriter.isDirty()) {
+            tarWriter.close();
 
             List<TarReader> list =
                     newArrayListWithCapacity(1 + readers.size());
@@ -1401,25 +1424,21 @@ public class FileStore implements SegmentStore {
             writeFile = new File(
                     directory,
                     String.format(FILE_NAME_FORMAT, writeNumber, "a"));
-            writer = new TarWriter(writeFile, stats);
+            tarWriter = new TarWriter(writeFile, stats);
         }
     }
 
-    @Override
-    public Blob readBlob(String blobId) {
-        if (blobStore != null) {
-            return new BlobStoreBlob(blobStore, blobId);
-        }
-        throw new IllegalStateException("Attempt to read external blob with blobId [" + blobId + "] " +
-                "without specifying BlobStore");
-    }
-
-    @Override
+    /**
+     * @return  the external BlobStore (if configured) with this store, {@code null} otherwise.
+     */
+    @CheckForNull
     public BlobStore getBlobStore() {
         return blobStore;
     }
 
-    @Override
+    /**
+     * Trigger a garbage collection cycle
+     */
     public void gc() {
         compactionThread.trigger();
     }
@@ -1452,9 +1471,7 @@ public class FileStore implements SegmentStore {
     private void setRevision(String rootRevision) {
         fileStoreLock.writeLock().lock();
         try {
-            RecordId id = RecordId.fromString(tracker, rootRevision);
-            head.set(id);
-            persistedHead.set(id);
+            revisions.setHeadId(RecordId.fromString(tracker, rootRevision));
         } finally {
             fileStoreLock.writeLock().unlock();
         }
@@ -1537,11 +1554,6 @@ public class FileStore implements SegmentStore {
         }
 
         @Override
-        public boolean setHead(SegmentNodeState base, SegmentNodeState head) {
-            throw new UnsupportedOperationException("Read Only Store");
-        }
-
-        @Override
         public void writeSegment(SegmentId id, byte[] data,
                 int offset, int length) {
             throw new UnsupportedOperationException("Read Only Store");
@@ -1569,7 +1581,7 @@ public class FileStore implements SegmentStore {
         }
 
         @Override
-        public boolean maybeCompact(boolean cleanup) {
+        public void maybeCompact(boolean cleanup) {
             throw new UnsupportedOperationException("Read Only Store");
         }
     }

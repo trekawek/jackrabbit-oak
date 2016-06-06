@@ -160,13 +160,12 @@ public final class SegmentGraph {
         checkNotNull(epoch);
         PrintWriter writer = new PrintWriter(checkNotNull(out));
         try {
-            SegmentNodeState root = checkNotNull(fileStore).getHead();
-
+            SegmentNodeState root = checkNotNull(fileStore).getReader().readHeadState();
             Predicate<UUID> filter = pattern == null
                 ? Predicates.<UUID>alwaysTrue()
                 : createRegExpFilter(pattern, fileStore.getTracker());
             Graph<UUID> segmentGraph = parseSegmentGraph(fileStore, filter);
-            Graph<UUID> headGraph = parseHeadGraph(root.getRecordId());
+            Graph<UUID> headGraph = parseHeadGraph(fileStore.getReader(), root.getRecordId());
 
             writer.write("nodedef>name VARCHAR, label VARCHAR, type VARCHAR, wid VARCHAR, gc INT, t INT, size INT, head BOOLEAN\n");
             for (UUID segment : segmentGraph.vertices()) {
@@ -233,7 +232,7 @@ public final class SegmentGraph {
     public static Graph<UUID> parseSegmentGraph(
             @Nonnull ReadOnlyStore fileStore,
             @Nonnull Predicate<UUID> filter) throws IOException {
-        SegmentNodeState root = checkNotNull(fileStore).getHead();
+        SegmentNodeState root = checkNotNull(fileStore).getReader().readHeadState();
         HashSet<UUID> roots = newHashSet(root.getRecordId().asUUID());
         return parseSegmentGraph(fileStore, roots, filter, Functions.<UUID>identity());
     }
@@ -286,23 +285,17 @@ public final class SegmentGraph {
     @Nonnull
     public static Graph<String> parseGCGraph(@Nonnull final ReadOnlyStore fileStore)
             throws IOException {
-        SegmentNodeState root = checkNotNull(fileStore).getHead();
+        SegmentNodeState root = checkNotNull(fileStore).getReader().readHeadState();
         HashSet<UUID> roots = newHashSet(root.getRecordId().asUUID());
         return parseSegmentGraph(fileStore, roots, Predicates.<UUID>alwaysTrue(), new Function<UUID, String>() {
             @Override @Nullable
             public String apply(UUID segmentId) {
-                Map<String, String> info = getSegmentInfoMap(segmentId, fileStore.getTracker());
-                if (info != null) {
-                    String error = info.get("error");
-                    if (error != null) {
-                        return "Error";
-                    } else {
-                        return info.get("gc");
-                    }
-                } else if (!isDataSegmentId(segmentId.getLeastSignificantBits())) {
-                    return "bulk";
+                Map<String, String> info = new SegmentInfo(segmentId, fileStore.getTracker()).getInfoMap();
+                String error = info.get("error");
+                if (error != null) {
+                    return "Error";
                 } else {
-                    return "null";
+                    return info.get("gc");
                 }
             }
         });
@@ -355,17 +348,20 @@ public final class SegmentGraph {
     }
 
     /**
-     * Parser the head graph. The head graph is the sub graph of the segment
+     * Parser the head graph of segment store. The head graph is the sub graph of the segment
      * graph containing the {@code root}.
+     * @param reader  segment reader for the store to parse
      * @param root
      * @return  the head graph of {@code root}.
      */
     @Nonnull
-    public static Graph<UUID> parseHeadGraph(@Nonnull RecordId root) {
+    public static Graph<UUID> parseHeadGraph(
+            @Nonnull SegmentReader reader,
+            @Nonnull RecordId root) {
         final Graph<UUID> graph = new Graph<UUID>();
 
         try {
-            new SegmentParser() {
+            new SegmentParser(reader) {
                 private void addEdge(RecordId from, RecordId to) {
                     graph.addVertex(from.asUUID());
                     graph.addVertex(to.asUUID());
@@ -451,10 +447,11 @@ public final class SegmentGraph {
     }
 
     private static void writeNode(UUID node, PrintWriter writer, boolean inHead, Date epoch, SegmentTracker tracker) {
-        Map<String, String> sInfo = getSegmentInfoMap(node, tracker);
-        if (!sInfo.containsKey("t")) {
+        SegmentInfo segmentInfo = new SegmentInfo(node, tracker);
+        if (!segmentInfo.isData()) {
             writer.write(node + ",b,bulk,b,-1,-1," + inHead + "\n");
         } else {
+            Map<String, String> sInfo = segmentInfo.getInfoMap();
             String error = sInfo.get("error");
             if (error != null) {
                 writer.write(node +
@@ -494,10 +491,6 @@ public final class SegmentGraph {
         return Long.valueOf(string);
     }
 
-    private static Map<String, String> getSegmentInfoMap(UUID segment, SegmentTracker tracker) {
-        return new SegmentInfo(segment, tracker).getInfoMap();
-    }
-
     private static String getSegmentInfo(UUID segment, SegmentTracker tracker) {
         return new SegmentInfo(segment, tracker).getInfo();
     }
@@ -525,10 +518,6 @@ public final class SegmentGraph {
             return id;
         }
 
-        int getSize() {
-            return getSegmentId().getSegment().size();
-        }
-
         String getInfo() {
             if (isData()) {
                 return getSegmentId().getSegment().getSegmentInfo();
@@ -546,7 +535,9 @@ public final class SegmentGraph {
                     tokenizer.read('{');
                     infoMap.putAll(JsonObject.create(tokenizer).getProperties());
                 }
-                infoMap.put("size", valueOf(getSize()));
+                Segment segment = getSegmentId().getSegment();
+                infoMap.put("size", valueOf(segment.size()));
+                infoMap.put("gc", valueOf(segment.getGcGeneration()));
                 return infoMap;
             } catch (SegmentNotFoundException e) {
                 return singletonMap("error", getStackTraceAsString(e));

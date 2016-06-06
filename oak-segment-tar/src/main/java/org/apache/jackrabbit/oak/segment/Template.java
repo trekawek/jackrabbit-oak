@@ -30,6 +30,7 @@ import java.util.List;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
@@ -56,6 +57,9 @@ public class Template {
     static final String ZERO_CHILD_NODES = null;
 
     static final String MANY_CHILD_NODES = "";
+
+    @Nonnull
+    private final SegmentReader reader;
 
     /**
      * The {@code jcr:primaryType} property, if present as a single-valued
@@ -86,8 +90,12 @@ public class Template {
     @CheckForNull
     private final String childName;
 
-    Template(PropertyState primaryType, PropertyState mixinTypes,
-            PropertyTemplate[] properties, String childName) {
+    Template(@Nonnull SegmentReader reader,
+             @Nullable PropertyState primaryType,
+             @Nullable PropertyState mixinTypes,
+             @Nullable  PropertyTemplate[] properties,
+             @Nullable String childName) {
+        this.reader = checkNotNull(reader);
         this.primaryType = primaryType;
         this.mixinTypes = mixinTypes;
         if (properties != null) {
@@ -99,7 +107,9 @@ public class Template {
         this.childName = childName;
     }
 
-    Template(NodeState state) {
+    Template(@Nonnull SegmentReader reader, @Nonnull NodeState state) {
+        this.reader = checkNotNull(reader);
+        checkNotNull(state);
         PropertyState primary = null;
         PropertyState mixins = null;
         List<PropertyTemplate> templates = Lists.newArrayList();
@@ -133,10 +143,12 @@ public class Template {
         }
     }
 
+    @CheckForNull
     PropertyState getPrimaryType() {
         return primaryType;
     }
 
+    @CheckForNull
     PropertyState getMixinTypes() {
         return mixinTypes;
     }
@@ -171,6 +183,7 @@ public class Template {
         return null;
     }
 
+    @CheckForNull
     String getChildName() {
         return childName;
     }
@@ -186,7 +199,7 @@ public class Template {
         RecordId lid = segment.readRecordId(offset);
         ListRecord props = new ListRecord(lid, properties.length);
         RecordId rid = props.getEntry(index);
-        return new SegmentPropertyState(rid, properties[index]);
+        return reader.readProperty(rid, properties[index]);
     }
 
     MapRecord getChildNodeMap(RecordId recordId) {
@@ -194,7 +207,7 @@ public class Template {
         Segment segment = recordId.getSegment();
         int offset = recordId.getOffset() + 2 * RECORD_ID_BYTES;
         RecordId childNodesId = segment.readRecordId(offset);
-        return segment.readMap(childNodesId);
+        return reader.readMap(childNodesId);
     }
 
     public NodeState getChildNode(String name, RecordId recordId) {
@@ -212,7 +225,7 @@ public class Template {
             Segment segment = recordId.getSegment();
             int offset = recordId.getOffset() + 2 * RECORD_ID_BYTES;
             RecordId childNodeId = segment.readRecordId(offset);
-            return new SegmentNodeState(childNodeId);
+            return reader.readNode(childNodeId);
         } else {
             return MISSING_NODE;
         }
@@ -229,7 +242,7 @@ public class Template {
             int offset = recordId.getOffset() + 2 * RECORD_ID_BYTES;
             RecordId childNodeId = segment.readRecordId(offset);
             return Collections.singletonList(new MemoryChildNodeEntry(
-                    childName, new SegmentNodeState(childNodeId)));
+                    childName, reader.readNode(childNodeId)));
         }
     }
 
