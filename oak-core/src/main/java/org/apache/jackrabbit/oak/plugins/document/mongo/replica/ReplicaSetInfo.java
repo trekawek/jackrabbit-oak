@@ -24,6 +24,7 @@ import static com.google.common.collect.Maps.filterKeys;
 import static com.google.common.collect.Sets.union;
 import static org.apache.jackrabbit.oak.plugins.document.util.Utils.isGreaterOrEquals;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -74,6 +75,8 @@ public class ReplicaSetInfo implements Runnable {
     private final Object stopMonitor = new Object();
 
     private final List<ReplicaSetInfoListener> listeners = new CopyOnWriteArrayList<ReplicaSetInfoListener>();
+
+    private List<String> hiddenMembers;
 
     private volatile RevisionVector rootRevisions;
 
@@ -127,32 +130,40 @@ public class ReplicaSetInfo implements Runnable {
     @Override
     public void run() {
         try {
-            while (!stop) {
-                updateReplicaStatus();
-
-                for (ReplicaSetInfoListener listener : listeners) {
-                    listener.gotRootRevisions(rootRevisions);
-                }
-
-                synchronized (stopMonitor) {
-                    try {
-                        if (!stop) {
-                            stopMonitor.wait(pullFrequencyMillis);
-                        }
-                    } catch (InterruptedException e) {
-                        break;
-                    }
-                }
-            }
-            LOG.debug("Stopping the replica set info");
-            nodeCollections.close();
+            updateLoop();
         } catch (Exception e) {
             LOG.error("Exception in the ReplicaSetInfo thread", e);
         }
     }
 
+    private void updateLoop() {
+        while (!stop) {
+            if (hiddenMembers == null) {
+                hiddenMembers = getHiddenMembers();
+            } else {
+                updateReplicaStatus();
+
+                for (ReplicaSetInfoListener listener : listeners) {
+                    listener.gotRootRevisions(rootRevisions);
+                }
+            }
+
+            synchronized (stopMonitor) {
+                try {
+                    if (!stop) {
+                        stopMonitor.wait(pullFrequencyMillis);
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        }
+        LOG.debug("Stopping the replica set info");
+        nodeCollections.close();
+    }
+
     void updateReplicaStatus() {
-        BasicDBObject result = null;
+        BasicDBObject result;
         try {
             result = getReplicaStatus();
         } catch (MongoException e) {
@@ -168,6 +179,34 @@ public class ReplicaSetInfo implements Runnable {
             members = Collections.emptyList();
         }
         updateRevisions(members);
+    }
+
+    List<String> getHiddenMembers() {
+        BasicDBObject result;
+        try {
+            result = getReplicaConfig();
+        } catch (MongoException e) {
+            LOG.error("Can't get replica configuration", e);
+            return null;
+        }
+
+        @SuppressWarnings("unchecked")
+        Iterable<BasicBSONObject> members = (Iterable<BasicBSONObject>) result.get("members");
+        if (members == null) {
+            members = Collections.emptyList();
+        }
+
+        List<String> hiddenMembers = new ArrayList<String>();
+        for (BasicBSONObject member : members) {
+            if (member.getBoolean("hidden")) {
+                hiddenMembers.add(member.getString("host"));
+            }
+        }
+        return hiddenMembers;
+    }
+
+    protected BasicDBObject getReplicaConfig() {
+        return adminDb.command("replSetGetConfig", ReadPreference.primary());
     }
 
     protected BasicDBObject getReplicaStatus() {
@@ -187,6 +226,9 @@ public class ReplicaSetInfo implements Runnable {
                 state = MemberState.UNKNOWN;
             }
             String name = member.getString("name");
+            if (hiddenMembers.contains(name)) {
+                continue;
+            }
 
             switch (state) {
             case PRIMARY:
