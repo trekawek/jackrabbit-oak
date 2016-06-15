@@ -19,8 +19,7 @@
 package org.apache.jackrabbit.oak.segment.http;
 
 import static org.apache.jackrabbit.oak.segment.CachingSegmentReader.DEFAULT_STRING_CACHE_MB;
-import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
-import static org.apache.jackrabbit.oak.segment.SegmentWriters.pooledSegmentWriter;
+import static org.apache.jackrabbit.oak.segment.SegmentWriterBuilder.segmentWriterBuilder;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,12 +33,12 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
 import com.google.common.base.Supplier;
-import com.google.common.base.Suppliers;
 import com.google.common.io.ByteStreams;
 import org.apache.jackrabbit.oak.segment.CachingSegmentReader;
 import org.apache.jackrabbit.oak.segment.Revisions;
 import org.apache.jackrabbit.oak.segment.Segment;
 import org.apache.jackrabbit.oak.segment.SegmentId;
+import org.apache.jackrabbit.oak.segment.SegmentIdFactory;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundException;
 import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.segment.SegmentStore;
@@ -50,7 +49,7 @@ import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 public class HttpStore implements SegmentStore {
 
     @Nonnull
-    private final SegmentTracker tracker = new SegmentTracker(this);
+    private final SegmentTracker tracker = new SegmentTracker();
 
     @Nonnull
     private final HttpStoreRevisions revisions = new HttpStoreRevisions(this);
@@ -64,11 +63,21 @@ public class HttpStore implements SegmentStore {
     };
     @Nonnull
     private final SegmentReader segmentReader = new CachingSegmentReader(
-            getWriter, revisions, null, DEFAULT_STRING_CACHE_MB);
+            getWriter, null, DEFAULT_STRING_CACHE_MB);
+
+    private final SegmentIdFactory segmentIdFactory = new SegmentIdFactory() {
+
+        @Override
+        @Nonnull
+        public SegmentId newSegmentId(long msb, long lsb) {
+            return new SegmentId(HttpStore.this, msb, lsb);
+        }
+
+    };
 
     @Nonnull
-    private final SegmentWriter segmentWriter = pooledSegmentWriter(this,
-            LATEST_VERSION, "sys", Suppliers.ofInstance(0));
+    private final SegmentWriter segmentWriter = segmentWriterBuilder("sys")
+            .withWriterPool().build(this);
 
     private final URL base;
 
@@ -101,6 +110,24 @@ public class HttpStore implements SegmentStore {
         return revisions;
     }
 
+    @Override
+    @Nonnull
+    public SegmentId newSegmentId(long msb, long lsb) {
+        return tracker.newSegmentId(msb, lsb, segmentIdFactory);
+    }
+
+    @Override
+    @Nonnull
+    public SegmentId newBulkSegmentId() {
+        return tracker.newBulkSegmentId(segmentIdFactory);
+    }
+
+    @Override
+    @Nonnull
+    public SegmentId newDataSegmentId() {
+        return tracker.newDataSegmentId(segmentIdFactory);
+    }
+
     /**
      * Builds a simple URLConnection. This method can be extended to add
      * authorization headers if needed.
@@ -131,7 +158,7 @@ public class HttpStore implements SegmentStore {
             InputStream stream = connection.getInputStream();
             try {
                 byte[] data = ByteStreams.toByteArray(stream);
-                return new Segment(tracker, segmentReader, id, ByteBuffer.wrap(data));
+                return new Segment(this, segmentReader, id, ByteBuffer.wrap(data));
             } finally {
                 stream.close();
             }

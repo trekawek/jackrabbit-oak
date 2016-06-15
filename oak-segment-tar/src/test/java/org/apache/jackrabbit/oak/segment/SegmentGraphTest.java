@@ -26,8 +26,8 @@ import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 import static org.apache.jackrabbit.oak.segment.SegmentGraph.createRegExpFilter;
 import static org.apache.jackrabbit.oak.segment.SegmentGraph.parseSegmentGraph;
-import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
-import static org.apache.jackrabbit.oak.segment.SegmentWriters.segmentWriter;
+import static org.apache.jackrabbit.oak.segment.SegmentWriterBuilder.segmentWriterBuilder;
+import static org.apache.jackrabbit.oak.segment.file.FileStoreBuilder.fileStoreBuilder;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
@@ -58,7 +58,7 @@ public class SegmentGraphTest {
     private final Map<UUID, Set<UUID>> filteredReferences = newHashMap();
 
     @Rule
-    public TemporaryFolder storeFolder = new TemporaryFolder();
+    public TemporaryFolder storeFolder = new TemporaryFolder(new File("target"));
 
     private File getStoreFolder() {
          return storeFolder.getRoot();
@@ -66,14 +66,14 @@ public class SegmentGraphTest {
 
     @Before
     public void setup() throws IOException {
-        FileStore store = FileStore.builder(getStoreFolder()).build();
+        FileStore store = fileStoreBuilder(getStoreFolder()).build();
         try {
-            SegmentNodeState root = store.getReader().readHeadState();
+            SegmentNodeState root = store.getHead();
             segments.add(getSegmentId(root));
 
-            SegmentWriter w1 = segmentWriter(store, LATEST_VERSION, "writer1", 0);
-            SegmentWriter w2 = segmentWriter(store, LATEST_VERSION, "writer2", 0);
-            SegmentWriter w3 = segmentWriter(store, LATEST_VERSION, "writer3", 0);
+            SegmentWriter w1 = segmentWriterBuilder("writer1").build(store);
+            SegmentWriter w2 = segmentWriterBuilder("writer2").build(store);
+            SegmentWriter w3 = segmentWriterBuilder("writer3").build(store);
 
             SegmentPropertyState p1 = w1.writeProperty(createProperty("p1", "v1"));
             segments.add(getSegmentId(p1));
@@ -128,7 +128,7 @@ public class SegmentGraphTest {
 
     @Test
     public void testSegmentGraph() throws IOException {
-        ReadOnlyStore store = FileStore.builder(getStoreFolder()).buildReadOnly();
+        ReadOnlyStore store = fileStoreBuilder(getStoreFolder()).buildReadOnly();
         try {
             Graph<UUID> segmentGraph = parseSegmentGraph(store, Predicates.<UUID>alwaysTrue());
             assertEquals(segments, newHashSet(segmentGraph.vertices()));
@@ -144,9 +144,9 @@ public class SegmentGraphTest {
 
     @Test
     public void testSegmentGraphWithFilter() throws IOException {
-        ReadOnlyStore store = FileStore.builder(getStoreFolder()).buildReadOnly();
+        ReadOnlyStore store = fileStoreBuilder(getStoreFolder()).buildReadOnly();
         try {
-            Predicate<UUID> filter = createRegExpFilter(".*(writer2|writer3).*", store.getTracker());
+            Predicate<UUID> filter = createRegExpFilter(".*(writer2|writer3).*", store);
             Graph<UUID> segmentGraph = parseSegmentGraph(store, filter);
             assertEquals(filteredSegments, newHashSet(segmentGraph.vertices()));
             Map<UUID, Set<UUID>> map = newHashMap();
@@ -164,7 +164,7 @@ public class SegmentGraphTest {
         // TODO Improve test coverage to non trivial cases with more than a single generation
         // This is quite tricky as there is no easy way to construct a file store with
         // a segment graphs having edges between generations (OAK-3348)
-        ReadOnlyStore store = FileStore.builder(getStoreFolder()).buildReadOnly();
+        ReadOnlyStore store = fileStoreBuilder(getStoreFolder()).buildReadOnly();
         try {
             Graph<String> gcGraph = SegmentGraph.parseGCGraph(store);
             assertEquals(ImmutableSet.of("0"), newHashSet(gcGraph.vertices()));

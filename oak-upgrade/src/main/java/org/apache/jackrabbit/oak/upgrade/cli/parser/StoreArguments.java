@@ -27,6 +27,7 @@ import org.apache.jackrabbit.oak.upgrade.cli.blob.BlobStoreFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.blob.DummyBlobStoreFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.blob.FileBlobStoreFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.blob.FileDataStoreFactory;
+import org.apache.jackrabbit.oak.upgrade.cli.blob.MissingBlobStoreFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.blob.S3DataStoreFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.StoreFactory;
 import org.slf4j.Logger;
@@ -40,10 +41,13 @@ import static org.apache.jackrabbit.oak.upgrade.cli.parser.OptionParserFactory.D
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.OptionParserFactory.DST_FDS;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.OptionParserFactory.DST_S3;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.OptionParserFactory.DST_S3_CONFIG;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.OptionParserFactory.MISSING_BLOBSTORE;
 
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.JCR2_DIR;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.JCR2_DIR_XML;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.JCR2_XML;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.JDBC;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.MONGO;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.SEGMENT;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.SEGMENT_TAR;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreType.getMatchingType;
@@ -78,6 +82,10 @@ public class StoreArguments {
         if (dst.getType() == SEGMENT) {
             logSegmentVersion();
         }
+
+        if (parser.hasOption(MISSING_BLOBSTORE) && !nodeStoresSupportMissingBlobStore()) {
+            throw new CliArgumentException("This combination of nodestores is not supported by the --" + MISSING_BLOBSTORE, 1);
+        }
     }
 
     public StoreFactory getSrcStore() {
@@ -96,6 +104,8 @@ public class StoreArguments {
             factory = new S3DataStoreFactory(parser.getOption(SRC_S3_CONFIG), parser.getOption(SRC_S3));
         } else if (parser.hasOption(SRC_FDS)) {
             factory = new FileDataStoreFactory(parser.getOption(SRC_FDS));
+        } else if (parser.hasOption(MISSING_BLOBSTORE)) {
+            factory = new MissingBlobStoreFactory();
         } else {
             factory = new DummyBlobStoreFactory();
         }
@@ -111,6 +121,8 @@ public class StoreArguments {
             factory = new S3DataStoreFactory(parser.getOption(DST_S3_CONFIG), parser.getOption(DST_S3));
         } else if (parser.hasOption(DST_FDS)) {
             factory = new FileDataStoreFactory(parser.getOption(DST_FDS));
+        } else if (parser.hasOption(MISSING_BLOBSTORE)) {
+            factory = new MissingBlobStoreFactory();
         } else {
             factory = new DummyBlobStoreFactory();
         }
@@ -230,6 +242,21 @@ public class StoreArguments {
                 lastVersion);
         if (lastVersion == SegmentVersion.V_11) {
             log.info("Requires Oak 1.0.12, 1.1.7 or later");
+        }
+    }
+
+    private boolean nodeStoresSupportMissingBlobStore() {
+        StoreType srcType = src.getType();
+        StoreType dstType = dst.getType();
+
+        if (srcType.isSegment() && dstType.isSegment()) {
+            return true;
+        } else if (srcType == MONGO && (dstType.isSegment() || dstType == MONGO)) {
+            return true;
+        } else if (srcType == JDBC && (dstType.isSegment() || dstType == JDBC)) {
+            return true;
+        } else {
+            return false;
         }
     }
 

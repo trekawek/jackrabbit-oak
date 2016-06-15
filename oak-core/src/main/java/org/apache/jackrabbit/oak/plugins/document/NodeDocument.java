@@ -2042,6 +2042,7 @@ public final class NodeDocument extends Document implements CachedNodeDocument{
             doc.put(k, fromJson(json));
             json.matches(',');
         }
+        doc.seal();
         return doc;
     }
     

@@ -58,7 +58,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.jackrabbit.oak.plugins.blob.ReferenceCollector;
 import org.apache.jackrabbit.oak.segment.SegmentGraph.SegmentGraphVisitor;
 import org.apache.jackrabbit.oak.segment.SegmentId;
-import org.apache.jackrabbit.oak.segment.SegmentTracker;
+import org.apache.jackrabbit.oak.segment.SegmentStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -734,16 +734,16 @@ class TarReader implements Closeable {
     /**
      * Collect the references of those blobs that are reachable from any segment with a
      * generation at or above {@code minGeneration}.
-     * @param tracker
+     * @param store
      * @param collector
      * @param minGeneration
      */
-    void collectBlobReferences(SegmentTracker tracker, ReferenceCollector collector, int minGeneration) {
+    void collectBlobReferences(SegmentStore store, ReferenceCollector collector, int minGeneration) {
         for (TarEntry entry : getEntries()) {
             if (entry.generation() >= minGeneration) {
                 // FIXME OAK-4201: Add an index of binary references in a tar file
                 // Fetch the blob references from the tar index instead reading them from the segment
-                SegmentId id = tracker.getSegmentId(entry.msb(), entry.lsb());
+                SegmentId id = store.newSegmentId(entry.msb(), entry.lsb());
                 id.getSegment().collectBlobReferences(collector);
             }
         }
@@ -789,7 +789,14 @@ class TarReader implements Closeable {
         }
     }
 
-    TarReader sweep(Set<UUID> reclaim) throws IOException {
+    /**
+     * Remove reclaimable segments and collect actually reclaimed segments.
+     * @param reclaim       segments to reclaim
+     * @param reclaimed     actually reclaimed segments
+     * @return              reader resulting from the reclamation process
+     * @throws IOException
+     */
+    TarReader sweep(@Nonnull Set<UUID> reclaim, @Nonnull Set<UUID> reclaimed) throws IOException {
         String name = file.getName();
         log.debug("Cleaning up {}", name);
 
@@ -856,6 +863,7 @@ class TarReader implements Closeable {
                 singletonList(newFile), access.isMemoryMapped());
         if (reader != null) {
             logCleanedSegments(cleaned);
+            reclaimed.addAll(cleaned);
             return reader;
         } else {
             log.warn("Failed to open cleaned up tar file {}", file);

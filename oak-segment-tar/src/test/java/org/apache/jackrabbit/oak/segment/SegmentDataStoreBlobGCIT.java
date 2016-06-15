@@ -23,6 +23,8 @@ import static org.apache.commons.io.FileUtils.byteCountToDisplaySize;
 import static org.apache.jackrabbit.oak.commons.FixturesHelper.Fixture.SEGMENT_MK;
 import static org.apache.jackrabbit.oak.commons.FixturesHelper.getFixtures;
 import static org.apache.jackrabbit.oak.plugins.blob.datastore.SharedDataStoreUtils.SharedStoreRecordType.REPOSITORY;
+import static org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions.defaultGCOptions;
+import static org.apache.jackrabbit.oak.segment.file.FileStoreBuilder.fileStoreBuilder;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
@@ -61,6 +63,7 @@ import org.apache.jackrabbit.oak.plugins.blob.datastore.SharedDataStoreUtils;
 import org.apache.jackrabbit.oak.plugins.identifier.ClusterRepositoryInfo;
 import org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
+import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.blob.GarbageCollectableBlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -84,10 +87,10 @@ public class SegmentDataStoreBlobGCIT {
     FileStore store;
     DataStoreBlobStore blobStore;
     Date startDate;
-    SegmentGCOptions gcOptions = SegmentGCOptions.DEFAULT;
+    SegmentGCOptions gcOptions = defaultGCOptions();
 
     @Rule
-    public TemporaryFolder folder = new TemporaryFolder();
+    public TemporaryFolder folder = new TemporaryFolder(new File("target"));
 
     @BeforeClass
     public static void assumptions() {
@@ -96,7 +99,7 @@ public class SegmentDataStoreBlobGCIT {
 
     protected SegmentNodeStore getNodeStore(BlobStore blobStore) throws IOException {
         if (nodeStore == null) {
-            FileStore.Builder builder = FileStore.builder(getWorkDir())
+            FileStoreBuilder builder = fileStoreBuilder(getWorkDir())
                     .withBlobStore(blobStore)
                     .withMaxFileSize(256)
                     .withCacheSize(64)
@@ -204,6 +207,21 @@ public class SegmentDataStoreBlobGCIT {
         return set;
     }
 
+    private HashSet<String> addNodeSpecialChars() throws Exception {
+        HashSet<String> set = new HashSet<String>();
+        NodeBuilder a = nodeStore.getRoot().builder();
+        int number = 1;
+        for (int i = 0; i < number; i++) {
+            SegmentBlob b = (SegmentBlob) nodeStore.createBlob(randomStream(i, 18432));
+            NodeBuilder n = a.child("cspecial");
+            n.child("q \\%22afdg\\%22").setProperty("x", b);
+            Iterator<String> idIter = blobStore.resolveChunks(b.getBlobId());
+            set.addAll(Lists.newArrayList(idIter));
+        }
+        nodeStore.merge(a, EmptyHook.INSTANCE, CommitInfo.EMPTY);
+        return set;
+    }
+
     private class DataStoreState {
         Set<String> blobsAdded = Sets.newHashSet();
         Set<String> blobsPresent = Sets.newHashSet();
@@ -233,7 +251,17 @@ public class SegmentDataStoreBlobGCIT {
         Set<String> existingAfterGC = gcInternal(86400);
         assertTrue(Sets.symmetricDifference(state.blobsAdded, existingAfterGC).isEmpty());
     }
-    
+
+    @Test
+    public void gcSpecialChar() throws Exception {
+        DataStoreState state = setUp();
+        Set<String> specialCharNodeBlobs = addNodeSpecialChars();
+        state.blobsAdded.addAll(specialCharNodeBlobs);
+        state.blobsPresent.addAll(specialCharNodeBlobs);
+        Set<String> existingAfterGC = gcInternal(0);
+        assertTrue(Sets.symmetricDifference(state.blobsPresent, existingAfterGC).isEmpty());
+    }
+
     @Test
     public void consistencyCheckInit() throws Exception {
         DataStoreState state = setUp();

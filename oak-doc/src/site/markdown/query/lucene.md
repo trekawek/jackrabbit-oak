@@ -17,9 +17,6 @@
 
 ## Lucene Index
 
-**Following details are applicable for Oak release 1.0.9 onwards. For pre 1.0
-.9 release refer to [Pre 1.0.9 Lucene documentation](lucene-old.html)**
-
 Oak supports Lucene based indexes to support both property constraint and full
 text constraints. Depending on the configuration a Lucene index can be used
 to evaluate property constraints, full text constraints, path restrictions
@@ -329,6 +326,7 @@ analyzed
     * _//element(*, app:Asset)[jcr:contains(type, 'image')]_
     * _//element(*, app:Asset)[jcr:contains(jcr:content/metadata/@format, 'image')]_
 
+<a name="ordered"></a>
 ordered
 : If the property is to be used in _order by_ clause to perform sorting then
   this should be set to true. This should be set to true only if the property
@@ -337,7 +335,9 @@ ordered
     * _//element(*, app:Asset)[jcr:contains(type, 'image')] order by
     jcr:content/@jcr:lastModified_
 
-  Refer to [Lucene based Sorting][OAK-2196] for more details
+  Refer to [Lucene based Sorting][OAK-2196] for more details. Note that this is 
+  only supported for single value property. Enabling this on multi value property
+  would cause indexing to fail.
 
 type
 : JCR Property type. Can be one of `Date`, `Boolean`, `Double` , `String` or `Long`. Mostly

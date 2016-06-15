@@ -18,17 +18,16 @@
  */
 package org.apache.jackrabbit.oak.segment;
 
-import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
+import static org.apache.jackrabbit.oak.segment.SegmentWriterBuilder.segmentWriterBuilder;
+import static org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions.defaultGCOptions;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.io.IOException;
 
 import com.google.common.base.Suppliers;
-
 import org.apache.jackrabbit.oak.Oak;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
-import org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions;
 import org.apache.jackrabbit.oak.segment.memory.MemoryStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
@@ -53,9 +52,9 @@ public class CompactorTest {
         NodeStore store = SegmentNodeStoreBuilders.builder(memoryStore).build();
         init(store);
 
-        SegmentWriter writer = SegmentWriters.segmentWriter(memoryStore, LATEST_VERSION, "c", 1);
+        SegmentWriter writer = segmentWriterBuilder("c").withGeneration(1).build(memoryStore);
         Compactor compactor = new Compactor(memoryStore.getReader(), writer,
-                memoryStore.getBlobStore(), Suppliers.ofInstance(false), SegmentGCOptions.DEFAULT);
+                memoryStore.getBlobStore(), Suppliers.ofInstance(false), defaultGCOptions());
         addTestContent(store, 0);
 
         NodeState initial = store.getRoot();
@@ -76,10 +75,9 @@ public class CompactorTest {
         // doesn't have the child named "b".
 
         NodeStore store = SegmentNodeStoreBuilders.builder(memoryStore).build();
-        SegmentWriter writer = SegmentWriters.segmentWriter(memoryStore, LATEST_VERSION, "c", 1);
+        SegmentWriter writer = segmentWriterBuilder("c").withGeneration(1).build(memoryStore);
         Compactor compactor = new Compactor(memoryStore.getReader(), writer,
-                memoryStore.getBlobStore(), Suppliers.ofInstance(true),
-                SegmentGCOptions.DEFAULT);
+                memoryStore.getBlobStore(), Suppliers.ofInstance(true), defaultGCOptions());
         SegmentNodeState sns = compactor.compact(store.getRoot(),
                 addChild(store.getRoot(), "b"), store.getRoot());
         assertFalse(sns.hasChildNode("b"));

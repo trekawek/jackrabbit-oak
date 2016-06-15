@@ -32,11 +32,14 @@ import static java.lang.System.getProperty;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.commons.lang.RandomStringUtils.randomAlphabetic;
+import static org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions.defaultGCOptions;
+import static org.apache.jackrabbit.oak.segment.file.FileStoreBuilder.fileStoreBuilder;
 import static org.junit.Assume.assumeTrue;
 import static org.slf4j.helpers.MessageFormatter.arrayFormat;
 import static org.slf4j.helpers.MessageFormatter.format;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -158,7 +161,7 @@ public class SegmentCompactionIT {
     private volatile long fileStoreSize;
 
     @Rule
-    public TemporaryFolder folder = new TemporaryFolder();
+    public TemporaryFolder folder = new TemporaryFolder(new File("target"));
 
     public synchronized void stop() {
         stopping = true;
@@ -224,8 +227,8 @@ public class SegmentCompactionIT {
             }
         }, 1, 1, SECONDS);
 
-        SegmentGCOptions gcOptions = SegmentGCOptions.DEFAULT.setLockWaitTime(lockWaitTime);
-        fileStore = FileStore.builder(folder.getRoot())
+        SegmentGCOptions gcOptions = defaultGCOptions().setLockWaitTime(lockWaitTime);
+        fileStore = fileStoreBuilder(folder.getRoot())
                 .withMemoryMapping(true)
                 .withGCMonitor(gcMonitor)
                 .withGCOptions(gcOptions)

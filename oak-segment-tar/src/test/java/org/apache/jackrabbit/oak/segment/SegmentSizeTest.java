@@ -20,9 +20,10 @@ package org.apache.jackrabbit.oak.segment;
 
 import static junit.framework.Assert.assertEquals;
 import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE;
-import static org.apache.jackrabbit.oak.segment.SegmentVersion.LATEST_VERSION;
-import static org.apache.jackrabbit.oak.segment.SegmentWriters.segmentWriter;
+import static org.apache.jackrabbit.oak.segment.SegmentWriterBuilder.segmentWriterBuilder;
+import static org.apache.jackrabbit.oak.segment.file.FileStoreBuilder.fileStoreBuilder;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Calendar;
 import java.util.Collections;
@@ -47,13 +48,13 @@ import org.junit.rules.TemporaryFolder;
  */
 public class SegmentSizeTest {
     @Rule
-    public TemporaryFolder folder = new TemporaryFolder();
+    public TemporaryFolder folder = new TemporaryFolder(new File("target"));
 
     private FileStore store;
 
     @Before
     public void setup() throws IOException {
-        store = FileStore.builder(folder.getRoot()).build();
+        store = fileStoreBuilder(folder.getRoot()).build();
     }
 
     @After
@@ -205,7 +206,7 @@ public class SegmentSizeTest {
     }
 
     private void expectSize(int expectedSize, NodeBuilder builder) throws IOException {
-        SegmentWriter writer = segmentWriter(store, LATEST_VERSION, "test", 0);
+        SegmentWriter writer = segmentWriterBuilder("test").build(store);
         RecordId id = writer.writeNode(builder.getNodeState()).getRecordId();
         writer.flush();
         Segment segment = id.getSegment();
@@ -214,7 +215,7 @@ public class SegmentSizeTest {
     }
 
     private void expectAmortizedSize(int expectedSize, NodeBuilder builder) throws IOException {
-        SegmentWriter writer = segmentWriter(store, LATEST_VERSION, "test", 0);
+        SegmentWriter writer = segmentWriterBuilder("test").build(store);
         NodeState state = builder.getNodeState();
         RecordId id1 = writer.writeNode(state).getRecordId();
         RecordId id2 = writer.writeNode(state).getRecordId();
