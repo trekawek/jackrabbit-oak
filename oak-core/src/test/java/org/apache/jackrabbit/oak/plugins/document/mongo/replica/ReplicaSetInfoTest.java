@@ -30,13 +30,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.jackrabbit.oak.plugins.document.Revision;
 import org.apache.jackrabbit.oak.plugins.document.RevisionVector;
-import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo;
 import org.apache.jackrabbit.oak.plugins.document.mongo.replica.ReplicaSetInfo.MemberState;
 import org.apache.jackrabbit.oak.stats.Clock;
 import org.bson.BasicBSONObject;
@@ -66,7 +66,6 @@ public class ReplicaSetInfoTest {
         when(db.getName()).thenReturn("oak-db");
         when(db.getSisterDB(Mockito.anyString())).thenReturn(db);
         replica = new ReplicaSetInfo(clock, db, null, 0l, 0l) {
-
             @Override
             protected BasicDBObject getReplicaStatus() {
                 BasicDBObject obj = new BasicDBObject();
@@ -86,6 +85,7 @@ public class ReplicaSetInfoTest {
                 });
             }
         };
+        replica.hiddenMembers = Collections.emptyList();
     }
 
     @Test

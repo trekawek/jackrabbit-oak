@@ -76,11 +76,11 @@ public class ReplicaSetInfo implements Runnable {
 
     private final List<ReplicaSetInfoListener> listeners = new CopyOnWriteArrayList<ReplicaSetInfoListener>();
 
-    private List<String> hiddenMembers;
-
     private volatile RevisionVector rootRevisions;
 
     volatile long secondariesSafeTimestamp;
+
+    List<String> hiddenMembers;
 
     private volatile boolean stop;
 
