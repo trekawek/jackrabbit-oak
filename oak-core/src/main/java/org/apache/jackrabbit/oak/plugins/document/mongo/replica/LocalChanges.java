@@ -27,6 +27,8 @@ import org.apache.jackrabbit.oak.plugins.document.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.jackrabbit.oak.plugins.document.util.Utils.isGreaterOrEquals;
+
 /**
  * This class maintains a list of local changes (paths+revisions), which
  * shouldn't be read from the secondary Mongo, as we are not sure if they have
@@ -74,12 +76,12 @@ public class LocalChanges implements ReplicaSetInfoListener {
     public void add(String id, Collection<Revision> revs) {
         RevisionVector revsV = new RevisionVector(revs);
         RevisionVector localRootRev = rootRevision;
-        if (localRootRev != null && localRootRev.compareTo(revsV) >= 0) {
+        if (localRootRev != null && isGreaterOrEquals(localRootRev, revsV)) {
             return;
         }
 
         synchronized (this) {
-            if (latestChange != null && latestChange.compareTo(revsV) >= 0) {
+            if (latestChange != null && isGreaterOrEquals(latestChange, revsV)) {
                 return;
             }
 

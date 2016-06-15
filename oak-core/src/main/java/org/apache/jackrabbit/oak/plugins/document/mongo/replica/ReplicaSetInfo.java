@@ -22,6 +22,7 @@ import static com.google.common.collect.Iterables.isEmpty;
 import static com.google.common.collect.Iterables.transform;
 import static com.google.common.collect.Maps.filterKeys;
 import static com.google.common.collect.Sets.union;
+import static org.apache.jackrabbit.oak.plugins.document.util.Utils.isGreaterOrEquals;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -97,7 +98,7 @@ public class ReplicaSetInfo implements Runnable {
         if (localRootRevisions == null) {
             return false;
         } else {
-            return revisions.compareTo(localRootRevisions) <= 0;
+            return isGreaterOrEquals(localRootRevisions, revisions);
         }
     }
 
@@ -255,7 +256,7 @@ public class ReplicaSetInfo implements Runnable {
         Long oldestNotReplicated = null;
         for (Timestamped<RevisionVector> v : secondaries) {
             RevisionVector secRev = v.getValue();
-            if (secRev.compareTo(priRev) == 0) {
+            if (secRev.equals(priRev)) {
                 continue;
             }
 
