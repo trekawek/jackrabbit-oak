@@ -81,12 +81,12 @@ public class ReplicaSetInfo implements Runnable {
 
     private volatile boolean stop;
 
-    public ReplicaSetInfo(Clock clock, DB db, String credentials, long pullFrequencyMillis, long maxReplicationLagMillis) {
+    public ReplicaSetInfo(Clock clock, DB db, String originalMongoUri, long pullFrequencyMillis, long maxReplicationLagMillis) {
         this.clock = clock;
         this.adminDb = db.getSisterDB("admin");
         this.pullFrequencyMillis = pullFrequencyMillis;
         this.maxReplicationLagMillis = maxReplicationLagMillis;
-        this.nodeCollections = new NodeCollectionProvider(credentials, db.getName());
+        this.nodeCollections = new NodeCollectionProvider(originalMongoUri, db.getName());
     }
 
     public void addListener(ReplicaSetInfoListener listener) {

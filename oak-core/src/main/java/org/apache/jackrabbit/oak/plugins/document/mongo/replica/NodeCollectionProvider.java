@@ -19,12 +19,16 @@ package org.apache.jackrabbit.oak.plugins.document.mongo.replica;
 import static com.google.common.collect.Sets.difference;
 
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.mongodb.MongoCredential;
+import com.mongodb.ServerAddress;
 import org.apache.jackrabbit.oak.plugins.document.Collection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,12 +49,12 @@ public class NodeCollectionProvider {
 
     private final Map<String, DBCollection> collections = new ConcurrentHashMap<String, DBCollection>();
 
-    private final String credentials;
+    private final String originalMongoUri;
 
     private final String dbName;
 
-    public NodeCollectionProvider(String credentials, String dbName) {
-        this.credentials = credentials;
+    public NodeCollectionProvider(String originalMongoUri, String dbName) {
+        this.originalMongoUri = originalMongoUri;
         this.dbName = dbName;
     }
 
@@ -78,25 +82,43 @@ public class NodeCollectionProvider {
     }
 
     @SuppressWarnings("deprecation")
-    public DBCollection get(String hostName) throws UnknownHostException {
-        if (collections.containsKey(hostName)) {
-            return collections.get(hostName);
+    public DBCollection get(String hostname) throws UnknownHostException {
+        if (collections.containsKey(hostname)) {
+            return collections.get(hostname);
         }
 
-        StringBuilder uriBuilder = new StringBuilder("mongodb://");
-        if (credentials != null) {
-            uriBuilder.append(credentials).append('@');
+        MongoClient client;
+        if (originalMongoUri == null) {
+            MongoClientURI uri = new MongoClientURI("mongodb://" + hostname);
+            client = new MongoClient(uri);
+        } else {
+            client = prepareClientForHostname(hostname);
         }
-        uriBuilder.append(hostName);
-
-        MongoClientURI uri = new MongoClientURI(uriBuilder.toString());
-        MongoClient client = new MongoClient(uri);
 
         DB db = client.getDB(dbName);
         db.getMongo().slaveOk();
         DBCollection collection = db.getCollection(Collection.NODES.toString());
-        collections.put(hostName, collection);
+        collections.put(hostname, collection);
         return collection;
     }
 
+    private MongoClient prepareClientForHostname(String hostname) throws UnknownHostException {
+        ServerAddress address;
+        if (hostname.contains(":")) {
+            String[] hostSplit = hostname.split(":");
+            if (hostSplit.length != 2) {
+                throw new IllegalArgumentException("Not a valid hostname: " + hostname);
+            }
+            address = new ServerAddress(hostSplit[0], Integer.parseInt(hostSplit[1]));
+        } else {
+            address = new ServerAddress(hostname);
+        }
+
+        MongoClientURI originalUri = new MongoClientURI(originalMongoUri);
+        List<MongoCredential> credentialList = new ArrayList<MongoCredential>(1);
+        if (originalUri.getCredentials() != null) {
+            credentialList.add(originalUri.getCredentials());
+        }
+        return new MongoClient(address, credentialList, originalUri.getOptions());
+    }
 }
