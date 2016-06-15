@@ -65,7 +65,7 @@ public class ReplicaSetInfoTest {
         DB db = mock(DB.class);
         when(db.getName()).thenReturn("oak-db");
         when(db.getSisterDB(Mockito.anyString())).thenReturn(db);
-        replica = new ReplicaSetInfo(clock, db, null, 0l, 0l) {
+        replica = new ReplicaSetInfo(clock, db, null, 0l, 0l, null) {
             @Override
             protected BasicDBObject getReplicaStatus() {
                 BasicDBObject obj = new BasicDBObject();

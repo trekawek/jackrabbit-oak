@@ -229,7 +229,7 @@ public class MongoDocumentStore implements DocumentStore {
 
         maxReplicationLagMillis = builder.getMaxReplicationLagMillis();
 
-        replicaInfo = new ReplicaSetInfo(clock, db, builder.getMongoUri(), estimationPullFrequencyMS, maxReplicationLagMillis);
+        replicaInfo = new ReplicaSetInfo(clock, db, builder.getMongoUri(), estimationPullFrequencyMS, maxReplicationLagMillis, builder.getExecutor());
         Thread replicaInfoThread = new Thread(replicaInfo, "MongoDocumentStore replica set info provider (" + builder.getClusterId() + ")");
         replicaInfoThread.setDaemon(true);
         replicaInfoThread.start();

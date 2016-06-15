@@ -31,11 +31,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.Set;
+import java.util.concurrent.FutureTask;
 
 import javax.annotation.Nullable;
 
@@ -66,7 +67,7 @@ public class ReplicaSetInfo implements Runnable {
 
     private final long maxReplicationLagMillis;
 
-    private final ExecutorService executors = Executors.newFixedThreadPool(5);
+    private final Executor executor;
 
     private final NodeCollectionProvider nodeCollections;
 
@@ -84,7 +85,8 @@ public class ReplicaSetInfo implements Runnable {
 
     private volatile boolean stop;
 
-    public ReplicaSetInfo(Clock clock, DB db, String originalMongoUri, long pullFrequencyMillis, long maxReplicationLagMillis) {
+    public ReplicaSetInfo(Clock clock, DB db, String originalMongoUri, long pullFrequencyMillis, long maxReplicationLagMillis, Executor executor) {
+        this.executor = executor;
         this.clock = clock;
         this.adminDb = db.getSisterDB("admin");
         this.pullFrequencyMillis = pullFrequencyMillis;
@@ -123,7 +125,6 @@ public class ReplicaSetInfo implements Runnable {
         synchronized (stopMonitor) {
             stop = true;
             stopMonitor.notify();
-            executors.shutdown();
         }
     }
 
@@ -329,7 +330,10 @@ public class ReplicaSetInfo implements Runnable {
     protected Map<String, Timestamped<RevisionVector>> getRootRevisions(Iterable<String> hosts) {
         Map<String, Future<Timestamped<RevisionVector>>> futures = new HashMap<String, Future<Timestamped<RevisionVector>>>();
         for (final String hostName : hosts) {
-            futures.put(hostName, executors.submit(new GetRootRevisionsCallable(clock, hostName, nodeCollections)));
+            Callable<Timestamped<RevisionVector>> callable = new GetRootRevisionsCallable(clock, hostName, nodeCollections);
+            FutureTask<Timestamped<RevisionVector>> futureTask = new FutureTask<Timestamped<RevisionVector>>(callable);
+            futures.put(hostName, futureTask);
+            executor.execute(futureTask);
         }
 
         Map<String, Timestamped<RevisionVector>> result = new HashMap<String, Timestamped<RevisionVector>>();
