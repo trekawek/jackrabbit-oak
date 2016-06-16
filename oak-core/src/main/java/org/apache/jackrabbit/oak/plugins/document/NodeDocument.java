@@ -1329,7 +1329,12 @@ public final class NodeDocument extends Document implements CachedNodeDocument{
         LOG.trace("get previous document {}", prevId);
         NodeDocument doc = store.find(Collection.NODES, prevId);
         if (doc == null) {
-            doc = store.find(Collection.NODES, prevId, 0); // force the primary
+            // In case secondary read preference is used and node is not found
+            // then check with primary again as it might happen that node document has not been
+            // replicated. We know that document with such an id must exist but possibly dut to
+            // replication lag it has not reached to secondary. So in that case read again
+            // from primary
+            doc = store.find(Collection.NODES, prevId, 0);
         }
         return doc;
     }
