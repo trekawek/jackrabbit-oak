@@ -404,9 +404,16 @@ public class DocumentNodeState extends AbstractDocumentNodeState implements Cach
 
     @CheckForNull
     private AbstractDocumentNodeState getChildNodeDoc(String childNodeName){
-        AbstractDocumentNodeState secondaryState = getSecondaryNodeState();
-        if (secondaryState != null){
-            NodeState result = secondaryState.getChildNode(childNodeName);
+        if (cachedSecondaryState == null) {
+            String childPath = PathUtils.concat(getPath(), childNodeName);
+            AbstractDocumentNodeState secondaryNodeState = getSecondaryNodeState(childPath);
+            if (secondaryNodeState == null) {
+                return store.getNode(childPath, lastRevision);
+            } else {
+                return secondaryNodeState;
+            }
+        } else {
+            NodeState result = cachedSecondaryState.getChildNode(childNodeName);
             //If given child node exist then cast it and return
             //else return null
             if (result.exists()){
@@ -414,7 +421,11 @@ public class DocumentNodeState extends AbstractDocumentNodeState implements Cach
             }
             return null;
         }
-        return store.getNode(PathUtils.concat(getPath(), childNodeName), lastRevision);
+    }
+
+    @CheckForNull
+    private AbstractDocumentNodeState getSecondaryNodeState(String path) {
+        return store.getSecondaryNodeState(path, rootRevision, lastRevision);
     }
 
     @CheckForNull
