@@ -76,7 +76,18 @@ public class SegmentTarNodeStoreContainer implements NodeStoreContainer {
 
     @Override
     public void clean() throws IOException {
-        FileUtils.deleteDirectory(directory);
+        for (int i = 0; i < 10; i++) {
+            try {
+                FileUtils.deleteDirectory(directory);
+            } catch(IOException e) {
+                try {
+                    Thread.sleep(100);
+                } catch(InterruptedException ie) {
+                    throw e;
+                }
+            }
+            break;
+        }
         if (blob != null) {
             blob.clean();
         }
