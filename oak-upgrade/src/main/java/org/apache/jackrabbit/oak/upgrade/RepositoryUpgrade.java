@@ -32,6 +32,7 @@ import static org.apache.jackrabbit.oak.spi.security.privilege.PrivilegeConstant
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.OptionParserFactory.SKIP_NAME_CHECK;
 import static org.apache.jackrabbit.oak.upgrade.nodestate.FilteringNodeState.ALL;
 import static org.apache.jackrabbit.oak.upgrade.nodestate.FilteringNodeState.NONE;
+import static org.apache.jackrabbit.oak.upgrade.nodestate.NameFilteringNodeState.isNameTooLong;
 import static org.apache.jackrabbit.oak.upgrade.nodestate.NodeStateCopier.copyProperties;
 
 import java.io.File;
@@ -134,15 +135,19 @@ import org.apache.jackrabbit.spi.QValueConstraint;
 import org.apache.jackrabbit.spi.commons.conversion.DefaultNamePathResolver;
 import org.apache.jackrabbit.spi.commons.conversion.NamePathResolver;
 import org.apache.jackrabbit.spi.commons.value.ValueFormat;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.index.DocsEnum;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermDocs;
-import org.apache.lucene.index.TermEnum;
+import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.BytesRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.jackrabbit.oak.upgrade.version.VersionCopier.copyVersionStorage;
 import static org.apache.jackrabbit.oak.upgrade.version.VersionHistoryUtil.getVersionStorage;
+import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
 public class RepositoryUpgrade {
 
@@ -997,24 +1002,28 @@ public class RepositoryUpgrade {
             if (reader == null) {
                 return;
             }
-            TermEnum terms = reader.terms(new Term(FieldNames.LOCAL_NAME));
-            while (terms.next()) {
-                Term t = terms.term();
-                if (!FieldNames.LOCAL_NAME.equals(t.field())) {
-                    continue;
-                }
-                String name = t.text();
-                if (NameFilteringNodeState.isNameTooLong(name)) {
-                    TermDocs docs = reader.termDocs(t);
-                    if (docs.next()) {
-                        int docId = docs.doc();
-                        String uuid = reader.document(docId).get(FieldNames.UUID);
+            TermsEnum terms = MultiFields.getTerms(reader, FieldNames.LOCAL_NAME).iterator(null);
+            if (terms == null) {
+                return;
+            }
+            BytesRef text;
+            Bits liveDocs = MultiFields.getLiveDocs(reader);
+            DocsEnum docs = null;
+            while((text = terms.next()) != null) {
+                if (isNameTooLong(text.utf8ToString())) {
+                    docs = terms.docs(liveDocs, docs);
+                    int docId;
+                    while ((docId = docs.nextDoc()) != NO_MORE_DOCS) {
+                        longNameFound = true;
+
+                        Document doc = reader.document(docId);
+                        String uuid = doc.get(FieldNames.UUID);
                         Node n = session.getNodeByIdentifier(uuid);
                         logger.warn("Name too long: {}", n.getPath());
-                        longNameFound = true;
                     }
                 }
             }
+
         } catch (IOException e) {
             throw new RepositoryException(e);
         } finally {
@@ -1025,6 +1034,7 @@ public class RepositoryUpgrade {
             throw new RepositoryException("Node with a long name has been found.");
         }
     }
+
 
     static class LoggingCompositeHook implements CommitHook {
         private final Collection<CommitHook> hooks;
