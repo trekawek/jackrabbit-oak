@@ -25,6 +25,7 @@ import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.commons.PathUtils;
+import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
@@ -47,7 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -100,9 +100,9 @@ public class CompositeNodeStore implements NodeStore, Observable {
 
     final CompositionContext ctx;
 
-    private final List<Observer> observers = new CopyOnWriteArrayList<>();
-
     private final Lock mergeLock;
+
+    private final ChangeDispatcher dispatcher;
 
     // visible for testing only
     CompositeNodeStore(MountInfoProvider mip, NodeStore globalStore, List<MountedNodeStore> nonDefaultStore) {
@@ -113,6 +113,7 @@ public class CompositeNodeStore implements NodeStore, Observable {
         this.ctx = new CompositionContext(mip, globalStore, nonDefaultStore);
         this.ignoreReadOnlyWritePaths = new TreeSet<>(ignoreReadOnlyWritePaths);
         this.mergeLock = new ReentrantLock();
+        this.dispatcher = new ChangeDispatcher(getRoot());
     }
 
     @Override
@@ -136,10 +137,11 @@ public class CompositeNodeStore implements NodeStore, Observable {
 
         assertNoChangesOnReadOnlyMounts(nodeBuilder);
 
+        CompositeNodeState newRoot;
         mergeLock.lock();
         try {
-            // merge the global builder and apply the commit hooks within
             Map<MountedNodeStore, NodeState> resultStates = newHashMap();
+            // merge the global builder and apply the commit hooks within
             MountedNodeStore globalStore = ctx.getGlobalStore();
             CommitHookEnhancer hookEnhancer = new CommitHookEnhancer(commitHook, ctx, nodeBuilder.getBuilders());
             NodeState globalResult = globalStore.getNodeStore().merge(nodeBuilder.getBuilders().get(globalStore), hookEnhancer, info);
@@ -161,15 +163,12 @@ public class CompositeNodeStore implements NodeStore, Observable {
                 NodeState partialState = mns.getNodeStore().merge(partialBuilder, EmptyHook.INSTANCE, info);
                 resultStates.put(mns, partialState);
             }
-
-            CompositeNodeState newRoot = ctx.createRootNodeState(resultStates);
-            for (Observer observer : observers) {
-                observer.contentChanged(newRoot, info);
-            }
-            return newRoot;
+            newRoot = ctx.createRootNodeState(resultStates);
         } finally {
             mergeLock.unlock();
         }
+        dispatcher.contentChanged(newRoot, info);
+        return newRoot;
    }
 
     private void assertNoChangesOnReadOnlyMounts(CompositeNodeBuilder nodeBuilder) throws CommitFailedException {
@@ -422,14 +421,7 @@ public class CompositeNodeStore implements NodeStore, Observable {
 
     @Override
     public Closeable addObserver(final Observer observer) {
-        observer.contentChanged(getRoot(), CommitInfo.EMPTY_EXTERNAL);
-        observers.add(observer);
-        return new Closeable() {
-            @Override
-            public void close() throws IOException {
-                observers.remove(observer);
-            }
-        };
+        return dispatcher.addObserver(observer);
     }
 
     private Set<String> getIgnoredPaths(Set<String> paths) {
