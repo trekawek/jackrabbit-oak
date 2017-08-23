@@ -393,6 +393,12 @@ public class DocumentNodeStoreService {
     public static final String PROP_ROLE = "role";
     private static final String PROP_JOURNAL_GC_INTERVAL_MILLIS = "journalGCInterval";
 
+    @Property(boolValue = false,
+            label = "Use docStore cache prefetching",
+            description = "Property indicating that the DocumentStore cache prefetching should be enabled"
+    )
+    public static final String PROP_CACHE_PREFETCHING = "cachePrefetching";
+
     private static enum DocumentStoreType {
         MONGO, RDB;
 
@@ -483,6 +489,7 @@ public class DocumentNodeStoreService {
         int cacheStackMoveDistance = toInteger(prop(PROP_CACHE_STACK_MOVE_DISTANCE), DEFAULT_CACHE_STACK_MOVE_DISTANCE);
         boolean bundlingDisabled = toBoolean(prop(PROP_BUNDLING_DISABLED), DEFAULT_BUNDLING_DISABLED);
         boolean prefetchExternalChanges = toBoolean(prop(PROP_PREFETCH_EXTERNAL_CHANGES), false);
+        boolean docStoreCachePrefetching = toBoolean(prop(PROP_CACHE_PREFETCHING), false);
         int updateLimit = toInteger(prop(PROP_UPDATE_LIMIT), DocumentMK.UPDATE_LIMIT);
         long journalGCMaxAge = toLong(context.getProperties().get(PROP_JOURNAL_GC_MAX_AGE_MILLIS), DEFAULT_JOURNAL_GC_MAX_AGE_MILLIS);
         DocumentMK.Builder mkBuilder =
@@ -522,7 +529,8 @@ public class DocumentNodeStoreService {
                 }).
                 setPrefetchExternalChanges(prefetchExternalChanges).
                 setUpdateLimit(updateLimit).
-                setJournalGCMaxAge(journalGCMaxAge);
+                setJournalGCMaxAge(journalGCMaxAge).
+                setDocStoreCachePrefetching(docStoreCachePrefetching);
 
         if (!Strings.isNullOrEmpty(persistentCache)) {
             mkBuilder.setPersistentCache(persistentCache);

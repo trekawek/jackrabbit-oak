@@ -536,6 +536,9 @@ public final class DocumentNodeStore
         } else {
             readOnlyMode = false;
         }
+        if (builder.getDocStoreCachePrefetching()) {
+            s = new PrefetchingDocumentStoreWrapper(s, builder.getPrefetchingAlgorithm());
+        }
         checkVersion(s, readOnlyMode);
         this.executor = builder.getExecutor();
         this.clock = builder.getClock();

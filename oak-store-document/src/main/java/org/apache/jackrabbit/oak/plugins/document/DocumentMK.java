@@ -71,6 +71,8 @@ import org.apache.jackrabbit.oak.plugins.blob.CachingBlobStore;
 import org.apache.jackrabbit.oak.plugins.blob.ReferencedBlob;
 import org.apache.jackrabbit.oak.plugins.document.DocumentNodeState.Children;
 import org.apache.jackrabbit.oak.plugins.document.cache.NodeDocumentCache;
+import org.apache.jackrabbit.oak.plugins.document.cache.prefetch.LoggingPrefetchAlgorithm;
+import org.apache.jackrabbit.oak.plugins.document.cache.prefetch.PrefetchAlgorithm;
 import org.apache.jackrabbit.oak.plugins.document.locks.NodeDocumentLocks;
 import org.apache.jackrabbit.oak.plugins.document.memory.MemoryDocumentStore;
 import org.apache.jackrabbit.oak.plugins.document.mongo.MongoBlobReferenceIterator;
@@ -584,6 +586,7 @@ public class DocumentMK {
         private long maxReplicationLagMillis = TimeUnit.HOURS.toMillis(6);
         private boolean disableBranches;
         private boolean prefetchExternalChanges;
+        private boolean docStoreCachePrefetching;
         private Clock clock = Clock.SIMPLE;
         private Executor executor;
         private String persistentCacheURI = DEFAULT_PERSISTENT_CACHE_URI;
@@ -1173,6 +1176,19 @@ public class DocumentMK {
             return gcMonitor;
         }
 
+        public Builder setDocStoreCachePrefetching(boolean docStoreCachePrefetching) {
+            this.docStoreCachePrefetching = docStoreCachePrefetching;
+            return this;
+        }
+
+        public boolean getDocStoreCachePrefetching() {
+            return docStoreCachePrefetching;
+        }
+
+        public PrefetchAlgorithm getPrefetchingAlgorithm() {
+            return new LoggingPrefetchAlgorithm();
+        }
+
         VersionGCSupport createVersionGCSupport() {
             DocumentStore store = getDocumentStore();
             if (store instanceof MongoDocumentStore) {
@@ -1381,7 +1397,6 @@ public class DocumentMK {
                 blobStoreCacheStats = ((CachingBlobStore) blobStore).getCacheStats();
             }
         }
-
     }
 
 }
