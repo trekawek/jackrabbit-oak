@@ -142,7 +142,7 @@ public class JournalReaderTest {
         }
     }
 
-    private JournalReader createJournalReader(String s) throws IOException {
+    protected JournalReader createJournalReader(String s) throws IOException {
         File journalFile = folder.newFile("jrt");
         write(journalFile, s);
         return new JournalReader(new LocalJournalFile(journalFile));

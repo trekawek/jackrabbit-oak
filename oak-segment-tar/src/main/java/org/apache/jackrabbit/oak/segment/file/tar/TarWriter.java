@@ -98,13 +98,13 @@ class TarWriter implements Closeable {
      * Used for maintenance operations (GC or recovery) via the TarReader and
      * tests
      */
-    TarWriter(SegmentArchiveManager archiveManager, String archiveName) {
+    TarWriter(SegmentArchiveManager archiveManager, String archiveName) throws IOException {
         this.archiveManager = archiveManager;
         this.archive = archiveManager.create(archiveName);
         this.writeIndex = -1;
     }
 
-    TarWriter(SegmentArchiveManager archiveManager, int writeIndex) {
+    TarWriter(SegmentArchiveManager archiveManager, int writeIndex) throws IOException {
         this.archiveManager = archiveManager;
         this.archive = archiveManager.create(format(FILE_NAME_FORMAT, writeIndex, "a"));
         this.writeIndex = writeIndex;

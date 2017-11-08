@@ -45,7 +45,7 @@ public class GcJournalTest {
     @Rule
     public final TemporaryFolder segmentFolder = new TemporaryFolder(new File("target"));
 
-    private SegmentNodeStorePersistence getPersistence() throws IOException {
+    protected SegmentNodeStorePersistence getPersistence() throws Exception {
         return new TarPersistence(segmentFolder.getRoot());
     }
 
@@ -107,7 +107,7 @@ public class GcJournalTest {
     }
 
     @Test
-    public void testReadOak16GCLog() throws IOException {
+    public void testReadOak16GCLog() throws Exception {
         createOak16GCLog();
         GCJournal gcJournal = new GCJournal(getPersistence().getGCJournalFile());
         GCJournalEntry entry = gcJournal.read();
@@ -120,7 +120,7 @@ public class GcJournalTest {
     }
 
     @Test
-    public void testUpdateOak16GCLog() throws IOException {
+    public void testUpdateOak16GCLog() throws Exception {
         createOak16GCLog();
         GCJournal gcJournal = new GCJournal(getPersistence().getGCJournalFile());
         gcJournal.persist(75, 300, newGCGeneration(3, 0, false), 125, "bar");

@@ -50,7 +50,7 @@ import org.junit.rules.TemporaryFolder;
 
 public class TarFilesTest {
 
-    private static final int MAX_FILE_SIZE = 512 * 1024;
+    public static final int MAX_FILE_SIZE = 512 * 1024;
 
     private static final Random random = new Random();
 
@@ -63,7 +63,7 @@ public class TarFilesTest {
     @Rule
     public TemporaryFolder folder = new TemporaryFolder(new File("target"));
 
-    private TarFiles tarFiles;
+    protected TarFiles tarFiles;
 
     @Before
     public void setUp() throws Exception {

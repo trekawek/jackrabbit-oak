@@ -65,7 +65,7 @@ public interface SegmentArchiveManager {
      * @return the archive writer
      */
     @Nonnull
-    SegmentArchiveWriter create(@Nonnull String archiveName);
+    SegmentArchiveWriter create(@Nonnull String archiveName) throws IOException;
 
     /**
      * Deletes the archive if exists.

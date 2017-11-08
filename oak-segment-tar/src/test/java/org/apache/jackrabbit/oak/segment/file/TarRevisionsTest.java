@@ -85,7 +85,7 @@ public class TarRevisionsTest {
 
     @Test(expected = IllegalStateException.class)
     public void unboundRevisions() throws IOException {
-        try (TarRevisions tarRevisions = new TarRevisions(new TarPersistence(folder.getRoot()))) {
+        try (TarRevisions tarRevisions = new TarRevisions(getPersistence())) {
             tarRevisions.getHead();
         }
     }
@@ -156,7 +156,7 @@ public class TarRevisionsTest {
 
     @Test
     public void concurrentSetHeadFromFunction()
-    throws IOException, InterruptedException, ExecutionException, TimeoutException {
+    throws InterruptedException, ExecutionException, TimeoutException {
         ListeningExecutorService executor = listeningDecorator(newFixedThreadPool(2));
         try {
             ListenableFuture<Boolean> t1 = executor.submit(new Callable<Boolean>() {

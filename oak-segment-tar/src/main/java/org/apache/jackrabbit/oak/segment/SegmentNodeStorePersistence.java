@@ -34,9 +34,9 @@ public interface SegmentNodeStorePersistence {
 
     JournalFile getJournalFile();
 
-    GCJournalFile getGCJournalFile();
+    GCJournalFile getGCJournalFile() throws IOException;
 
-    ManifestFile getManifestFile();
+    ManifestFile getManifestFile() throws IOException;
 
     RepositoryLock lockRepository() throws IOException;
 

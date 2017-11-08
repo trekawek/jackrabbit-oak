@@ -85,7 +85,7 @@ public abstract class AbstractFileStore implements SegmentStore, Closeable {
      */
     private static final int MAX_STORE_VERSION = 2;
 
-    static ManifestChecker newManifestChecker(SegmentNodeStorePersistence persistence, boolean strictVersionCheck) {
+    static ManifestChecker newManifestChecker(SegmentNodeStorePersistence persistence, boolean strictVersionCheck) throws IOException {
         return ManifestChecker.newManifestChecker(
                 persistence.getManifestFile(),
                 persistence.segmentFilesExist(),
