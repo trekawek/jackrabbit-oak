@@ -16,23 +16,38 @@
  */
 package org.apache.jackrabbit.oak.segment.azure;
 
+import java.io.IOException;
+import java.net.Socket;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
+import org.junit.Assume;
 
 public final class AzureContainerFactory {
+
+    private static final boolean LOCAL_CLOUD_STORAGE_AVAILABLE = isMockCloudStorageAvailable();
 
     private AzureContainerFactory() {
     }
 
     public static CloudBlobContainer getContainer(String name) throws URISyntaxException, StorageException, InvalidKeyException {
+        Assume.assumeTrue(LOCAL_CLOUD_STORAGE_AVAILABLE);
+
         CloudStorageAccount cloud = CloudStorageAccount.parse("DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;");
         CloudBlobContainer container = cloud.createCloudBlobClient().getContainerReference(name);
         container.deleteIfExists();
         container.create();
         return container;
+    }
+
+    private static boolean isMockCloudStorageAvailable() {
+        try (Socket ignored = new Socket("localhost", 10000)) {
+            return true;
+        } catch (IOException ignored) {
+            return false;
+        }
     }
 }

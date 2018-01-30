@@ -66,7 +66,7 @@ public class TarRevisionsTest {
         return folder.getRoot();
     }
 
-    protected SegmentNodeStorePersistence getPersistence() {
+    protected SegmentNodeStorePersistence getPersistence() throws IOException {
         return new TarPersistence(getFileStoreFolder());
     }
 
@@ -80,7 +80,10 @@ public class TarRevisionsTest {
 
     @After
     public void tearDown() {
-        store.close();
+        if (store != null) {
+            store.close();
+            store = null;
+        }
     }
 
     @Test(expected = IllegalStateException.class)

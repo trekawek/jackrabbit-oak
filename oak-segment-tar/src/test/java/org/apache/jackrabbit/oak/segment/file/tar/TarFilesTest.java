@@ -80,7 +80,10 @@ public class TarFilesTest {
 
     @After
     public void tearDown() throws Exception {
-        tarFiles.close();
+        if (tarFiles != null) {
+            tarFiles.close();
+            tarFiles = null;
+        }
     }
 
     private void writeSegment(UUID id) throws IOException {
