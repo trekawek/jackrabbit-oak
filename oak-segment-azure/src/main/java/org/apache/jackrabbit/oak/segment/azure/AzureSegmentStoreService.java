@@ -23,6 +23,7 @@ import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.ConfigurationPolicy;
 import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Property;
 import org.apache.jackrabbit.oak.commons.PropertiesUtil;
@@ -44,11 +45,10 @@ import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.A
 import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_CONTAINER_NAME;
 import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ROOT_PATH;
 
-@Component(
-        label = "Apache Jackrabbit Oak Azure Segment Store",
-        name = "org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService",
+@Component(policy = ConfigurationPolicy.REQUIRE,
         metatype = true,
-        ds = false
+        label = "Oak Azure Segment Store",
+        description = "Azure backend for the Oak Segment Node Store"
 )
 public class AzureSegmentStoreService {
 
