@@ -18,17 +18,19 @@
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <parent>
-        <artifactId>oak-parent</artifactId>
-        <groupId>org.apache.jackrabbit</groupId>
-        <version>1.8.1-SNAPSHOT</version>
-        <relativePath>../oak-parent/pom.xml</relativePath>
-    </parent>
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>org.apache.jackrabbit</groupId>
+        <artifactId>oak-parent</artifactId>
+        <version>1.8.2-SNAPSHOT</version>
+        <relativePath>../oak-parent/pom.xml</relativePath>
+    </parent>
+
     <artifactId>oak-segment-azure</artifactId>
-    <name>Oak Azure Segment Store</name>
     <packaging>bundle</packaging>
+
+    <name>Oak Segment Azure</name>
 
     <build>
         <plugins>
@@ -83,17 +85,7 @@
         </dependency>
         <dependency>
             <groupId>org.apache.felix</groupId>
-            <artifactId>org.apache.felix.jaas</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.felix</groupId>
             <artifactId>org.apache.felix.scr.annotations</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.annotation</artifactId>
             <scope>provided</scope>
         </dependency>
 
@@ -102,11 +94,13 @@
             <groupId>org.apache.jackrabbit</groupId>
             <artifactId>oak-segment-tar</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.jackrabbit</groupId>
             <artifactId>oak-store-spi</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Azure Blob Storage dependency -->
