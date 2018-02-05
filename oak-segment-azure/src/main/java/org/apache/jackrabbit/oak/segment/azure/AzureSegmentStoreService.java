@@ -41,7 +41,7 @@ import java.util.Properties;
 import static org.apache.jackrabbit.oak.osgi.OsgiUtil.lookupConfigurationThenFramework;
 import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ACCESS_KEY;
 import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ACCOUNT_NAME;
-import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_BLOB_ENDPOINT;
+import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_CONNECTION_URL;
 import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_CONTAINER_NAME;
 import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ROOT_PATH;
 
@@ -76,9 +76,10 @@ public class AzureSegmentStoreService {
     public static final String AZURE_ROOT_PATH = "azure.rootPath";
 
     @Property(
-            label = "Azure blob endpoint (optional)"
+            label = "Azure connection URL (optional)",
+            description = "The connection URL to be used (it overrides all the other Azure properties)."
     )
-    public static final String AZURE_BLOB_ENDPOINT = "azure.blobEndpoint";
+    public static final String AZURE_CONNECTION_URL = "azure.connectionUrl";
 
     private ServiceRegistration registration;
 
@@ -103,11 +104,12 @@ public class AzureSegmentStoreService {
     private static SegmentNodeStorePersistence createAzurePersistence(Configuration configuration) throws IOException {
         try {
             StringBuilder connectionString = new StringBuilder();
-            connectionString.append("DefaultEndpointsProtocol=http;");
-            connectionString.append("AccountName=").append(configuration.getAzureAccountName()).append(';');
-            connectionString.append("AccountKey=").append(configuration.getAzureAccessKey()).append(';');
-            if (configuration.getAzureBlobEndpoint() != null) {
-                connectionString.append("BlobEndpoint=").append(configuration.getAzureBlobEndpoint()).append(';');
+            if (configuration.getAzureConnectionUrl() != null) {
+                connectionString.append(configuration.getAzureConnectionUrl());
+            } else {
+                connectionString.append("DefaultEndpointsProtocol=https;");
+                connectionString.append("AccountName=").append(configuration.getAzureAccountName()).append(';');
+                connectionString.append("AccountKey=").append(configuration.getAzureAccessKey()).append(';');
             }
             log.info("Connection string: {}", connectionString.toString());
             CloudStorageAccount cloud = CloudStorageAccount.parse(connectionString.toString());
@@ -154,8 +156,8 @@ class Configuration {
 
     String getAzureRootPath() { return PropertiesUtil.toString(property(AZURE_ROOT_PATH), "/oak"); }
 
-    String getAzureBlobEndpoint() {
-        return property(AZURE_BLOB_ENDPOINT);
+    String getAzureConnectionUrl() {
+        return property(AZURE_CONNECTION_URL);
     }
 
 }
