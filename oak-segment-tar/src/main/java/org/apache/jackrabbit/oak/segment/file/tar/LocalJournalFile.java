@@ -19,7 +19,7 @@
 package org.apache.jackrabbit.oak.segment.file.tar;
 
 import org.apache.commons.io.input.ReversedLinesFileReader;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 
 import java.io.File;
 import java.io.IOException;

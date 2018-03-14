@@ -20,7 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file;
 
 import static com.google.common.collect.Lists.newArrayList;
-import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGeneration;
+import static org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration.newGCGeneration;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
@@ -33,7 +33,7 @@ import java.util.List;
 
 import org.apache.jackrabbit.oak.commons.IOUtils;
 import org.apache.jackrabbit.oak.segment.RecordId;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.file.GCJournal.GCJournalEntry;
 import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
 import org.junit.Rule;

@@ -36,7 +36,7 @@ import javax.annotation.Nonnull;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.Monitor;
 import com.google.common.util.concurrent.Monitor.Guard;
-import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
 
 /**
  * This {@link WriteOperationHandler} uses a pool of {@link SegmentBufferWriter}s,

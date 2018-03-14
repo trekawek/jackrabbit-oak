@@ -20,7 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file.tar;
 
 import static com.google.common.base.Charsets.UTF_8;
-import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGeneration;
+import static org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration.newGCGeneration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -29,7 +29,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
 
-import org.apache.jackrabbit.oak.segment.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;

@@ -18,7 +18,7 @@
  */
 package org.apache.jackrabbit.oak.segment.file;
 
-import org.apache.jackrabbit.oak.segment.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 
 import java.io.BufferedWriter;
 import java.io.File;

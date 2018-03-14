@@ -16,7 +16,7 @@
  *
  */
 
-package org.apache.jackrabbit.oak.segment.file.tar;
+package org.apache.jackrabbit.oak.segment.spi.persistence;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 

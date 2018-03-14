@@ -51,8 +51,9 @@ import javax.annotation.Nonnull;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
-import org.apache.jackrabbit.oak.segment.SegmentArchiveManager;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileReaper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

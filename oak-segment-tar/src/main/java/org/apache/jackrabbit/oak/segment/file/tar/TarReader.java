@@ -24,7 +24,7 @@ import static com.google.common.collect.Maps.newLinkedHashMap;
 import static com.google.common.collect.Maps.newTreeMap;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.util.Collections.singletonList;
-import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGeneration;
+import static org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration.newGCGeneration;
 
 import java.io.Closeable;
 import java.io.File;
@@ -44,11 +44,13 @@ import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 
 import com.google.common.base.Predicate;
-import org.apache.jackrabbit.oak.segment.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.BinaryReferencesIndex;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.InvalidBinaryReferencesIndexException;
 import org.apache.jackrabbit.oak.segment.file.tar.index.Index;
 import org.apache.jackrabbit.oak.segment.file.tar.index.IndexEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.TarEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
