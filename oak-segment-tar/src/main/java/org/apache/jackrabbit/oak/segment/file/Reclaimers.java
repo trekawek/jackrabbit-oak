@@ -23,7 +23,7 @@ import javax.annotation.Nonnull;
 
 import com.google.common.base.Predicate;
 import org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions.GCType;
-import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
 
 /**
  * Helper class exposing static factories for reclaimers. A reclaimer

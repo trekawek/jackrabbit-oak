@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.jackrabbit.oak.segment.file.tar;
+package org.apache.jackrabbit.oak.segment.spi.persistence;
 
 import java.util.Comparator;
 
@@ -29,7 +29,7 @@ public class TarEntry {
     /** Size in bytes a tar entry takes up in the tar file */
     static final int SIZE = 33;
 
-    static final Comparator<TarEntry> OFFSET_ORDER = new Comparator<TarEntry>() {
+    public static final Comparator<TarEntry> OFFSET_ORDER = new Comparator<TarEntry>() {
         @Override
         public int compare(TarEntry a, TarEntry b) {
             if (a.offset > b.offset) {
@@ -76,7 +76,7 @@ public class TarEntry {
         return size;
     }
 
-    GCGeneration generation() {
+    public GCGeneration generation() {
         return generation;
     }
 

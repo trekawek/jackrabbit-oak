@@ -16,8 +16,8 @@
  */
 package org.apache.jackrabbit.oak.segment.azure.queue;
 
-import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
-import org.apache.jackrabbit.oak.segment.file.tar.TarEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.TarEntry;
 import org.junit.After;
 import org.junit.Test;
 

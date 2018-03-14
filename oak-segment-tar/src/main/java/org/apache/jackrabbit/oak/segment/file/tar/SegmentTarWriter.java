@@ -19,7 +19,9 @@
 package org.apache.jackrabbit.oak.segment.file.tar;
 
 import com.google.common.base.Stopwatch;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.persistence.TarEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

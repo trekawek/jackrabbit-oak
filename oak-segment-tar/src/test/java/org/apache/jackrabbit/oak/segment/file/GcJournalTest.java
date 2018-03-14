@@ -20,7 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file;
 
 import static com.google.common.collect.Lists.newArrayList;
-import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGeneration;
+import static org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration.newGCGeneration;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;

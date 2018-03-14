@@ -23,7 +23,7 @@ import static java.util.Collections.emptySet;
 import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
 import static java.util.UUID.randomUUID;
-import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGeneration;
+import static org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration.newGCGeneration;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -42,6 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.apache.jackrabbit.oak.segment.file.tar.TarFiles.CleanupResult;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;

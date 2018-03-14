@@ -18,8 +18,6 @@
  */
 package org.apache.jackrabbit.oak.segment.spi.persistence;
 
-import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
-import org.apache.jackrabbit.oak.segment.file.tar.TarEntry;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.BinaryReferencesIndex;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.InvalidBinaryReferencesIndexException;
 import org.apache.jackrabbit.oak.segment.file.tar.index.Index;

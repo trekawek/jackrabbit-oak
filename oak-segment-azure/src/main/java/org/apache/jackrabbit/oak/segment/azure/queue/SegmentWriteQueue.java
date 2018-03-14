@@ -16,7 +16,7 @@
  */
 package org.apache.jackrabbit.oak.segment.azure.queue;
 
-import org.apache.jackrabbit.oak.segment.file.tar.TarEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.TarEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

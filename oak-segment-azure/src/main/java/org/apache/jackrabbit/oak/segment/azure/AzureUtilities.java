@@ -19,7 +19,7 @@ package org.apache.jackrabbit.oak.segment.azure;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlob;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.jackrabbit.oak.segment.file.tar.TarEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.TarEntry;
 import org.apache.jackrabbit.oak.segment.file.tar.index.IndexEntry;
 
 import java.io.IOException;

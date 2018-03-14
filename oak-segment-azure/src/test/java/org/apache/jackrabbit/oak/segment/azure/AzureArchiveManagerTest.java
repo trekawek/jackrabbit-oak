@@ -21,7 +21,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager.SegmentArchiveWriter;
 import org.apache.jackrabbit.oak.segment.file.tar.FileStoreMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCGeneration;
 import org.apache.jackrabbit.oak.segment.file.tar.IOMonitorAdapter;
 import org.junit.Before;
 import org.junit.ClassRule;

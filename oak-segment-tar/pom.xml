@@ -46,10 +46,8 @@
                     <instructions>
                         <Export-Package>
                             org.apache.jackrabbit.oak.segment.spi.persistence,
-                            org.apache.jackrabbit.oak.segment.file.tar,
                             org.apache.jackrabbit.oak.segment.file.tar.binaries,
-                            org.apache.jackrabbit.oak.segment.file.tar.index,
-                            org.apache.jackrabbit.oak.segment.util
+                            org.apache.jackrabbit.oak.segment.file.tar.index
                         </Export-Package>
                         <Embed-Dependency>
                             netty-*,
