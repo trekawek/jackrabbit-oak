@@ -21,15 +21,13 @@ package org.apache.jackrabbit.oak.segment.azure;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.ConfigurationPolicy;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStorePersistence;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.ConfigurationPolicy;
+import org.osgi.service.component.annotations.Deactivate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,56 +36,24 @@ import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.util.Properties;
 
-import static org.apache.jackrabbit.oak.osgi.OsgiUtil.lookupConfigurationThenFramework;
-import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ACCESS_KEY;
-import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ACCOUNT_NAME;
-import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_CONNECTION_URL;
-import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_CONTAINER_NAME;
-import static org.apache.jackrabbit.oak.segment.azure.AzureSegmentStoreService.AZURE_ROOT_PATH;
 
-@Component(policy = ConfigurationPolicy.REQUIRE,
-        metatype = true,
-        label = "Oak Azure Segment Store",
-        description = "Azure backend for the Oak Segment Node Store"
-)
+@Component(
+        configurationPolicy = ConfigurationPolicy.REQUIRE,
+        configurationPid = {Configuration.PID})
 public class AzureSegmentStoreService {
 
     private static final Logger log = LoggerFactory.getLogger(AzureSegmentStoreService.class);
 
-    @Property(
-            label = "Azure account name"
-    )
-    public static final String AZURE_ACCOUNT_NAME = "azure.accountName";
+    public static final String DEFAULT_CONTAINER_NAME = "oak";
 
-    @Property(
-            label = "Azure container name"
-    )
-    public static final String AZURE_CONTAINER_NAME = "azure.containerName";
-
-    @Property(
-            label = "Azure access key"
-    )
-    public static final String AZURE_ACCESS_KEY = "azure.accessKey";
-
-    @Property(
-            label = "Azure root path",
-            value = "/oak"
-    )
-    public static final String AZURE_ROOT_PATH = "azure.rootPath";
-
-    @Property(
-            label = "Azure connection URL (optional)",
-            description = "The connection URL to be used (it overrides all the other Azure properties)."
-    )
-    public static final String AZURE_CONNECTION_URL = "azure.connectionUrl";
+    public static final String DEFAULT_ROOT_PATH = "/oak";
 
     private ServiceRegistration registration;
 
     private SegmentNodeStorePersistence persistence;
 
     @Activate
-    public void activate(ComponentContext context) throws IOException {
-        Configuration config = new Configuration(context);
+    public void activate(ComponentContext context, Configuration config) throws IOException {
         persistence = createAzurePersistence(config);
         registration = context.getBundleContext().registerService(SegmentNodeStorePersistence.class.getName(), persistence, new Properties());
     }
@@ -104,19 +70,19 @@ public class AzureSegmentStoreService {
     private static SegmentNodeStorePersistence createAzurePersistence(Configuration configuration) throws IOException {
         try {
             StringBuilder connectionString = new StringBuilder();
-            if (configuration.getAzureConnectionUrl() != null) {
-                connectionString.append(configuration.getAzureConnectionUrl());
+            if (configuration.connectionURL() != null) {
+                connectionString.append(configuration.connectionURL());
             } else {
                 connectionString.append("DefaultEndpointsProtocol=https;");
-                connectionString.append("AccountName=").append(configuration.getAzureAccountName()).append(';');
-                connectionString.append("AccountKey=").append(configuration.getAzureAccessKey()).append(';');
+                connectionString.append("AccountName=").append(configuration.accountName()).append(';');
+                connectionString.append("AccountKey=").append(configuration.accessKey()).append(';');
             }
             log.info("Connection string: {}", connectionString.toString());
             CloudStorageAccount cloud = CloudStorageAccount.parse(connectionString.toString());
-            CloudBlobContainer container = cloud.createCloudBlobClient().getContainerReference(configuration.getAzureContainerName());
+            CloudBlobContainer container = cloud.createCloudBlobClient().getContainerReference(configuration.containerName());
             container.createIfNotExists();
 
-            String path = configuration.getAzureRootPath();
+            String path = configuration.rootPath();
             if (path != null && path.length() > 0 && path.charAt(0) == '/') {
                 path = path.substring(1);
             }
@@ -130,34 +96,3 @@ public class AzureSegmentStoreService {
 
 }
 
-class Configuration {
-
-    private final ComponentContext context;
-
-    Configuration(ComponentContext context) {
-        this.context = context;
-    }
-
-    String property(String name) {
-        return lookupConfigurationThenFramework(context, name);
-    }
-
-    String getAzureAccountName() {
-        return property(AZURE_ACCOUNT_NAME);
-    }
-
-    String getAzureContainerName() {
-        return property(AZURE_CONTAINER_NAME);
-    }
-
-    String getAzureAccessKey() {
-        return property(AZURE_ACCESS_KEY);
-    }
-
-    String getAzureRootPath() { return PropertiesUtil.toString(property(AZURE_ROOT_PATH), "/oak"); }
-
-    String getAzureConnectionUrl() {
-        return property(AZURE_CONNECTION_URL);
-    }
-
-}
