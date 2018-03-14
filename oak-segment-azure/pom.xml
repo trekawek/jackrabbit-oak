@@ -39,9 +39,6 @@
                 <artifactId>maven-bundle-plugin</artifactId>
                 <configuration>
                     <instructions>
-                        <Export-Package>
-                            org.apache.jackrabbit.oak.segment.azure
-                        </Export-Package>
                         <Embed-Dependency>
                             azure-storage,
                             azure-keyvault-core
