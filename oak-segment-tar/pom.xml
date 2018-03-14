@@ -45,7 +45,7 @@
                 <configuration>
                     <instructions>
                         <Export-Package>
-                            org.apache.jackrabbit.oak.segment,
+                            org.apache.jackrabbit.oak.segment.spi.persistence,
                             org.apache.jackrabbit.oak.segment.file.tar,
                             org.apache.jackrabbit.oak.segment.file.tar.binaries,
                             org.apache.jackrabbit.oak.segment.file.tar.index,

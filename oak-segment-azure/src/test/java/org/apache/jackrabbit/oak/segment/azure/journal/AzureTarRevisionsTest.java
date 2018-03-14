@@ -17,7 +17,7 @@
 package org.apache.jackrabbit.oak.segment.azure.journal;
 
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.azure.AzuriteDockerRule;
 import org.apache.jackrabbit.oak.segment.file.TarRevisionsTest;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
