@@ -31,8 +31,12 @@ import org.apache.jackrabbit.oak.fixture.MemoryFixture;
 import org.apache.jackrabbit.oak.fixture.NodeStoreFixture;
 import org.apache.jackrabbit.oak.composite.CompositeMemoryStoreFixture;
 import org.apache.jackrabbit.oak.composite.CompositeSegmentStoreFixture;
+import org.apache.jackrabbit.oak.kv.KVNodeStore;
+import org.apache.jackrabbit.oak.kv.store.memory.MemoryStore;
 import org.apache.jackrabbit.oak.segment.azure.fixture.SegmentAzureFixture;
 import org.apache.jackrabbit.oak.segment.fixture.SegmentTarFixture;
+import org.apache.jackrabbit.oak.spi.blob.MemoryBlobStore;
+import org.apache.jackrabbit.oak.spi.state.NodeStore;
 
 public class NodeStoreFixtures {
 
@@ -53,6 +57,20 @@ public class NodeStoreFixtures {
     public static final NodeStoreFixture COMPOSITE_MEM = new CompositeMemoryStoreFixture();
 
     public static final NodeStoreFixture COW_DOCUMENT = new COWStoreFixture();
+
+    public static final NodeStoreFixture KV = new NodeStoreFixture() {
+
+        @Override
+        public NodeStore createNodeStore() {
+            return new KVNodeStore(new MemoryStore(), new MemoryBlobStore());
+        }
+
+        @Override
+        public String toString() {
+            return "KV";
+        }
+
+    };
 
     public static Collection<Object[]> asJunitParameters(Set<FixturesHelper.Fixture> fixtures) {
         List<NodeStoreFixture> configuredFixtures = new ArrayList<NodeStoreFixture>();
@@ -82,6 +100,9 @@ public class NodeStoreFixtures {
         }
         if (fixtures.contains(FixturesHelper.Fixture.COW_DOCUMENT)) {
             configuredFixtures.add(COW_DOCUMENT);
+        }
+        if (fixtures.contains(FixturesHelper.Fixture.KV)) {
+            configuredFixtures.add(KV);
         }
 
         Collection<Object[]> result = new ArrayList<Object[]>();
