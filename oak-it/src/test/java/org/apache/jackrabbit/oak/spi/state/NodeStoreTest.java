@@ -37,9 +37,11 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.NodeStoreFixtures;
 import org.apache.jackrabbit.oak.OakBaseTest;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
@@ -59,10 +61,6 @@ import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 public class NodeStoreTest extends OakBaseTest {
     private NodeState root;
@@ -456,9 +454,18 @@ public class NodeStoreTest extends OakBaseTest {
     public void moveToDescendant() {
         NodeBuilder test = store.getRoot().builder().getChildNode("test");
         NodeBuilder x = test.getChildNode("x");
-        if (fixture == NodeStoreFixtures.SEGMENT_TAR || fixture == NodeStoreFixtures.MEMORY_NS 
-                || fixture == NodeStoreFixtures.COMPOSITE_MEM || fixture == NodeStoreFixtures.COMPOSITE_SEGMENT
-                || fixture == NodeStoreFixtures.COW_DOCUMENT || fixture == NodeStoreFixtures.SEGMENT_AZURE) {
+
+        Set<NodeStoreFixture> allowedFixtures = Sets.newHashSet(
+            NodeStoreFixtures.SEGMENT_TAR,
+            NodeStoreFixtures.MEMORY_NS,
+            NodeStoreFixtures.COMPOSITE_MEM,
+            NodeStoreFixtures.COMPOSITE_SEGMENT,
+            NodeStoreFixtures.COW_DOCUMENT,
+            NodeStoreFixtures.SEGMENT_AZURE,
+            NodeStoreFixtures.KV
+        );
+
+        if (allowedFixtures.contains(fixture)) {
             assertTrue(x.moveTo(x, "xx"));
             assertFalse(x.exists());
             assertFalse(test.hasChildNode("x"));
