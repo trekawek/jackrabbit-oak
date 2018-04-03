@@ -19,13 +19,6 @@
 
 package org.apache.jackrabbit.oak.kv;
 
-import static java.util.stream.Collectors.toList;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
@@ -40,6 +33,13 @@ import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static java.util.stream.Collectors.toList;
 
 class KVNodeState extends AbstractNodeState {
 
@@ -103,7 +103,7 @@ class KVNodeState extends AbstractNodeState {
 
     @Override
     public NodeBuilder builder() {
-        return new KVNodeBuilder(this);
+        return new KVNodeBuilder(store, blobStore, this);
     }
 
     @Override
