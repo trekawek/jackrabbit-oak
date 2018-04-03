@@ -276,21 +276,24 @@ public class KVNodeStore implements NodeStore, Observable {
 
     @Override
     public NodeState rebase(NodeBuilder builder) {
-        if (builder instanceof MemoryNodeBuilder) {
-            return rebase((MemoryNodeBuilder) builder);
+        if (builder instanceof KVNodeBuilder) {
+            return rebase((KVNodeBuilder) builder);
         }
         throw new IllegalArgumentException("builder");
     }
 
-    private NodeState rebase(MemoryNodeBuilder builder) {
-        try {
-            return rebase(builder, builder.getBaseState(), builder.getNodeState());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+    private NodeState rebase(KVNodeBuilder builder) {
+        if (builder.isRootBuilder()) {
+            try {
+                return rebase(builder, builder.getBaseState(), builder.getNodeState());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+        throw new IllegalArgumentException("builder");
     }
 
-    private NodeState rebase(MemoryNodeBuilder builder, NodeState baseState, NodeState headState) throws IOException {
+    private NodeState rebase(KVNodeBuilder builder, NodeState baseState, NodeState headState) throws IOException {
         ID upstreamID = store.getTag("root");
 
         if (upstreamID == null) {
@@ -318,16 +321,19 @@ public class KVNodeStore implements NodeStore, Observable {
 
     @Override
     public NodeState reset(NodeBuilder builder) {
-        if (builder instanceof MemoryNodeBuilder) {
-            return reset((MemoryNodeBuilder) builder);
+        if (builder instanceof KVNodeBuilder) {
+            return reset((KVNodeBuilder) builder);
         }
         throw new IllegalArgumentException("builder");
     }
 
-    private NodeState reset(MemoryNodeBuilder builder) {
-        NodeState root = getRoot();
-        builder.reset(root);
-        return root;
+    private NodeState reset(KVNodeBuilder builder) {
+        if (builder.isRootBuilder()) {
+            NodeState root = getRoot();
+            builder.reset(root);
+            return root;
+        }
+        throw new IllegalArgumentException("builder");
     }
 
     @Override
