@@ -19,6 +19,18 @@
 
 package org.apache.jackrabbit.oak.kv;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.kv.store.ID;
@@ -35,19 +47,11 @@ import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 public class KVNodeStore implements NodeStore, Observable {
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    private final Set<Observer> observers = new CopyOnWriteArraySet<>();
 
     private final Store store;
 
@@ -60,7 +64,8 @@ public class KVNodeStore implements NodeStore, Observable {
 
     @Override
     public Closeable addObserver(Observer observer) {
-        throw new UnsupportedOperationException("not implemented");
+        observers.add(observer);
+        return () -> observers.remove(observer);
     }
 
     @Override
@@ -120,6 +125,8 @@ public class KVNodeStore implements NodeStore, Observable {
     }
 
     private NodeState merge(KVNodeBuilder builder, NodeState baseState, NodeState headState, CommitHook commitHook, CommitInfo commitInfo) throws IOException, CommitFailedException {
+        KVNodeState mergedState;
+
         lock.writeLock().lock();
         try {
             ID upstreamID = store.getTag("root");
@@ -138,8 +145,6 @@ public class KVNodeStore implements NodeStore, Observable {
                 throw new IllegalStateException("invalid base state");
             }
 
-            KVNodeState mergedState;
-
             if (baseID.equals(upstreamID)) {
                 mergedState = (KVNodeState) commitHook.processCommit(baseState, headState, commitInfo);
             } else {
@@ -149,11 +154,16 @@ public class KVNodeStore implements NodeStore, Observable {
             }
 
             store.putTag("root", mergedState.getID());
-            builder.reset(mergedState);
-            return mergedState;
         } finally {
             lock.writeLock().unlock();
         }
+
+        for (Observer observer : observers) {
+            observer.contentChanged(mergedState, commitInfo);
+        }
+
+        builder.reset(mergedState);
+        return mergedState;
     }
 
     @Override
