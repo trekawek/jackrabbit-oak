@@ -18,6 +18,7 @@
  */
 package org.apache.jackrabbit.oak.segment.file;
 
+import static com.google.common.collect.Lists.newArrayList;
 import static org.apache.jackrabbit.oak.segment.DefaultSegmentWriterBuilder.defaultSegmentWriterBuilder;
 
 import java.io.IOException;
@@ -37,6 +38,7 @@ import org.apache.jackrabbit.oak.segment.Segment;
 import org.apache.jackrabbit.oak.segment.SegmentId;
 import org.apache.jackrabbit.oak.segment.SegmentWriter;
 import org.apache.jackrabbit.oak.segment.file.tar.TarFiles;
+import org.apache.jackrabbit.oak.segment.file.tar.TarReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +65,7 @@ public class ReadOnlyFileStore extends AbstractFileStore {
     ReadOnlyFileStore(FileStoreBuilder builder) throws InvalidFileStoreVersionException, IOException {
         super(builder);
 
-        newManifestChecker(builder.getPersistence(), builder.getStrictVersionCheck()).checkManifest();
+        newManifestChecker(persistence, builder.getStrictVersionCheck()).checkManifest();
 
         tarFiles = TarFiles.builder()
                 .withDirectory(directory)
