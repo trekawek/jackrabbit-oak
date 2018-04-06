@@ -340,7 +340,7 @@ public class FileStoreBuilder {
         return this;
     }
 
-    public Proc.Backend buildProcBackend(FileStore fileStore) throws IOException {
+    public Proc.Backend buildProcBackend(AbstractFileStore fileStore) throws IOException {
         SegmentArchiveManager archiveManager = persistence.createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
 
         return new Proc.Backend() {
