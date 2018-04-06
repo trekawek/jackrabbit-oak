@@ -535,6 +535,11 @@ public class FileStoreBuilder {
                     }
 
                     @Override
+                    public String getRevision() {
+                        return entry.getRevision();
+                    }
+
+                    @Override
                     public Optional<NodeState> getRoot() {
                         RecordId id = RecordId.fromString(fileStore.getSegmentIdProvider(), entry.getRevision());
                         return Optional.of(fileStore.getReader().readNode(id));

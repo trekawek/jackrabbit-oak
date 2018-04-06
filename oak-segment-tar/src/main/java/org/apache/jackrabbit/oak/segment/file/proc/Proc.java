@@ -46,6 +46,8 @@ public class Proc {
 
             long getTimestamp();
 
+            String getRevision();
+
             Optional<NodeState> getRoot();
 
         }
