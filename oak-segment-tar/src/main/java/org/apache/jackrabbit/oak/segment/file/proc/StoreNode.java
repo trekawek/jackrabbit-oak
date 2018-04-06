@@ -20,14 +20,14 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static java.util.Collections.emptyList;
 
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
@@ -35,10 +35,10 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 class StoreNode extends AbstractNodeState {
 
-    private final SegmentArchiveManager manager;
+    private final Proc.Backend backend;
 
-    StoreNode(SegmentArchiveManager manager) {
-        this.manager = manager;
+    StoreNode(Proc.Backend backend) {
+        this.backend = backend;
     }
 
     @Override
@@ -54,47 +54,28 @@ class StoreNode extends AbstractNodeState {
 
     @Override
     public boolean hasChildNode(@Nonnull String name) {
-        try {
-            return manager.listArchives().stream().anyMatch(name::equals);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        return backend.tarExists(name);
     }
 
     @Nonnull
     @Override
     public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        try {
-            return manager.listArchives().stream()
-                .filter(name::equals)
-                .findFirst()
-                .map(this::newArchiveNode)
-                .orElse(EmptyNodeState.MISSING_NODE);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (backend.tarExists(name)) {
+            return new TarNode(backend, name);
         }
-    }
-
-    private NodeState newArchiveNode(String name) {
-        return new TarNode(manager, name);
+        return EmptyNodeState.MISSING_NODE;
     }
 
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return () -> {
-            try {
-                return manager.listArchives().stream()
-                    .map(this::newArchiveEntry)
-                    .iterator();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        };
-    }
+        List<ChildNodeEntry> entries = new ArrayList<>();
 
-    private ChildNodeEntry newArchiveEntry(String name) {
-        return new MemoryChildNodeEntry(name, newArchiveNode(name));
+        for (String name : backend.getTarNames()) {
+            entries.add(new MemoryChildNodeEntry(name, new TarNode(backend, name)));
+        }
+
+        return entries;
     }
 
     @Nonnull

@@ -20,22 +20,14 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static java.util.Collections.emptyList;
 
-import java.io.IOException;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Function;
-import java.util.function.Predicate;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
@@ -43,12 +35,12 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 class TarNode extends AbstractNodeState {
 
-    private final SegmentArchiveManager manager;
+    private final Proc.Backend backend;
 
     private final String name;
 
-    TarNode(SegmentArchiveManager manager, String name) {
-        this.manager = manager;
+    TarNode(Proc.Backend backend, String name) {
+        this.backend = backend;
         this.name = name;
     }
 
@@ -65,68 +57,28 @@ class TarNode extends AbstractNodeState {
 
     @Override
     public boolean hasChildNode(@Nonnull String name) {
-        try (SegmentArchiveReader reader = manager.open(this.name)) {
-            return Optional.ofNullable(reader)
-                .map(SegmentArchiveReader::listSegments)
-                .map(e -> e.stream().anyMatch(matchingName(name)))
-                .orElse(false);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        return backend.segmentExists(this.name, name);
     }
 
     @Nonnull
     @Override
     public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        try (SegmentArchiveReader reader = manager.open(this.name)) {
-            return Optional.ofNullable(reader)
-                .map(SegmentArchiveReader::listSegments)
-                .map(toChildNode(name))
-                .orElse(EmptyNodeState.MISSING_NODE);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (backend.segmentExists(this.name, name)) {
+            return new SegmentNode(backend, this.name, name);
         }
-    }
-
-    private Function<List<SegmentArchiveEntry>, NodeState> toChildNode(String name) {
-        return entries -> entries.stream()
-            .filter(matchingName(name))
-            .map(this::newTarNode)
-            .findFirst()
-            .orElse(EmptyNodeState.MISSING_NODE);
-    }
-
-    private static String name(SegmentArchiveEntry e) {
-        return new UUID(e.getMsb(), e.getLsb()).toString();
-    }
-
-    private static Predicate<SegmentArchiveEntry> matchingName(String name) {
-        return e -> name(e).equals(name);
-    }
-
-    private NodeState newTarNode(SegmentArchiveEntry e) {
-        return new TarEntryNode(manager, name, e.getMsb(), e.getLsb());
+        return EmptyNodeState.MISSING_NODE;
     }
 
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        try (SegmentArchiveReader reader = manager.open(this.name)) {
-            return Optional.ofNullable(reader)
-                .map(SegmentArchiveReader::listSegments)
-                .map(this::toChildNodeEntries)
-                .orElse(Collections.emptyList());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        List<ChildNodeEntry> entries = new ArrayList<>();
+
+        for (String segmentId : backend.getSegmentIds(name)) {
+            entries.add(new MemoryChildNodeEntry(segmentId, new SegmentNode(backend, name, segmentId)));
         }
-    }
 
-    private Iterable<ChildNodeEntry> toChildNodeEntries(List<SegmentArchiveEntry> entries) {
-        return () -> entries.stream().map(this::toChildNodeEntry).iterator();
-    }
-
-    private ChildNodeEntry toChildNodeEntry(SegmentArchiveEntry entry) {
-        return new MemoryChildNodeEntry(name(entry), newTarNode(entry));
+        return entries;
     }
 
     @Nonnull

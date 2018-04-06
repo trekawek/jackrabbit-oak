@@ -19,56 +19,66 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Objects.requireNonNull;
-
-import java.io.IOException;
+import java.io.InputStream;
+import java.util.Optional;
 
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
-import org.apache.jackrabbit.oak.segment.SegmentIdProvider;
-import org.apache.jackrabbit.oak.segment.SegmentReader;
-import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 public class Proc {
 
-    private SegmentNodeStorePersistence persistence;
+    public interface Backend {
 
-    private SegmentReader segmentReader;
+        interface Segment {
 
-    private SegmentIdProvider segmentIdProvider;
+            int getGeneration();
 
-    public static Proc builder() {
-        return new Proc();
+            int getFullGeneration();
+
+            boolean isCompacted();
+
+            int getLength();
+
+        }
+
+        interface Commit {
+
+            long getTimestamp();
+
+            Optional<NodeState> getRoot();
+
+        }
+
+        boolean tarExists(String name);
+
+        Iterable<String> getTarNames();
+
+        boolean segmentExists(String name, String segmentId);
+
+        Iterable<String> getSegmentIds(String name);
+
+        Optional<Segment> getSegment(String name, String segmentId);
+
+        Optional<InputStream> getSegmentData(String name, String segmentId);
+
+        boolean commitExists(String handle);
+
+        Iterable<String> getCommitHandles();
+
+        Optional<Commit> getCommit(String handle);
+
     }
 
-    public Proc withPersistence(SegmentNodeStorePersistence persistence) {
-        this.persistence = requireNonNull(persistence);
-        return this;
-    }
-
-    public Proc withSegmentReader(SegmentReader reader) {
-        this.segmentReader = requireNonNull(reader);
-        return this;
-    }
-
-    public Proc withSegmentIdProvider(SegmentIdProvider segmentIdProvider) {
-        this.segmentIdProvider = requireNonNull(segmentIdProvider);
-        return this;
-    }
-
-    public NodeState build() throws IOException {
+    public static NodeState of(Backend backend) {
         NodeBuilder builder = EmptyNodeState.EMPTY_NODE.builder();
-        builder.setChildNode("store", new StoreNode(newSegmentArchiveManager(persistence)));
-        builder.setChildNode("journal", new JournalNode(persistence.getJournalFile(), segmentReader, segmentIdProvider));
+        builder.setChildNode("store", new StoreNode(backend));
+        builder.setChildNode("journal", new JournalNode(backend));
         return builder.getNodeState();
     }
 
-    private static SegmentArchiveManager newSegmentArchiveManager(SegmentNodeStorePersistence persistence) throws IOException {
-        return persistence.createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
+    private Proc() {
+        // Prevent external instantiation.
     }
 
 }

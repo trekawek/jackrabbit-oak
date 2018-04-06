@@ -30,8 +30,17 @@ import static org.apache.jackrabbit.oak.segment.WriterCacheManager.DEFAULT_STRIN
 import static org.apache.jackrabbit.oak.segment.WriterCacheManager.DEFAULT_TEMPLATE_CACHE_SIZE;
 import static org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions.defaultGCOptions;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -40,19 +49,26 @@ import com.google.common.base.Predicate;
 import org.apache.jackrabbit.oak.segment.CacheWeights.NodeCacheWeigher;
 import org.apache.jackrabbit.oak.segment.CacheWeights.StringCacheWeigher;
 import org.apache.jackrabbit.oak.segment.CacheWeights.TemplateCacheWeigher;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
-import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
 import org.apache.jackrabbit.oak.segment.RecordCache;
+import org.apache.jackrabbit.oak.segment.RecordId;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundExceptionListener;
 import org.apache.jackrabbit.oak.segment.WriterCacheManager;
 import org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc;
+import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
+import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
+import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitorAdapter;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.gc.DelegatingGCMonitor;
 import org.apache.jackrabbit.oak.spi.gc.GCMonitor;
 import org.apache.jackrabbit.oak.spi.gc.LoggingGCMonitor;
+import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.stats.StatisticsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -322,6 +338,221 @@ public class FileStoreBuilder {
     public FileStoreBuilder withCustomPersistence(SegmentNodeStorePersistence persistence) throws IOException {
         this.persistence = persistence;
         return this;
+    }
+
+    public Proc.Backend buildProcBackend(FileStore fileStore) throws IOException {
+        SegmentArchiveManager archiveManager = persistence.createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
+
+        return new Proc.Backend() {
+
+            @Override
+            public boolean tarExists(String name) {
+                try {
+                    return archiveManager.listArchives().contains(name);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public Iterable<String> getTarNames() {
+                try {
+                    return archiveManager.listArchives();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public boolean segmentExists(String name, String segmentId) {
+                try (SegmentArchiveReader reader = archiveManager.open(name)) {
+                    if (reader == null) {
+                        return false;
+                    }
+                    return segmentExists(reader, UUID.fromString(segmentId));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            boolean segmentExists(SegmentArchiveReader reader, UUID id) {
+                return reader.containsSegment(id.getMostSignificantBits(), id.getLeastSignificantBits());
+            }
+
+            @Override
+            public Iterable<String> getSegmentIds(String name) {
+                try (SegmentArchiveReader reader = archiveManager.open(name)) {
+                    if (reader == null) {
+                        return Collections.emptyList();
+                    }
+                    return getSegmentIds(reader);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            private Iterable<String> getSegmentIds(SegmentArchiveReader reader) {
+                List<String> ids = new ArrayList<>();
+                for (SegmentArchiveEntry entry : reader.listSegments()) {
+                    ids.add(new UUID(entry.getMsb(), entry.getLsb()).toString());
+                }
+                return ids;
+            }
+
+            @Override
+            public Optional<Segment> getSegment(String name, String segmentId) {
+                SegmentArchiveEntry entry;
+
+                try (SegmentArchiveReader reader = archiveManager.open(name)) {
+                    if (reader == null) {
+                        return Optional.empty();
+                    }
+                    entry = getEntry(reader.listSegments(), UUID.fromString(segmentId));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+                if (entry == null) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(new Segment() {
+
+                    @Override
+                    public int getGeneration() {
+                        return entry.getGeneration();
+                    }
+
+                    @Override
+                    public int getFullGeneration() {
+                        return entry.getFullGeneration();
+                    }
+
+                    @Override
+                    public boolean isCompacted() {
+                        return entry.isCompacted();
+                    }
+
+                    @Override
+                    public int getLength() {
+                        return entry.getLength();
+                    }
+
+                });
+            }
+
+            private SegmentArchiveEntry getEntry(List<SegmentArchiveEntry> entries, UUID id) {
+                for (SegmentArchiveEntry entry : entries) {
+                    if (entry.getMsb() == id.getMostSignificantBits() && entry.getLsb() == id.getLeastSignificantBits()) {
+                        return entry;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public Optional<InputStream> getSegmentData(String name, String segmentId) {
+                try (SegmentArchiveReader reader = archiveManager.open(name)) {
+                    if (reader == null) {
+                        return Optional.empty();
+                    }
+                    ByteBuffer buffer = readSegment(reader, UUID.fromString(segmentId));
+                    if (buffer == null) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(new ByteArrayInputStream(toByteArray(buffer)));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            private ByteBuffer readSegment(SegmentArchiveReader reader, UUID id) throws IOException {
+                return reader.readSegment(id.getMostSignificantBits(), id.getLeastSignificantBits());
+            }
+
+            private byte[] toByteArray(ByteBuffer buffer) {
+                if (buffer.hasArray()) {
+                    return buffer.array();
+                }
+                byte[] data = new byte[buffer.remaining()];
+                buffer.get(data);
+                return data;
+            }
+
+            @Override
+            public boolean commitExists(String handle) {
+                long timestamp = Long.parseLong(handle);
+
+                try (JournalReader reader = new JournalReader(persistence.getJournalFile())) {
+                    for (JournalEntry entry : iterable(reader)) {
+                        if (entry.getTimestamp() == timestamp) {
+                            return true;
+                        }
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+                return false;
+            }
+
+            private <T> Iterable<T> iterable(Iterator<T> i) {
+                return () -> i;
+            }
+
+            @Override
+            public Iterable<String> getCommitHandles() {
+                try (JournalReader reader = new JournalReader(persistence.getJournalFile())) {
+                    List<String> handles = new ArrayList<>();
+                    for (JournalEntry entry : iterable(reader)) {
+                        handles.add(Long.toString(entry.getTimestamp()));
+                    }
+                    return handles;
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public Optional<Commit> getCommit(String handle) {
+                JournalEntry entry;
+
+                try (JournalReader reader = new JournalReader(persistence.getJournalFile())) {
+                    entry = getEntry(reader, Long.parseLong(handle));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+                if (entry == null) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(new Commit() {
+
+                    @Override
+                    public long getTimestamp() {
+                        return entry.getTimestamp();
+                    }
+
+                    @Override
+                    public Optional<NodeState> getRoot() {
+                        RecordId id = RecordId.fromString(fileStore.getSegmentIdProvider(), entry.getRevision());
+                        return Optional.of(fileStore.getReader().readNode(id));
+                    }
+
+                });
+            }
+
+            private JournalEntry getEntry(JournalReader reader, long timestamp) {
+                for (JournalEntry entry : iterable(reader)) {
+                    if (entry.getTimestamp() == timestamp) {
+                        return entry;
+                    }
+                }
+                return null;
+            }
+
+        };
     }
 
     /**

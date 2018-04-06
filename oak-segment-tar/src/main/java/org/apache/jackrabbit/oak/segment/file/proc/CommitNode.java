@@ -18,35 +18,32 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
+import static java.util.Collections.emptySet;
+import static java.util.Collections.singleton;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.Lists;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.segment.RecordId;
-import org.apache.jackrabbit.oak.segment.SegmentIdProvider;
-import org.apache.jackrabbit.oak.segment.SegmentReader;
-import org.apache.jackrabbit.oak.segment.file.JournalEntry;
+import org.apache.jackrabbit.oak.plugins.memory.PropertyStates;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Commit;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class JournalEntryNode extends AbstractNodeState {
+class CommitNode extends AbstractNodeState {
 
-    private final JournalEntry journalEntry;
+    private final Proc.Backend backend;
 
-    private final SegmentReader segmentReader;
+    private final String handle;
 
-    private final SegmentIdProvider segmentIdProvider;
-
-    JournalEntryNode(JournalEntry journalEntry, SegmentReader segmentReader, SegmentIdProvider segmentIdProvider) {
-        this.journalEntry = journalEntry;
-        this.segmentReader = segmentReader;
-        this.segmentIdProvider = segmentIdProvider;
+    CommitNode(Proc.Backend backend, String handle) {
+        this.backend = backend;
+        this.handle = handle;
     }
 
     @Override
@@ -57,37 +54,36 @@ class JournalEntryNode extends AbstractNodeState {
     @Nonnull
     @Override
     public Iterable<? extends PropertyState> getProperties() {
-        return emptyList();
+        return backend.getCommit(handle).map(this::getProperties).orElse(emptySet());
+    }
+
+    private Iterable<PropertyState> getProperties(Commit entry) {
+        return Lists.newArrayList(
+            PropertyStates.createProperty("timestamp", entry.getTimestamp(), Type.LONG)
+        );
     }
 
     @Override
     public boolean hasChildNode(@Nonnull String name) {
-        return name.equals("root");
+        return name.equals("root") && backend.getCommit(handle).flatMap(Proc.Backend.Commit::getRoot).isPresent();
     }
 
     @Nonnull
     @Override
     public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
         if (name.equals("root")) {
-            return newRoot(journalEntry);
+            return backend.getCommit(handle).flatMap(Commit::getRoot).orElse(EmptyNodeState.MISSING_NODE);
         }
         return EmptyNodeState.MISSING_NODE;
     }
 
     @Nonnull
-    private NodeState newRoot(@Nonnull JournalEntry journalEntry) {
-        return segmentReader.readNode(RecordId.fromString(segmentIdProvider, journalEntry.getRevision()));
-    }
-
-    @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return singletonList(newChildNodeEntry(journalEntry));
-    }
-
-    @Nonnull
-    private ChildNodeEntry newChildNodeEntry(@Nonnull JournalEntry journalEntry) {
-        return new MemoryChildNodeEntry("root", newRoot(journalEntry));
+        return backend.getCommit(handle)
+            .flatMap(Proc.Backend.Commit::getRoot)
+            .map(r -> singleton(new MemoryChildNodeEntry("root", r)))
+            .orElse(emptySet());
     }
 
     @Nonnull
