@@ -355,6 +355,15 @@ public class FileStoreBuilder {
             }
 
             @Override
+            public long tarSize(String name) {
+                try (SegmentArchiveReader reader = archiveManager.open(name)) {
+                    return reader == null ? -1 : reader.length();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
             public Iterable<String> getTarNames() {
                 try {
                     return archiveManager.listArchives();

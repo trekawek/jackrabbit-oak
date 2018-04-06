@@ -54,6 +54,8 @@ public class Proc {
 
         boolean tarExists(String name);
 
+        long tarSize(String name);
+
         Iterable<String> getTarNames();
 
         boolean segmentExists(String name, String segmentId);
