@@ -18,7 +18,7 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Collections.emptySet;
+import static java.util.Collections.singleton;
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.io.InputStream;
@@ -56,7 +56,9 @@ class SegmentNode extends AbstractNodeState {
     @Nonnull
     @Override
     public Iterable<? extends PropertyState> getProperties() {
-        return backend.getSegment(segmentId).map(this::getProperties).orElse(emptySet());
+        return backend.getSegment(segmentId)
+                .map(this::getProperties)
+                .orElse(singleton(newIdProperty(segmentId)));
     }
 
     private Iterable<PropertyState> getProperties(Segment segment) {
@@ -66,11 +68,15 @@ class SegmentNode extends AbstractNodeState {
             createProperty("compacted", segment.isCompacted(), Type.BOOLEAN),
             createProperty("length", (long) segment.getLength(), Type.LONG),
             createProperty("data", newBlob(), Type.BINARY),
-            createProperty("id", segmentId, Type.STRING),
+            newIdProperty(segmentId),
             createProperty("version", (long) segment.getVersion(), Type.LONG),
             createProperty("isDataSegment", segment.isDataSegment(), Type.BOOLEAN),
             createProperty("info", segment.getInfo().orElse(""), Type.STRING)
         );
+    }
+
+    private static PropertyState newIdProperty(String segmentId) {
+        return createProperty("id", segmentId, Type.STRING);
     }
 
     private Blob newBlob() {
