@@ -381,7 +381,7 @@ public class Segment {
      * @return the segment meta data
      */
     @CheckForNull
-    String getSegmentInfo() {
+    public String getSegmentInfo() {
         if (info == null && id.isDataSegmentId()) {
             info = readString(recordNumbers.iterator().next().getRecordNumber());
         }

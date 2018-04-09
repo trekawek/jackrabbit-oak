@@ -51,7 +51,9 @@ import org.apache.jackrabbit.oak.segment.CacheWeights.StringCacheWeigher;
 import org.apache.jackrabbit.oak.segment.CacheWeights.TemplateCacheWeigher;
 import org.apache.jackrabbit.oak.segment.RecordCache;
 import org.apache.jackrabbit.oak.segment.RecordId;
+import org.apache.jackrabbit.oak.segment.SegmentId;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundExceptionListener;
+import org.apache.jackrabbit.oak.segment.SegmentVersion;
 import org.apache.jackrabbit.oak.segment.WriterCacheManager;
 import org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc;
@@ -409,14 +411,14 @@ public class FileStoreBuilder {
             }
 
             @Override
-            public Optional<Segment> getSegment(String name, String segmentId) {
+            public Optional<Segment> getSegment(String name, String id) {
                 SegmentArchiveEntry entry;
 
                 try (SegmentArchiveReader reader = archiveManager.open(name)) {
                     if (reader == null) {
                         return Optional.empty();
                     }
-                    entry = getEntry(reader.listSegments(), UUID.fromString(segmentId));
+                    entry = getEntry(reader.listSegments(), UUID.fromString(id));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -424,6 +426,9 @@ public class FileStoreBuilder {
                 if (entry == null) {
                     return Optional.empty();
                 }
+
+                SegmentId segmentId = new SegmentId(fileStore, entry.getMsb(), entry.getLsb());
+                org.apache.jackrabbit.oak.segment.Segment segment = fileStore.readSegment(segmentId);
 
                 return Optional.of(new Segment() {
 
@@ -445,6 +450,21 @@ public class FileStoreBuilder {
                     @Override
                     public int getLength() {
                         return entry.getLength();
+                    }
+
+                    @Override
+                    public int getVersion() {
+                        return SegmentVersion.asByte(segment.getSegmentVersion());
+                    }
+
+                    @Override
+                    public boolean isDataSegment() {
+                        return segmentId.isDataSegmentId();
+                    }
+
+                    @Override
+                    public Optional<String> getInfo() {
+                        return Optional.ofNullable(segment.getSegmentInfo());
                     }
 
                 });

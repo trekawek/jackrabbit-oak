@@ -70,7 +70,10 @@ class SegmentNode extends AbstractNodeState {
             createProperty("compacted", segment.isCompacted(), Type.BOOLEAN),
             createProperty("length", (long) segment.getLength(), Type.LONG),
             createProperty("data", newBlob(), Type.BINARY),
-            createProperty("id", segmentId)
+            createProperty("id", segmentId, Type.STRING),
+            createProperty("version", (long) segment.getVersion(), Type.LONG),
+            createProperty("isDataSegment", segment.isDataSegment(), Type.BOOLEAN),
+            createProperty("info", segment.getInfo().orElse(""), Type.STRING)
         );
     }
 

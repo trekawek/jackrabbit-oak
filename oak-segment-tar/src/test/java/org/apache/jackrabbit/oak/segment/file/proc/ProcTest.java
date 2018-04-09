@@ -187,6 +187,7 @@ public class ProcTest {
     public void segmentNodeShouldHaveGenerationProperty() {
         Segment segment = mock(Segment.class);
         when(segment.getGeneration()).thenReturn(1);
+        when(segment.getInfo()).thenReturn(Optional.empty());
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -207,6 +208,7 @@ public class ProcTest {
     public void segmentNodeShouldHaveFullGenerationProperty() {
         Segment segment = mock(Segment.class);
         when(segment.getFullGeneration()).thenReturn(1);
+        when(segment.getInfo()).thenReturn(Optional.empty());
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -227,6 +229,7 @@ public class ProcTest {
     public void segmentNodeShouldHaveCompactedProperty() {
         Segment segment = mock(Segment.class);
         when(segment.isCompacted()).thenReturn(true);
+        when(segment.getInfo()).thenReturn(Optional.empty());
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -247,6 +250,7 @@ public class ProcTest {
     public void segmentNodeShouldHaveLengthProperty() {
         Segment segment = mock(Segment.class);
         when(segment.getLength()).thenReturn(1);
+        when(segment.getInfo()).thenReturn(Optional.empty());
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -269,6 +273,7 @@ public class ProcTest {
 
         Segment segment = mock(Segment.class);
         when(segment.getLength()).thenReturn(1);
+        when(segment.getInfo()).thenReturn(Optional.empty());
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -291,6 +296,7 @@ public class ProcTest {
     public void segmentNodeShouldHaveIdProperty() {
         Segment segment = mock(Segment.class);
         when(segment.getLength()).thenReturn(1);
+        when(segment.getInfo()).thenReturn(Optional.empty());
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -305,6 +311,68 @@ public class ProcTest {
 
         assertEquals(Type.STRING, property.getType());
         assertEquals("s", property.getValue(Type.STRING));
+    }
+
+    @Test
+    public void segmentNodeShouldHaveVersionProperty() {
+        Segment segment = mock(Segment.class);
+        when(segment.getVersion()).thenReturn(1);
+        when(segment.getInfo()).thenReturn(Optional.empty());
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+
+        PropertyState property = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getProperty("version");
+
+        assertEquals(Type.LONG, property.getType());
+        assertEquals(1, property.getValue(Type.LONG).longValue());
+    }
+
+    @Test
+    public void segmentNodeShouldHaveIsDataSegmentProperty() {
+        Segment segment = mock(Segment.class);
+        when(segment.isDataSegment()).thenReturn(true);
+        when(segment.getInfo()).thenReturn(Optional.empty());
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+
+        PropertyState property = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getProperty("isDataSegment");
+
+        assertEquals(Type.BOOLEAN, property.getType());
+        assertTrue(property.getValue(Type.BOOLEAN));
+    }
+
+    @Test
+    public void segmentNodeShouldHaveInfoProperty() {
+        Segment segment = mock(Segment.class);
+        when(segment.getInfo()).thenReturn(Optional.of("info"));
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+
+        PropertyState property = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getProperty("info");
+
+        assertEquals(Type.STRING, property.getType());
+        assertEquals("info", property.getValue(Type.STRING));
     }
 
     @Test(expected = UnsupportedOperationException.class)

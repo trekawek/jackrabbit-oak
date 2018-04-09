@@ -40,6 +40,12 @@ public class Proc {
 
             int getLength();
 
+            int getVersion();
+
+            boolean isDataSegment();
+
+            Optional<String> getInfo();
+
         }
 
         interface Commit {
