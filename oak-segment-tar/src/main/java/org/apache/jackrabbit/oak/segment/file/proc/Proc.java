@@ -54,7 +54,7 @@ public class Proc {
 
         boolean tarExists(String name);
 
-        long tarSize(String name);
+        Optional<Long> getTarSize(String name);
 
         Iterable<String> getTarNames();
 
