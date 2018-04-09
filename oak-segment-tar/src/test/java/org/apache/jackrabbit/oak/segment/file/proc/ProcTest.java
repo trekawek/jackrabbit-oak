@@ -154,6 +154,36 @@ public class ProcTest {
     }
 
     @Test
+    public void tarNodeShouldHaveNameProperty() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.getTarSize("t")).thenReturn(Optional.empty());
+
+        PropertyState property = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getProperty("name");
+
+        assertEquals(Type.STRING, property.getType());;
+        assertEquals("t", property.getValue(Type.STRING));
+    }
+
+    @Test
+    public void tarNodeShouldHaveSizeProperty() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.getTarSize("t")).thenReturn(Optional.of(1L));
+
+        PropertyState property = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getProperty("size");
+
+        assertEquals(Type.LONG, property.getType());;
+        assertEquals(1L, property.getValue(Type.LONG).longValue());
+    }
+
+    @Test
     public void segmentNodeShouldHaveGenerationProperty() {
         Segment segment = mock(Segment.class);
         when(segment.getGeneration()).thenReturn(1);
