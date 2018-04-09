@@ -58,6 +58,16 @@ public class Proc {
 
         }
 
+        interface Record {
+
+            int getNumber();
+
+            int getOffset();
+
+            String getType();
+
+        }
+
         boolean tarExists(String name);
 
         Optional<Long> getTarSize(String name);
@@ -73,6 +83,8 @@ public class Proc {
         Optional<InputStream> getSegmentData(String segmentId);
 
         Optional<Iterable<String>> getSegmentReferences(String segmentId);
+
+        Optional<Iterable<Record>> getSegmentRecords(String segmentId);
 
         boolean commitExists(String handle);
 

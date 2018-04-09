@@ -23,7 +23,6 @@ import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProp
 
 import java.io.InputStream;
 import java.util.Arrays;
-import java.util.Collections;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -120,8 +119,9 @@ class SegmentNode extends AbstractNodeState {
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return Collections.singletonList(
-            new MemoryChildNodeEntry("references", new SegmentReferencesNode(backend, segmentId))
+        return Arrays.asList(
+            new MemoryChildNodeEntry("references", new SegmentReferencesNode(backend, segmentId)),
+            new MemoryChildNodeEntry("records", new SegmentRecordsNode(backend, segmentId))
         );
     }
 

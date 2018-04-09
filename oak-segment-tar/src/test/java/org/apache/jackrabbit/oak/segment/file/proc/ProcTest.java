@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.Sets;
 import org.apache.commons.io.input.NullInputStream;
@@ -41,6 +42,7 @@ import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Commit;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
@@ -471,6 +473,174 @@ public class ProcTest {
             .getChildNode("s")
             .getChildNode("references")
             .builder();
+    }
+
+    @Test
+    public void segmentNodeShouldExposeRecordsNode() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+
+        NodeState n = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records");
+
+        assertTrue(n.exists());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void recordsNodeShouldNotBeBuildable() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+
+        Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records")
+            .builder();
+    }
+
+    @Test
+    public void recordsNodeShouldExposeRecordNumber() {
+        Record record = mock(Record.class);
+        when(record.getNumber()).thenReturn(1);
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentRecords("s")).thenReturn(Optional.of(Collections.singletonList(record)));
+
+        assertTrue(
+            Proc.of(backend)
+                .getChildNode("store")
+                .getChildNode("t")
+                .getChildNode("s")
+                .getChildNode("records")
+                .hasChildNode("1")
+        );
+    }
+
+    @Test
+    public void recordsNodeShouldExposeAllRecordNumbers() {
+        Set<Integer> numbers = Sets.newHashSet(1, 2, 3);
+
+        Set<Record> records = numbers.stream()
+            .map(n -> {
+                Record record = mock(Record.class);
+                when(record.getNumber()).thenReturn(n);
+                return record;
+            })
+            .collect(Collectors.toSet());
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentRecords("s")).thenReturn(Optional.of(records));
+
+        NodeState n = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records");
+
+        Set<String> names = numbers.stream()
+            .map(x -> Integer.toString(x))
+            .collect(Collectors.toSet());
+
+        assertEquals(names, Sets.newHashSet(n.getChildNodeNames()));
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void recordNodeShouldNotBeBuildable() {
+        Record record = mock(Record.class);
+        when(record.getNumber()).thenReturn(1);
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentRecords("s")).thenReturn(Optional.of(Collections.singletonList(record)));
+
+        Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records")
+            .getChildNode("1")
+            .builder();
+    }
+
+    @Test
+    public void recordNodeShouldHaveNumberProperty() {
+        Record record = mock(Record.class);
+        when(record.getNumber()).thenReturn(1);
+        when(record.getType()).thenReturn("t");
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentRecords("s")).thenReturn(Optional.of(Collections.singletonList(record)));
+
+        PropertyState p = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records")
+            .getChildNode("1")
+            .getProperty("number");
+
+        assertEquals(Type.LONG, p.getType());
+        assertEquals(1, p.getValue(Type.LONG).intValue());
+    }
+
+    @Test
+    public void recordNodeShouldHaveOffsetProperty() {
+        Record record = mock(Record.class);
+        when(record.getNumber()).thenReturn(1);
+        when(record.getOffset()).thenReturn(2);
+        when(record.getType()).thenReturn("t");
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentRecords("s")).thenReturn(Optional.of(Collections.singletonList(record)));
+
+        PropertyState p = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records")
+            .getChildNode("1")
+            .getProperty("offset");
+
+        assertEquals(Type.LONG, p.getType());
+        assertEquals(2, p.getValue(Type.LONG).intValue());
+    }
+
+    @Test
+    public void recordNodeShouldHaveTypeProperty() {
+        Record record = mock(Record.class);
+        when(record.getNumber()).thenReturn(1);
+        when(record.getType()).thenReturn("t");
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentRecords("s")).thenReturn(Optional.of(Collections.singletonList(record)));
+
+        PropertyState p = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("records")
+            .getChildNode("1")
+            .getProperty("type");
+
+        assertEquals(Type.STRING, p.getType());
+        assertEquals("t", p.getValue(Type.STRING));
     }
 
     @Test

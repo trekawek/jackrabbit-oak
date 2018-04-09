@@ -501,6 +501,36 @@ public class FileStoreBuilder {
             }
 
             @Override
+            public Optional<Iterable<Record>> getSegmentRecords(String segmentId) {
+                return readSegment(segmentId).map(segment -> {
+                    List<Record> records = new ArrayList<>();
+
+                    segment.forEachRecord((number, type, offset) -> {
+                        records.add(new Record() {
+
+                            @Override
+                            public int getNumber() {
+                                return number;
+                            }
+
+                            @Override
+                            public int getOffset() {
+                                return offset;
+                            }
+
+                            @Override
+                            public String getType() {
+                                return type.name();
+                            }
+
+                        });
+                    });
+
+                    return records;
+                });
+            }
+
+            @Override
             public boolean commitExists(String handle) {
                 long timestamp = Long.parseLong(handle);
 
