@@ -514,8 +514,18 @@ public class FileStoreBuilder {
                             }
 
                             @Override
+                            public String getSegmentId() {
+                                return segmentId;
+                            }
+
+                            @Override
                             public int getOffset() {
                                 return offset;
+                            }
+
+                            @Override
+                            public int getAddress() {
+                                return segment.getAddress(offset);
                             }
 
                             @Override
