@@ -340,7 +340,7 @@ public class FileStoreBuilder {
         return this;
     }
 
-    public Proc.Backend buildProcBackend(FileStore fileStore) throws IOException {
+    public Proc.Backend buildProcBackend(AbstractFileStore fileStore) throws IOException {
         SegmentArchiveManager archiveManager = persistence.createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
 
         return new Proc.Backend() {
@@ -349,6 +349,15 @@ public class FileStoreBuilder {
             public boolean tarExists(String name) {
                 try {
                     return archiveManager.listArchives().contains(name);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public long tarSize(String name) {
+                try (SegmentArchiveReader reader = archiveManager.open(name)) {
+                    return reader == null ? -1 : reader.length();
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -532,6 +541,11 @@ public class FileStoreBuilder {
                     @Override
                     public long getTimestamp() {
                         return entry.getTimestamp();
+                    }
+
+                    @Override
+                    public String getRevision() {
+                        return entry.getRevision();
                     }
 
                     @Override

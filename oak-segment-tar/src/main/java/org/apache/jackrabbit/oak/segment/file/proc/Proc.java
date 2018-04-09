@@ -46,11 +46,15 @@ public class Proc {
 
             long getTimestamp();
 
+            String getRevision();
+
             Optional<NodeState> getRoot();
 
         }
 
         boolean tarExists(String name);
+
+        long tarSize(String name);
 
         Iterable<String> getTarNames();
 

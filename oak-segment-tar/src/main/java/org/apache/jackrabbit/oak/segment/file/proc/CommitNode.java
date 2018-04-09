@@ -59,7 +59,8 @@ class CommitNode extends AbstractNodeState {
 
     private Iterable<PropertyState> getProperties(Commit entry) {
         return Lists.newArrayList(
-            PropertyStates.createProperty("timestamp", entry.getTimestamp(), Type.LONG)
+            PropertyStates.createProperty("timestamp", entry.getTimestamp(), Type.LONG),
+            PropertyStates.createProperty("revision", entry.getRevision())
         );
     }
 

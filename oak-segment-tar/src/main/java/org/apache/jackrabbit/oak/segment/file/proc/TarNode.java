@@ -18,13 +18,14 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Collections.emptyList;
+import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
@@ -52,7 +53,10 @@ class TarNode extends AbstractNodeState {
     @Nonnull
     @Override
     public Iterable<? extends PropertyState> getProperties() {
-        return emptyList();
+        return ImmutableList.of(
+            createProperty("name", name),
+            createProperty("size", backend.tarSize(name))
+        );
     }
 
     @Override
