@@ -72,6 +72,8 @@ public class Proc {
 
         Optional<InputStream> getSegmentData(String segmentId);
 
+        Optional<Iterable<String>> getSegmentReferences(String segmentId);
+
         boolean commitExists(String handle);
 
         Iterable<String> getCommitHandles();

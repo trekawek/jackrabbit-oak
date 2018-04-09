@@ -35,7 +35,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -485,6 +484,19 @@ public class FileStoreBuilder {
                     }
 
                     return new ByteArrayInputStream(out.toByteArray());
+                });
+            }
+
+            @Override
+            public Optional<Iterable<String>> getSegmentReferences(String segmentId) {
+                return readSegment(segmentId).map(segment -> {
+                    List<String> references = new ArrayList<>(segment.getReferencedSegmentIdCount());
+
+                    for (int i = 0; i < segment.getReferencedSegmentIdCount(); i++) {
+                        references.add(segment.getReferencedSegmentId(i).toString());
+                    }
+
+                    return references;
                 });
             }
 

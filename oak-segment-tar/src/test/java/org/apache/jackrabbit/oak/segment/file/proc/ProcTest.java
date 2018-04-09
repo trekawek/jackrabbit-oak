@@ -20,12 +20,17 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -385,6 +390,86 @@ public class ProcTest {
             .getChildNode("store")
             .getChildNode("t")
             .getChildNode("s")
+            .builder();
+    }
+
+    @Test
+    public void segmentNodeShouldExposeReferences() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+
+        NodeState segment = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s");
+
+        assertTrue(segment.hasChildNode("references"));
+        assertNotNull(segment.getChildNode("references"));
+        assertTrue(segment.getChildNode("references").exists());
+    }
+
+    @Test
+    public void segmentReferencesNodeShouldExposeReference() {
+        List<String> references = Collections.singletonList("u");
+
+        Segment segment = mock(Segment.class);
+        when(segment.getInfo()).thenReturn(Optional.empty());
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentReferences("s")).thenReturn(Optional.of(references));
+        when(backend.getSegment("u")).thenReturn(Optional.of(segment));
+
+        NodeState r = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("references")
+            .getChildNode("0");
+
+        assertEquals("u", r.getProperty("id").getValue(Type.STRING));
+    }
+
+    @Test
+    public void segmentReferencesNodeShouldExposeAllReference() {
+        List<String> references = Arrays.asList(
+            "u", "v", "w"
+        );
+
+        Segment segment = mock(Segment.class);
+        when(segment.getInfo()).thenReturn(Optional.empty());
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegmentReferences("s")).thenReturn(Optional.of(references));
+        when(backend.getSegment(any())).thenReturn(Optional.of(segment));
+
+        NodeState rr = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("references");
+
+        for (int i = 0; i < references.size(); i++) {
+            NodeState r = rr.getChildNode(Integer.toString(i));
+            assertEquals(references.get(i), r.getProperty("id").getValue(Type.STRING));
+        }
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void segmentReferencesNodeShouldNotBeBuildable() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+
+        Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getChildNode("references")
             .builder();
     }
 

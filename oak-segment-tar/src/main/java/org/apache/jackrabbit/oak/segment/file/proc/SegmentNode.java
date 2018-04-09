@@ -18,12 +18,12 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Collections;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -31,7 +31,7 @@ import javax.annotation.Nonnull;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
-import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
+import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
@@ -108,19 +108,21 @@ class SegmentNode extends AbstractNodeState {
 
     @Override
     public boolean hasChildNode(@Nonnull String name) {
-        return false;
+        return NodeUtils.hasChildNode(getChildNodeEntries(), name);
     }
 
     @Nonnull
     @Override
     public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        return EmptyNodeState.MISSING_NODE;
+        return NodeUtils.getChildNode(getChildNodeEntries(), name);
     }
 
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return emptyList();
+        return Collections.singletonList(
+            new MemoryChildNodeEntry("references", new SegmentReferencesNode(backend, segmentId))
+        );
     }
 
     @Nonnull
