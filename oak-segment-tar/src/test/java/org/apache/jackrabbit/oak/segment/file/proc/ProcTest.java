@@ -328,6 +328,7 @@ public class ProcTest {
     public void commitNodeShouldHaveTimestampProperty() {
         Commit commit = mock(Commit.class);
         when(commit.getTimestamp()).thenReturn(1L);
+        when(commit.getRevision()).thenReturn("");
 
         Backend backend = mock(Backend.class);
         when(backend.commitExists("h")).thenReturn(true);
