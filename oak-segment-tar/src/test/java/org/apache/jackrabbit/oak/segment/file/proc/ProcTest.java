@@ -192,7 +192,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -213,7 +213,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -234,7 +234,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -255,7 +255,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -278,8 +278,8 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
-        when(backend.getSegmentData("t", "s")).thenReturn(Optional.of(stream));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
+        when(backend.getSegmentData("s")).thenReturn(Optional.of(stream));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -301,7 +301,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -322,7 +322,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -343,7 +343,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")
@@ -363,7 +363,7 @@ public class ProcTest {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
         when(backend.segmentExists("t", "s")).thenReturn(true);
-        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         PropertyState property = Proc.of(backend)
             .getChildNode("store")

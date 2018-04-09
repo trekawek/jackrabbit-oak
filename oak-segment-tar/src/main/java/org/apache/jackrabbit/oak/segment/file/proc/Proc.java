@@ -68,9 +68,9 @@ public class Proc {
 
         Iterable<String> getSegmentIds(String name);
 
-        Optional<Segment> getSegment(String name, String segmentId);
+        Optional<Segment> getSegment(String segmentId);
 
-        Optional<InputStream> getSegmentData(String name, String segmentId);
+        Optional<InputStream> getSegmentData(String segmentId);
 
         boolean commitExists(String handle);
 

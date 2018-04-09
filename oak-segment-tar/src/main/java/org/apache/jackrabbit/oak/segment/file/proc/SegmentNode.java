@@ -42,13 +42,10 @@ class SegmentNode extends AbstractNodeState {
 
     private final Proc.Backend backend;
 
-    private final String name;
-
     private final String segmentId;
 
-    SegmentNode(Proc.Backend backend, String name, String segmentId) {
+    SegmentNode(Proc.Backend backend, String segmentId) {
         this.backend = backend;
-        this.name = name;
         this.segmentId = segmentId;
     }
 
@@ -60,7 +57,7 @@ class SegmentNode extends AbstractNodeState {
     @Nonnull
     @Override
     public Iterable<? extends PropertyState> getProperties() {
-        return backend.getSegment(name, segmentId).map(this::getProperties).orElse(emptySet());
+        return backend.getSegment(segmentId).map(this::getProperties).orElse(emptySet());
     }
 
     private Iterable<PropertyState> getProperties(Segment segment) {
@@ -83,13 +80,13 @@ class SegmentNode extends AbstractNodeState {
             @Nonnull
             @Override
             public InputStream getNewStream() {
-                return backend.getSegmentData(name, segmentId)
+                return backend.getSegmentData(segmentId)
                     .orElseThrow(() -> new IllegalStateException("segment not found"));
             }
 
             @Override
             public long length() {
-                return backend.getSegment(name, segmentId)
+                return backend.getSegment(segmentId)
                     .map(Segment::getLength)
                     .orElseThrow(() -> new IllegalStateException("segment not found"));
             }

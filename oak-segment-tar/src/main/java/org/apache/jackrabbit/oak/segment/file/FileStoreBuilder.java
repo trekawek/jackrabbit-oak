@@ -31,6 +31,7 @@ import static org.apache.jackrabbit.oak.segment.WriterCacheManager.DEFAULT_TEMPL
 import static org.apache.jackrabbit.oak.segment.compaction.SegmentGCOptions.defaultGCOptions;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,6 +53,7 @@ import org.apache.jackrabbit.oak.segment.CacheWeights.TemplateCacheWeigher;
 import org.apache.jackrabbit.oak.segment.RecordCache;
 import org.apache.jackrabbit.oak.segment.RecordId;
 import org.apache.jackrabbit.oak.segment.SegmentId;
+import org.apache.jackrabbit.oak.segment.SegmentNotFoundException;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundExceptionListener;
 import org.apache.jackrabbit.oak.segment.SegmentVersion;
 import org.apache.jackrabbit.oak.segment.WriterCacheManager;
@@ -410,46 +412,47 @@ public class FileStoreBuilder {
                 return ids;
             }
 
-            @Override
-            public Optional<Segment> getSegment(String name, String id) {
-                SegmentArchiveEntry entry;
+            private Optional<org.apache.jackrabbit.oak.segment.Segment> readSegment(String id) {
+                return readSegment(UUID.fromString(id));
+            }
 
-                try (SegmentArchiveReader reader = archiveManager.open(name)) {
-                    if (reader == null) {
-                        return Optional.empty();
-                    }
-                    entry = getEntry(reader.listSegments(), UUID.fromString(id));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+            private Optional<org.apache.jackrabbit.oak.segment.Segment> readSegment(UUID id) {
+                return readSegment(fileStore.getSegmentIdProvider().newSegmentId(
+                    id.getMostSignificantBits(),
+                    id.getLeastSignificantBits()
+                ));
+            }
 
-                if (entry == null) {
+            private Optional<org.apache.jackrabbit.oak.segment.Segment> readSegment(SegmentId id) {
+                try {
+                    return Optional.of(fileStore.readSegment(id));
+                } catch (SegmentNotFoundException e) {
                     return Optional.empty();
                 }
+            }
 
-                SegmentId segmentId = new SegmentId(fileStore, entry.getMsb(), entry.getLsb());
-                org.apache.jackrabbit.oak.segment.Segment segment = fileStore.readSegment(segmentId);
-
-                return Optional.of(new Segment() {
+            @Override
+            public Optional<Segment> getSegment(String id) {
+                return readSegment(id).map(segment -> new Segment() {
 
                     @Override
                     public int getGeneration() {
-                        return entry.getGeneration();
+                        return segment.getGcGeneration().getGeneration();
                     }
 
                     @Override
                     public int getFullGeneration() {
-                        return entry.getFullGeneration();
+                        return segment.getGcGeneration().getFullGeneration();
                     }
 
                     @Override
                     public boolean isCompacted() {
-                        return entry.isCompacted();
+                        return segment.getGcGeneration().isCompacted();
                     }
 
                     @Override
                     public int getLength() {
-                        return entry.getLength();
+                        return segment.size();
                     }
 
                     @Override
@@ -459,7 +462,7 @@ public class FileStoreBuilder {
 
                     @Override
                     public boolean isDataSegment() {
-                        return segmentId.isDataSegmentId();
+                        return segment.getSegmentId().isDataSegmentId();
                     }
 
                     @Override
@@ -470,42 +473,19 @@ public class FileStoreBuilder {
                 });
             }
 
-            private SegmentArchiveEntry getEntry(List<SegmentArchiveEntry> entries, UUID id) {
-                for (SegmentArchiveEntry entry : entries) {
-                    if (entry.getMsb() == id.getMostSignificantBits() && entry.getLsb() == id.getLeastSignificantBits()) {
-                        return entry;
-                    }
-                }
-                return null;
-            }
-
             @Override
-            public Optional<InputStream> getSegmentData(String name, String segmentId) {
-                try (SegmentArchiveReader reader = archiveManager.open(name)) {
-                    if (reader == null) {
-                        return Optional.empty();
-                    }
-                    ByteBuffer buffer = readSegment(reader, UUID.fromString(segmentId));
-                    if (buffer == null) {
-                        return Optional.empty();
-                    }
-                    return Optional.of(new ByteArrayInputStream(toByteArray(buffer)));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            public Optional<InputStream> getSegmentData(String segmentId) {
+                return readSegment(segmentId).map(segment -> {
+                    ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-            private ByteBuffer readSegment(SegmentArchiveReader reader, UUID id) throws IOException {
-                return reader.readSegment(id.getMostSignificantBits(), id.getLeastSignificantBits());
-            }
+                    try {
+                        segment.writeTo(out);
+                    } catch (IOException e) {
+                        return null;
+                    }
 
-            private byte[] toByteArray(ByteBuffer buffer) {
-                if (buffer.hasArray()) {
-                    return buffer.array();
-                }
-                byte[] data = new byte[buffer.remaining()];
-                buffer.get(data);
-                return data;
+                    return new ByteArrayInputStream(out.toByteArray());
+                });
             }
 
             @Override

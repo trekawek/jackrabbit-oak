@@ -68,7 +68,7 @@ class TarNode extends AbstractNodeState {
     @Override
     public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
         if (backend.segmentExists(this.name, name)) {
-            return new SegmentNode(backend, this.name, name);
+            return new SegmentNode(backend, name);
         }
         return EmptyNodeState.MISSING_NODE;
     }
@@ -79,7 +79,7 @@ class TarNode extends AbstractNodeState {
         List<ChildNodeEntry> entries = new ArrayList<>();
 
         for (String segmentId : backend.getSegmentIds(name)) {
-            entries.add(new MemoryChildNodeEntry(segmentId, new SegmentNode(backend, name, segmentId)));
+            entries.add(new MemoryChildNodeEntry(segmentId, new SegmentNode(backend, segmentId)));
         }
 
         return entries;
