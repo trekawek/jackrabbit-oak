@@ -55,7 +55,7 @@ class TarNode extends AbstractNodeState {
     public Iterable<? extends PropertyState> getProperties() {
         return ImmutableList.of(
             createProperty("name", name),
-            createProperty("size", backend.tarSize(name))
+            createProperty("size", backend.getTarSize(name).orElse(-1L))
         );
     }
 

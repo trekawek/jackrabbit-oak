@@ -355,9 +355,9 @@ public class FileStoreBuilder {
             }
 
             @Override
-            public long tarSize(String name) {
+            public Optional<Long> getTarSize(String name) {
                 try (SegmentArchiveReader reader = archiveManager.open(name)) {
-                    return reader == null ? -1 : reader.length();
+                    return Optional.ofNullable(reader).map(SegmentArchiveReader::length);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
