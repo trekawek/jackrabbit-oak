@@ -287,6 +287,26 @@ public class ProcTest {
         assertEquals(1, property.getValue(Type.BINARY).length());
     }
 
+    @Test
+    public void segmentNodeShouldHaveIdProperty() {
+        Segment segment = mock(Segment.class);
+        when(segment.getLength()).thenReturn(1);
+
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegment("t", "s")).thenReturn(Optional.of(segment));
+
+        PropertyState property = Proc.of(backend)
+            .getChildNode("store")
+            .getChildNode("t")
+            .getChildNode("s")
+            .getProperty("id");
+
+        assertEquals(Type.STRING, property.getType());
+        assertEquals("s", property.getValue(Type.STRING));
+    }
+
     @Test(expected = UnsupportedOperationException.class)
     public void segmentNodeShouldNotBeBuildable() {
         Backend backend = mock(Backend.class);
