@@ -19,9 +19,9 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import javax.annotation.Nonnull;
 
@@ -49,15 +49,9 @@ class ReferencesNode extends AbstractNode {
     }
 
     private Iterable<ChildNodeEntry> getChildNodeEntries(Iterable<String> references) {
-        int i = 0;
-
-        List<ChildNodeEntry> entries = new ArrayList<>();
-
-        for (String reference : references) {
-            entries.add(new MemoryChildNodeEntry(Integer.toString(i++), new SegmentNode(backend, reference)));
-        }
-
-        return entries;
+        return StreamSupport.stream(references.spliterator(), false)
+            .map(r -> new MemoryChildNodeEntry(r, new SegmentNode(backend, r)))
+            .collect(Collectors.toList());
     }
 
 }

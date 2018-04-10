@@ -20,6 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
@@ -39,42 +41,24 @@ import org.junit.Test;
 
 public class ReferencesNodeTest {
 
-    private Segment mockSegment() {
-        Segment segment = mock(Segment.class);
-        when(segment.getInfo()).thenReturn(Optional.empty());
-        return segment;
-    }
-
     @Test
     public void shouldExposeReference() {
         List<String> references = Collections.singletonList("u");
 
-        Segment segment = mockSegment();
-
         Backend backend = mock(Backend.class);
         when(backend.getSegmentReferences("s")).thenReturn(Optional.of(references));
-        when(backend.getSegment("u")).thenReturn(Optional.of(segment));
 
-        NodeState n = new ReferencesNode(backend, "s").getChildNode("0");
-        assertEquals("u", n.getProperty("id").getValue(Type.STRING));
+        assertTrue(new ReferencesNode(backend, "s").hasChildNode("u"));
     }
 
     @Test
     public void shouldExposeAllReferences() {
         List<String> references = Arrays.asList("u", "v", "w");
 
-        Segment segment = mockSegment();
-
         Backend backend = mock(Backend.class);
         when(backend.getSegmentReferences("s")).thenReturn(Optional.of(references));
-        when(backend.getSegment(any())).thenReturn(Optional.of(segment));
 
-        NodeState r = new ReferencesNode(backend, "s");
-
-        for (int i = 0; i < references.size(); i++) {
-            NodeState n = r.getChildNode(Integer.toString(i));
-            assertEquals(references.get(i), n.getProperty("id").getValue(Type.STRING));
-        }
+        assertEquals(Sets.newHashSet(references), Sets.newHashSet(new ReferencesNode(backend, "s").getChildNodeNames()));
     }
 
 }
