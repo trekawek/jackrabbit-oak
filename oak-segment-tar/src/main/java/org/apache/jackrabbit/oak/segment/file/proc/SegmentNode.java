@@ -18,7 +18,6 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Collections.singleton;
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.io.InputStream;
@@ -27,6 +26,7 @@ import java.util.Arrays;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
@@ -58,7 +58,9 @@ class SegmentNode extends AbstractNodeState {
     public Iterable<? extends PropertyState> getProperties() {
         return backend.getSegment(segmentId)
                 .map(this::getProperties)
-                .orElse(singleton(newIdProperty(segmentId)));
+                .orElse(ImmutableList.of(
+                        newIdProperty(segmentId),
+                        newExistsProperty(false)));
     }
 
     private Iterable<PropertyState> getProperties(Segment segment) {
@@ -71,12 +73,17 @@ class SegmentNode extends AbstractNodeState {
             newIdProperty(segmentId),
             createProperty("version", (long) segment.getVersion(), Type.LONG),
             createProperty("isDataSegment", segment.isDataSegment(), Type.BOOLEAN),
-            createProperty("info", segment.getInfo().orElse(""), Type.STRING)
+            createProperty("info", segment.getInfo().orElse(""), Type.STRING),
+            newExistsProperty(true)
         );
     }
 
     private static PropertyState newIdProperty(String segmentId) {
         return createProperty("id", segmentId, Type.STRING);
+    }
+
+    private static PropertyState newExistsProperty(boolean exists) {
+        return createProperty("exists", exists, Type.BOOLEAN);
     }
 
     private Blob newBlob() {
