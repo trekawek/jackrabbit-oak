@@ -29,12 +29,10 @@ import com.google.common.collect.ImmutableList;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class TarNode extends AbstractNodeState {
+class TarNode extends AbstractNode {
 
     private final Proc.Backend backend;
 
@@ -43,11 +41,6 @@ class TarNode extends AbstractNodeState {
     TarNode(Proc.Backend backend, String name) {
         this.backend = backend;
         this.name = name;
-    }
-
-    @Override
-    public boolean exists() {
-        return true;
     }
 
     @Nonnull
@@ -83,12 +76,6 @@ class TarNode extends AbstractNodeState {
         }
 
         return entries;
-    }
-
-    @Nonnull
-    @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
     }
 
 }

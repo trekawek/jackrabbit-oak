@@ -32,12 +32,9 @@ import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
-import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
-import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class SegmentNode extends AbstractNodeState {
+class SegmentNode extends AbstractNode {
 
     private final Proc.Backend backend;
 
@@ -46,11 +43,6 @@ class SegmentNode extends AbstractNodeState {
     SegmentNode(Proc.Backend backend, String segmentId) {
         this.backend = backend;
         this.segmentId = segmentId;
-    }
-
-    @Override
-    public boolean exists() {
-        return true;
     }
 
     @Nonnull
@@ -118,30 +110,13 @@ class SegmentNode extends AbstractNodeState {
         };
     }
 
-    @Override
-    public boolean hasChildNode(@Nonnull String name) {
-        return NodeUtils.hasChildNode(getChildNodeEntries(), name);
-    }
-
-    @Nonnull
-    @Override
-    public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        return NodeUtils.getChildNode(getChildNodeEntries(), name);
-    }
-
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
         return Arrays.asList(
-            new MemoryChildNodeEntry("references", new SegmentReferencesNode(backend, segmentId)),
-            new MemoryChildNodeEntry("records", new SegmentRecordsNode(backend, segmentId))
+            new MemoryChildNodeEntry("references", new ReferencesNode(backend, segmentId)),
+            new MemoryChildNodeEntry("records", new RecordsNode(backend, segmentId))
         );
-    }
-
-    @Nonnull
-    @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
     }
 
 }

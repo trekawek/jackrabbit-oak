@@ -19,40 +19,21 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.PropertyState;
-import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class SegmentReferencesNode extends AbstractNodeState {
-
-    private final Backend backend;
-
-    private final String segmentId;
-
-    SegmentReferencesNode(Backend backend, String segmentId) {
-        this.backend = backend;
-        this.segmentId = segmentId;
-    }
+abstract class AbstractNode extends AbstractNodeState {
 
     @Override
     public boolean exists() {
         return true;
-    }
-
-    @Nonnull
-    @Override
-    public Iterable<? extends PropertyState> getProperties() {
-        return Collections.emptyList();
     }
 
     @Override
@@ -68,28 +49,20 @@ class SegmentReferencesNode extends AbstractNodeState {
 
     @Nonnull
     @Override
-    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return backend.getSegmentReferences(segmentId)
-            .map(this::getChildNodeEntries)
-            .orElse(Collections.emptyList());
-    }
-
-    private Iterable<ChildNodeEntry> getChildNodeEntries(Iterable<String> references) {
-        int i = 0;
-
-        List<ChildNodeEntry> entries = new ArrayList<>();
-
-        for (String reference : references) {
-            entries.add(new MemoryChildNodeEntry(Integer.toString(i++), new SegmentNode(backend, reference)));
-        }
-
-        return entries;
+    public NodeBuilder builder() {
+        throw new UnsupportedOperationException();
     }
 
     @Nonnull
     @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
+    public Iterable<? extends PropertyState> getProperties() {
+        return Collections.emptyList();
+    }
+
+    @Nonnull
+    @Override
+    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
+        return Collections.emptyList();
     }
 
 }

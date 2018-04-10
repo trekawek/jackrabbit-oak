@@ -30,12 +30,10 @@ import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.plugins.memory.PropertyStates;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Commit;
-import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class CommitNode extends AbstractNodeState {
+class CommitNode extends AbstractNode {
 
     private final Proc.Backend backend;
 
@@ -44,11 +42,6 @@ class CommitNode extends AbstractNodeState {
     CommitNode(Proc.Backend backend, String handle) {
         this.backend = backend;
         this.handle = handle;
-    }
-
-    @Override
-    public boolean exists() {
-        return true;
     }
 
     @Nonnull
@@ -85,12 +78,6 @@ class CommitNode extends AbstractNodeState {
             .flatMap(Proc.Backend.Commit::getRoot)
             .map(r -> singleton(new MemoryChildNodeEntry("root", r)))
             .orElse(emptySet());
-    }
-
-    @Nonnull
-    @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
     }
 
 }

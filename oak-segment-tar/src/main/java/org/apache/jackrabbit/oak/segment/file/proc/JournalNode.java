@@ -18,38 +18,22 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import static java.util.Collections.emptyList;
-
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 
-import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class JournalNode extends AbstractNodeState {
+class JournalNode extends AbstractNode {
 
     private final Proc.Backend backend;
 
     JournalNode(Proc.Backend backend) {
         this.backend = backend;
-    }
-
-    @Override
-    public boolean exists() {
-        return true;
-    }
-
-    @Nonnull
-    @Override
-    public Iterable<? extends PropertyState> getProperties() {
-        return emptyList();
     }
 
     @Override
@@ -76,12 +60,6 @@ class JournalNode extends AbstractNodeState {
         }
 
         return entries;
-    }
-
-    @Nonnull
-    @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
     }
 
 }

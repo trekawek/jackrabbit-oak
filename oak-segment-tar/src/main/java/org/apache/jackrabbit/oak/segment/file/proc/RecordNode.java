@@ -22,30 +22,19 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.util.Arrays;
-import java.util.Collections;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
-import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
-import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
-import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
-import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class RecordNode extends AbstractNodeState {
+class RecordNode extends AbstractNode {
 
     private final Record record;
 
     RecordNode(Record record) {
         this.record = record;
-    }
-
-    @Override
-    public boolean exists() {
-        return true;
     }
 
     @Nonnull
@@ -58,29 +47,6 @@ class RecordNode extends AbstractNodeState {
             createProperty("address", (long) record.getAddress(), Type.LONG),
             createProperty("type", record.getType(), Type.STRING)
         );
-    }
-
-    @Override
-    public boolean hasChildNode(@Nonnull String name) {
-        return false;
-    }
-
-    @Nonnull
-    @Override
-    public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        return EmptyNodeState.MISSING_NODE;
-    }
-
-    @Nonnull
-    @Override
-    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return Collections.emptyList();
-    }
-
-    @Nonnull
-    @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
     }
 
 }

@@ -25,46 +25,20 @@ import java.util.stream.StreamSupport;
 
 import javax.annotation.Nonnull;
 
-import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
-import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
-import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class SegmentRecordsNode extends AbstractNodeState {
+class RecordsNode extends AbstractNode {
 
     private final Backend backend;
 
     private final String segmentId;
 
-    SegmentRecordsNode(Backend backend, String segmentId) {
+    RecordsNode(Backend backend, String segmentId) {
         this.backend = backend;
         this.segmentId = segmentId;
-    }
-
-    @Override
-    public boolean exists() {
-        return true;
-    }
-
-    @Nonnull
-    @Override
-    public Iterable<? extends PropertyState> getProperties() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public boolean hasChildNode(@Nonnull String name) {
-        return NodeUtils.hasChildNode(getChildNodeEntries(), name);
-    }
-
-    @Nonnull
-    @Override
-    public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        return NodeUtils.getChildNode(getChildNodeEntries(), name);
     }
 
     @Nonnull
@@ -79,12 +53,6 @@ class SegmentRecordsNode extends AbstractNodeState {
         return StreamSupport.stream(records.spliterator(), false)
             .map(r -> new MemoryChildNodeEntry(Integer.toString(r.getNumber()), new RecordNode(r)))
             .collect(Collectors.toList());
-    }
-
-    @Nonnull
-    @Override
-    public NodeBuilder builder() {
-        throw new UnsupportedOperationException();
     }
 
 }
