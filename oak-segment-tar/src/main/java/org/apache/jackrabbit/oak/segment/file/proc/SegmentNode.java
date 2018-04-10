@@ -22,6 +22,7 @@ import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProp
 
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Collections;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -54,18 +55,28 @@ class SegmentNode extends AbstractNode {
     }
 
     private Iterable<PropertyState> getFullProperties(Segment segment) {
-        return Arrays.asList(
-            createProperty("generation", (long) segment.getGeneration(), Type.LONG),
-            createProperty("fullGeneration", (long) segment.getFullGeneration(), Type.LONG),
-            createProperty("compacted", segment.isCompacted(), Type.BOOLEAN),
-            createProperty("length", (long) segment.getLength(), Type.LONG),
-            createProperty("data", newBlob(), Type.BINARY),
-            createProperty("version", (long) segment.getVersion(), Type.LONG),
-            createProperty("isDataSegment", segment.isDataSegment(), Type.BOOLEAN),
-            createProperty("info", segment.getInfo().orElse(""), Type.STRING),
-            newIdProperty(segmentId),
-            newExistsProperty(true)
-        );
+        if (segment.isDataSegment()) {
+            return Arrays.asList(
+                    createProperty("generation", (long) segment.getGeneration(), Type.LONG),
+                    createProperty("fullGeneration", (long) segment.getFullGeneration(), Type.LONG),
+                    createProperty("compacted", segment.isCompacted(), Type.BOOLEAN),
+                    createProperty("length", (long) segment.getLength(), Type.LONG),
+                    createProperty("data", newBlob(), Type.BINARY),
+                    createProperty("version", (long) segment.getVersion(), Type.LONG),
+                    createProperty("isDataSegment", true, Type.BOOLEAN),
+                    createProperty("info", segment.getInfo().orElse(""), Type.STRING),
+                    newIdProperty(segmentId),
+                    newExistsProperty(true)
+            );
+        } else {
+            return Arrays.asList(
+                    createProperty("length", (long) segment.getLength(), Type.LONG),
+                    createProperty("data", newBlob(), Type.BINARY),
+                    createProperty("isDataSegment", false, Type.BOOLEAN),
+                    newIdProperty(segmentId),
+                    newExistsProperty(true)
+            );
+        }
     }
 
     private Iterable<PropertyState> getMinimalProperties() {
@@ -118,10 +129,18 @@ class SegmentNode extends AbstractNode {
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return Arrays.asList(
-            new MemoryChildNodeEntry("references", new ReferencesNode(backend, segmentId)),
-            new MemoryChildNodeEntry("records", new RecordsNode(backend, segmentId))
-        );
+        boolean dataSegment = backend.getSegment(segmentId)
+                .map(Segment::isDataSegment)
+                .orElse(true);
+
+        if (dataSegment) {
+            return Arrays.asList(
+                    new MemoryChildNodeEntry("references", new ReferencesNode(backend, segmentId)),
+                    new MemoryChildNodeEntry("records", new RecordsNode(backend, segmentId))
+            );
+        } else {
+            return Collections.emptyList();
+        }
     }
 
 }
