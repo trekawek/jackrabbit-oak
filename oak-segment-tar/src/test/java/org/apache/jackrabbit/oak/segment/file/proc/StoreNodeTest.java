@@ -19,28 +19,56 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.util.Set;
+
+import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.junit.Test;
 
-public class ProcTest {
+public class StoreNodeTest {
 
     @Test
-    public void procNodeShouldExposeStore() {
+    public void shouldExist() {
         assertTrue(
             Proc.of(mock(Backend.class))
-                .hasChildNode("store")
+                .getChildNode("store")
+                .exists()
         );
     }
 
     @Test
-    public void procShouldExposeJournal() {
+    public void shouldExposeAllTarNames() {
+        Set<String> names = Sets.newHashSet("t1", "t2", "t3");
+        Backend backend = mock(Backend.class);
+        when(backend.getTarNames()).thenReturn(names);
+        assertEquals(names, Sets.newHashSet(
+            Proc.of(backend)
+                .getChildNode("store")
+                .getChildNodeNames()
+        ));
+    }
+
+    @Test
+    public void shouldExposeTarName() {
+        Backend backend = mock(Backend.class);
+        when(backend.tarExists("t")).thenReturn(true);
         assertTrue(
-            Proc.of(mock(Backend.class))
-                .hasChildNode("journal")
+            Proc.of(backend)
+                .getChildNode("store")
+                .hasChildNode("t")
         );
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void shouldNotBeBuildable() {
+        Proc.of(mock(Backend.class))
+            .getChildNode("store")
+            .builder();
     }
 
 }

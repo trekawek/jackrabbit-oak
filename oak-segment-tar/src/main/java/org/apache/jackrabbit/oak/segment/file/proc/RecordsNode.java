@@ -31,7 +31,7 @@ import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 
 class RecordsNode extends AbstractNode {
-
+    
     private final Backend backend;
 
     private final String segmentId;

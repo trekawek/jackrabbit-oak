@@ -19,28 +19,50 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.util.Set;
+
+import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.junit.Test;
 
-public class ProcTest {
+public class JournalNodeTest {
 
     @Test
-    public void procNodeShouldExposeStore() {
+    public void shouldExposeCommitHandle() {
+        Backend backend = mock(Backend.class);
+        when(backend.commitExists("h")).thenReturn(true);
+
         assertTrue(
-            Proc.of(mock(Backend.class))
-                .hasChildNode("store")
+            Proc.of(backend)
+                .getChildNode("journal")
+                .hasChildNode("h")
         );
     }
 
     @Test
-    public void procShouldExposeJournal() {
-        assertTrue(
-            Proc.of(mock(Backend.class))
-                .hasChildNode("journal")
-        );
+    public void shouldExposeAllCommitHandles() {
+        Set<String> names = Sets.newHashSet("h1", "h2", "h3");
+
+        Backend backend = mock(Backend.class);
+        when(backend.getCommitHandles()).thenReturn(names);
+
+        assertEquals(names, Sets.newHashSet(
+            Proc.of(backend)
+                .getChildNode("journal")
+                .getChildNodeNames()
+        ));
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void shouldNotBeBuildable() {
+        Proc.of(mock(Backend.class))
+            .getChildNode("journal")
+            .builder();
     }
 
 }
