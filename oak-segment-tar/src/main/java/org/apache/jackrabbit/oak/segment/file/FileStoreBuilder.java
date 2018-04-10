@@ -51,6 +51,7 @@ import org.apache.jackrabbit.oak.segment.CacheWeights.StringCacheWeigher;
 import org.apache.jackrabbit.oak.segment.CacheWeights.TemplateCacheWeigher;
 import org.apache.jackrabbit.oak.segment.RecordCache;
 import org.apache.jackrabbit.oak.segment.RecordId;
+import org.apache.jackrabbit.oak.segment.RecordType;
 import org.apache.jackrabbit.oak.segment.SegmentId;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundException;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundExceptionListener;
@@ -533,6 +534,15 @@ public class FileStoreBuilder {
                                 return type.name();
                             }
 
+                            @Override
+                            public Optional<NodeState> getRoot() {
+                                if (RecordType.NODE == type) {
+                                    RecordId id = new RecordId(segment.getSegmentId(), number);
+                                    return Optional.of(fileStore.getReader().readNode(id));
+                                } else {
+                                    return Optional.empty();
+                                }
+                            }
                         });
                     });
 

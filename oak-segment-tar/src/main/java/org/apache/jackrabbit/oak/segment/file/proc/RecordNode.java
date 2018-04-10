@@ -22,12 +22,15 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
+import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
+import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 
 class RecordNode extends AbstractNode {
 
@@ -47,6 +50,15 @@ class RecordNode extends AbstractNode {
             createProperty("address", (long) record.getAddress(), Type.LONG),
             createProperty("type", record.getType(), Type.STRING)
         );
+    }
+
+    @Nonnull
+    @Override
+    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
+        return record.getRoot()
+                .map(root -> new MemoryChildNodeEntry("root", root))
+                .map(Collections::singletonList)
+                .orElse(Collections.emptyList());
     }
 
 }

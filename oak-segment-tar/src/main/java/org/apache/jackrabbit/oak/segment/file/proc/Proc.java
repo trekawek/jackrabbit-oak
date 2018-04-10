@@ -69,6 +69,7 @@ public class Proc {
 
             String getType();
 
+            Optional<NodeState> getRoot();
         }
 
         boolean tarExists(String name);
