@@ -543,6 +543,16 @@ public class FileStoreBuilder {
                                     return Optional.empty();
                                 }
                             }
+
+                            @Override
+                            public Optional<String> getValue() {
+                                if (RecordType.VALUE == type) {
+                                    RecordId id = new RecordId(segment.getSegmentId(), number);
+                                    return Optional.of(fileStore.getReader().readString(id));
+                                } else {
+                                    return Optional.empty();
+                                }
+                            }
                         });
                     });
 

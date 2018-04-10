@@ -21,14 +21,16 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
-import java.util.Arrays;
 import java.util.Collections;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList.Builder;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
+import org.apache.jackrabbit.oak.segment.RecordType;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 
@@ -43,13 +45,21 @@ class RecordNode extends AbstractNode {
     @Nonnull
     @Override
     public Iterable<? extends PropertyState> getProperties() {
-        return Arrays.asList(
+        Builder<PropertyState> listBuilder = ImmutableList.builder();
+
+        listBuilder.add(
             createProperty("number", (long) record.getNumber(), Type.LONG),
             createProperty("segmentId", record.getSegmentId(), Type.STRING),
             createProperty("offset", (long) record.getOffset(), Type.LONG),
             createProperty("address", (long) record.getAddress(), Type.LONG),
             createProperty("type", record.getType(), Type.STRING)
         );
+
+        if (RecordType.valueOf(record.getType()) == RecordType.VALUE) {
+            listBuilder.add(createProperty("value", record.getValue().get()));
+        }
+
+        return listBuilder.build();
     }
 
     @Nonnull
