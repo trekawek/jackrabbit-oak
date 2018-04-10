@@ -578,6 +578,7 @@ public class ProcTest {
         Record record = mock(Record.class);
         when(record.getNumber()).thenReturn(1);
         when(record.getType()).thenReturn("t");
+        when(record.getSegmentId()).thenReturn("s");
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -602,6 +603,7 @@ public class ProcTest {
         when(record.getNumber()).thenReturn(1);
         when(record.getOffset()).thenReturn(2);
         when(record.getType()).thenReturn("t");
+        when(record.getSegmentId()).thenReturn("s");
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
@@ -625,6 +627,7 @@ public class ProcTest {
         Record record = mock(Record.class);
         when(record.getNumber()).thenReturn(1);
         when(record.getType()).thenReturn("t");
+        when(record.getSegmentId()).thenReturn("s");
 
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
