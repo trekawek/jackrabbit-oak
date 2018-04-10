@@ -59,10 +59,13 @@ public class Proc {
         }
 
         interface Record {
-
             int getNumber();
 
+            String getSegmentId();
+
             int getOffset();
+
+            int getAddress();
 
             String getType();
 

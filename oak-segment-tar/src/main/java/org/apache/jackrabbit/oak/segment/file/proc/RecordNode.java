@@ -53,7 +53,9 @@ class RecordNode extends AbstractNodeState {
     public Iterable<? extends PropertyState> getProperties() {
         return Arrays.asList(
             createProperty("number", (long) record.getNumber(), Type.LONG),
+            createProperty("segmentId", record.getSegmentId(), Type.STRING),
             createProperty("offset", (long) record.getOffset(), Type.LONG),
+            createProperty("address", (long) record.getAddress(), Type.LONG),
             createProperty("type", record.getType(), Type.STRING)
         );
     }
