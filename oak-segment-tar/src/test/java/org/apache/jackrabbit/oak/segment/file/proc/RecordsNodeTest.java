@@ -36,16 +36,6 @@ import org.junit.Test;
 
 public class RecordsNodeTest {
 
-    @Test(expected = UnsupportedOperationException.class)
-    public void shouldNotBeBuildable() {
-        new RecordsNode(mock(Backend.class), "s").builder();
-    }
-
-    @Test
-    public void shouldExist() {
-        assertTrue(new RecordsNode(mock(Backend.class), "s").exists());
-    }
-
     @Test
     public void shouldExposeRecordNumber() {
         Record record = mock(Record.class);

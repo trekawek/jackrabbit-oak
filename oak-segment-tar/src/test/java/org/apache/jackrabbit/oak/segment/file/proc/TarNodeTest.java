@@ -20,6 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -31,69 +32,46 @@ import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
+import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.junit.Test;
 
 public class TarNodeTest {
 
     @Test
-    public void shouldExist() {
+    public void shouldExposeSegmentId() {
         Backend backend = mock(Backend.class);
-        when(backend.tarExists("t")).thenReturn(true);
-        assertTrue(
-            Proc.of(backend)
-                .getChildNode("store")
-                .getChildNode("t")
-                .exists()
-        );
+        when(backend.segmentExists("t", "s")).thenReturn(true);
+
+        NodeState n = new TarNode(backend, "t");
+
+        assertTrue(n.hasChildNode("s"));
+        assertTrue(n.getChildNode("s").exists());
     }
 
     @Test
-    public void shouldExposeSegmentId() {
-        Backend backend = mock(Backend.class);
-        when(backend.tarExists("t")).thenReturn(true);
-        when(backend.segmentExists("t", "s")).thenReturn(true);
-        assertTrue(
-            Proc.of(backend)
-                .getChildNode("store")
-                .getChildNode("t")
-                .hasChildNode("s")
-        );
+    public void shouldNotExposeNonExistingSegmentId() {
+        NodeState n = new TarNode(mock(Backend.class), "t");
+
+        assertFalse(n.hasChildNode("s"));
+        assertFalse(n.getChildNode("s").exists());
     }
 
     @Test
     public void shouldExposeAllSegmentIds() {
         Set<String> names = Sets.newHashSet("s1", "s2", "s3");
-        Backend backend = mock(Backend.class);
-        when(backend.tarExists("t")).thenReturn(true);
-        when(backend.getSegmentIds("t")).thenReturn(names);
-        assertEquals(names, Sets.newHashSet(
-            Proc.of(backend)
-                .getChildNode("store")
-                .getChildNode("t")
-                .getChildNodeNames()
-        ));
-    }
 
-    @Test(expected = UnsupportedOperationException.class)
-    public void shouldNotBeBuildable() {
         Backend backend = mock(Backend.class);
-        when(backend.tarExists("t")).thenReturn(true);
-        Proc.of(backend)
-            .getChildNode("store")
-            .getChildNode("t")
-            .builder();
+        when(backend.getSegmentIds("t")).thenReturn(names);
+
+        assertEquals(names, Sets.newHashSet(new TarNode(backend, "t").getChildNodeNames()));
     }
 
     @Test
     public void shouldHaveNameProperty() {
         Backend backend = mock(Backend.class);
-        when(backend.tarExists("t")).thenReturn(true);
         when(backend.getTarSize("t")).thenReturn(Optional.empty());
 
-        PropertyState property = Proc.of(backend)
-            .getChildNode("store")
-            .getChildNode("t")
-            .getProperty("name");
+        PropertyState property = new TarNode(backend, "t").getProperty("name");
 
         assertEquals(Type.STRING, property.getType());
         assertEquals("t", property.getValue(Type.STRING));
@@ -102,13 +80,9 @@ public class TarNodeTest {
     @Test
     public void shouldHaveSizeProperty() {
         Backend backend = mock(Backend.class);
-        when(backend.tarExists("t")).thenReturn(true);
         when(backend.getTarSize("t")).thenReturn(Optional.of(1L));
 
-        PropertyState property = Proc.of(backend)
-            .getChildNode("store")
-            .getChildNode("t")
-            .getProperty("size");
+        PropertyState property = new TarNode(backend, "t").getProperty("size");
 
         assertEquals(Type.LONG, property.getType());
         assertEquals(1L, property.getValue(Type.LONG).longValue());

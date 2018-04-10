@@ -27,43 +27,30 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 
-import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Commit;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.junit.Test;
 
 public class CommitNodeTest {
 
-    @Test
-    public void shouldExist() {
-        Proc.Backend backend = mock(Proc.Backend.class);
-        when(backend.commitExists("h")).thenReturn(true);
-
-        assertTrue(
-            Proc.of(backend)
-                .getChildNode("journal")
-                .getChildNode("h")
-                .exists()
-        );
+    private Commit mockCommit() {
+        Commit commit = mock(Commit.class);
+        when(commit.getRevision()).thenReturn("");
+        return commit;
     }
 
     @Test
     public void shouldHaveTimestampProperty() {
-        Proc.Backend.Commit commit = mock(Proc.Backend.Commit.class);
+        Commit commit = mockCommit();
         when(commit.getTimestamp()).thenReturn(1L);
-        when(commit.getRevision()).thenReturn("");
 
         Proc.Backend backend = mock(Proc.Backend.class);
-        when(backend.commitExists("h")).thenReturn(true);
         when(backend.getCommit("h")).thenReturn(Optional.of(commit));
 
-        PropertyState property = Proc.of(backend)
-            .getChildNode("journal")
-            .getChildNode("h")
-            .getProperty("timestamp");
+        PropertyState property = new CommitNode(backend, "h").getProperty("timestamp");
 
         assertEquals(Type.LONG, property.getType());
         assertEquals(1L, property.getValue(Type.LONG).longValue());
@@ -71,55 +58,26 @@ public class CommitNodeTest {
 
     @Test
     public void shouldExposeRoot() {
-        Proc.Backend.Commit commit = mock(Proc.Backend.Commit.class);
+        Commit commit = mockCommit();
         when(commit.getRoot()).thenReturn(Optional.of(EmptyNodeState.EMPTY_NODE));
 
         Proc.Backend backend = mock(Proc.Backend.class);
-        when(backend.commitExists("h")).thenReturn(true);
         when(backend.getCommit("h")).thenReturn(Optional.of(commit));
 
-        NodeState commitNode = Proc.of(backend)
-            .getChildNode("journal")
-            .getChildNode("h");
-
-        assertTrue(commitNode.hasChildNode("root"));
-        assertTrue(Sets.newHashSet(commitNode.getChildNodeNames()).contains("root"));
+        assertTrue(new CommitNode(backend, "h").hasChildNode("root"));
     }
 
     @Test
     public void shouldHaveRootChildNode() {
-        NodeBuilder builder = EmptyNodeState.EMPTY_NODE.builder();
-        builder.setProperty("root", true);
-        NodeState root = builder.getNodeState();
+        NodeState root = EmptyNodeState.EMPTY_NODE;
 
-        Proc.Backend.Commit commit = mock(Proc.Backend.Commit.class);
+        Commit commit = mock(Commit.class);
         when(commit.getRoot()).thenReturn(Optional.of(root));
 
         Proc.Backend backend = mock(Proc.Backend.class);
-        when(backend.commitExists("h")).thenReturn(true);
         when(backend.getCommit("h")).thenReturn(Optional.of(commit));
 
-        assertSame(root,
-            Proc.of(backend)
-                .getChildNode("journal")
-                .getChildNode("h")
-                .getChildNode("root")
-        );
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void shouldNotBeBuildable() {
-        Proc.Backend.Commit commit = mock(Proc.Backend.Commit.class);
-        when(commit.getRoot()).thenReturn(Optional.of(EmptyNodeState.EMPTY_NODE));
-
-        Proc.Backend backend = mock(Proc.Backend.class);
-        when(backend.commitExists("h")).thenReturn(true);
-        when(backend.getCommit("h")).thenReturn(Optional.of(commit));
-
-        Proc.of(backend)
-            .getChildNode("journal")
-            .getChildNode("h")
-            .builder();
+        assertSame(root, new CommitNode(backend, "h").getChildNode("root"));
     }
 
 }

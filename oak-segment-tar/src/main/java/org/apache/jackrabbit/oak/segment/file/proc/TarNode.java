@@ -29,16 +29,17 @@ import com.google.common.collect.ImmutableList;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 class TarNode extends AbstractNode {
 
-    private final Proc.Backend backend;
+    private final Backend backend;
 
     private final String name;
 
-    TarNode(Proc.Backend backend, String name) {
+    TarNode(Backend backend, String name) {
         this.backend = backend;
         this.name = name;
     }

@@ -20,6 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -28,47 +29,38 @@ import java.util.Set;
 
 import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
+import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.junit.Test;
 
 public class StoreNodeTest {
 
     @Test
-    public void shouldExist() {
-        assertTrue(
-            Proc.of(mock(Backend.class))
-                .getChildNode("store")
-                .exists()
-        );
-    }
-
-    @Test
     public void shouldExposeAllTarNames() {
         Set<String> names = Sets.newHashSet("t1", "t2", "t3");
+
         Backend backend = mock(Backend.class);
         when(backend.getTarNames()).thenReturn(names);
-        assertEquals(names, Sets.newHashSet(
-            Proc.of(backend)
-                .getChildNode("store")
-                .getChildNodeNames()
-        ));
+
+        assertEquals(names, Sets.newHashSet(new StoreNode(backend).getChildNodeNames()));
     }
 
     @Test
     public void shouldExposeTarName() {
         Backend backend = mock(Backend.class);
         when(backend.tarExists("t")).thenReturn(true);
-        assertTrue(
-            Proc.of(backend)
-                .getChildNode("store")
-                .hasChildNode("t")
-        );
+
+        NodeState n = new StoreNode(backend);
+
+        assertTrue(n.hasChildNode("t"));
+        assertTrue(n.getChildNode("t").exists());
     }
 
-    @Test(expected = UnsupportedOperationException.class)
-    public void shouldNotBeBuildable() {
-        Proc.of(mock(Backend.class))
-            .getChildNode("store")
-            .builder();
+    @Test
+    public void shouldNotExposeNonExistingTarName() {
+        NodeState n = new StoreNode(mock(Backend.class));
+
+        assertFalse(n.hasChildNode("t"));
+        assertFalse(n.getChildNode("t").exists());
     }
 
 }

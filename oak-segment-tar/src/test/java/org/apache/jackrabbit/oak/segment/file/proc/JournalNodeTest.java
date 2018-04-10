@@ -20,6 +20,7 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -28,6 +29,7 @@ import java.util.Set;
 
 import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
+import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.junit.Test;
 
 public class JournalNodeTest {
@@ -37,11 +39,18 @@ public class JournalNodeTest {
         Backend backend = mock(Backend.class);
         when(backend.commitExists("h")).thenReturn(true);
 
-        assertTrue(
-            Proc.of(backend)
-                .getChildNode("journal")
-                .hasChildNode("h")
-        );
+        NodeState n  = new JournalNode(backend);
+
+        assertTrue(n.hasChildNode("h"));
+        assertTrue(n.getChildNode("h").exists());
+    }
+
+    @Test
+    public void shouldNotExposeNonExistingHandle() {
+        NodeState n = new JournalNode(mock(Backend.class));
+
+        assertFalse(n.hasChildNode("h"));
+        assertFalse(n.getChildNode("h").exists());
     }
 
     @Test
@@ -51,18 +60,7 @@ public class JournalNodeTest {
         Backend backend = mock(Backend.class);
         when(backend.getCommitHandles()).thenReturn(names);
 
-        assertEquals(names, Sets.newHashSet(
-            Proc.of(backend)
-                .getChildNode("journal")
-                .getChildNodeNames()
-        ));
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void shouldNotBeBuildable() {
-        Proc.of(mock(Backend.class))
-            .getChildNode("journal")
-            .builder();
+        assertEquals(names, Sets.newHashSet(new JournalNode(backend).getChildNodeNames()));
     }
 
 }

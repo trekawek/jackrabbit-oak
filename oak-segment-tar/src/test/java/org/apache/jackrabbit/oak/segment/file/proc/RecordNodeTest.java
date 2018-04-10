@@ -20,7 +20,6 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -31,22 +30,17 @@ import org.junit.Test;
 
 public class RecordNodeTest {
 
-    @Test
-    public void shouldExist() {
-        assertTrue(new RecordNode(mock(Record.class)).exists());
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void shouldNotBeBuildable() {
-        new RecordNode(mock(Record.class)).builder();
+    private Record mockRecord() {
+        Record record = mock(Record.class);
+        when(record.getSegmentId()).thenReturn("");
+        when(record.getType()).thenReturn("");
+        return record;
     }
 
     @Test
     public void shouldHaveNumberProperty() {
-        Record record = mock(Record.class);
+        Record record = mockRecord();
         when(record.getNumber()).thenReturn(1);
-        when(record.getType()).thenReturn("t");
-        when(record.getSegmentId()).thenReturn("s");
 
         PropertyState p = new RecordNode(record).getProperty("number");
 
@@ -56,10 +50,8 @@ public class RecordNodeTest {
 
     @Test
     public void shouldHaveOffsetProperty() {
-        Record record = mock(Record.class);
+        Record record = mockRecord();
         when(record.getOffset()).thenReturn(2);
-        when(record.getType()).thenReturn("t");
-        when(record.getSegmentId()).thenReturn("s");
 
         PropertyState p = new RecordNode(record).getProperty("offset");
 
@@ -69,9 +61,8 @@ public class RecordNodeTest {
 
     @Test
     public void shouldHaveTypeProperty() {
-        Record record = mock(Record.class);
+        Record record = mockRecord();
         when(record.getType()).thenReturn("t");
-        when(record.getSegmentId()).thenReturn("s");
 
         PropertyState p = new RecordNode(record).getProperty("type");
 
@@ -81,8 +72,7 @@ public class RecordNodeTest {
 
     @Test
     public void shouldHaveSegmentIdProperty() {
-        Record record = mock(Record.class);
-        when(record.getType()).thenReturn("t");
+        Record record = mockRecord();
         when(record.getSegmentId()).thenReturn("s");
 
         PropertyState p = new RecordNode(record).getProperty("segmentId");
@@ -93,10 +83,8 @@ public class RecordNodeTest {
 
     @Test
     public void shouldHaveAddressProperty() {
-        Record record = mock(Record.class);
+        Record record = mockRecord();
         when(record.getAddress()).thenReturn(1);
-        when(record.getType()).thenReturn("t");
-        when(record.getSegmentId()).thenReturn("s");
 
         PropertyState p = new RecordNode(record).getProperty("address");
 

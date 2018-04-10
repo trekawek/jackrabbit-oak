@@ -26,21 +26,21 @@ import java.util.Arrays;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
-import com.google.common.collect.ImmutableList;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 
 class SegmentNode extends AbstractNode {
 
-    private final Proc.Backend backend;
+    private final Backend backend;
 
     private final String segmentId;
 
-    SegmentNode(Proc.Backend backend, String segmentId) {
+    SegmentNode(Backend backend, String segmentId) {
         this.backend = backend;
         this.segmentId = segmentId;
     }
@@ -49,24 +49,29 @@ class SegmentNode extends AbstractNode {
     @Override
     public Iterable<? extends PropertyState> getProperties() {
         return backend.getSegment(segmentId)
-                .map(this::getProperties)
-                .orElse(ImmutableList.of(
-                        newIdProperty(segmentId),
-                        newExistsProperty(false)));
+            .map(this::getFullProperties)
+            .orElseGet(this::getMinimalProperties);
     }
 
-    private Iterable<PropertyState> getProperties(Segment segment) {
+    private Iterable<PropertyState> getFullProperties(Segment segment) {
         return Arrays.asList(
             createProperty("generation", (long) segment.getGeneration(), Type.LONG),
             createProperty("fullGeneration", (long) segment.getFullGeneration(), Type.LONG),
             createProperty("compacted", segment.isCompacted(), Type.BOOLEAN),
             createProperty("length", (long) segment.getLength(), Type.LONG),
             createProperty("data", newBlob(), Type.BINARY),
-            newIdProperty(segmentId),
             createProperty("version", (long) segment.getVersion(), Type.LONG),
             createProperty("isDataSegment", segment.isDataSegment(), Type.BOOLEAN),
             createProperty("info", segment.getInfo().orElse(""), Type.STRING),
+            newIdProperty(segmentId),
             newExistsProperty(true)
+        );
+    }
+
+    private Iterable<PropertyState> getMinimalProperties() {
+        return Arrays.asList(
+            newIdProperty(segmentId),
+            newExistsProperty(false)
         );
     }
 

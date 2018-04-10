@@ -57,20 +57,6 @@ class CommitNode extends AbstractNode {
         );
     }
 
-    @Override
-    public boolean hasChildNode(@Nonnull String name) {
-        return name.equals("root") && backend.getCommit(handle).flatMap(Proc.Backend.Commit::getRoot).isPresent();
-    }
-
-    @Nonnull
-    @Override
-    public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
-        if (name.equals("root")) {
-            return backend.getCommit(handle).flatMap(Commit::getRoot).orElse(EmptyNodeState.MISSING_NODE);
-        }
-        return EmptyNodeState.MISSING_NODE;
-    }
-
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {

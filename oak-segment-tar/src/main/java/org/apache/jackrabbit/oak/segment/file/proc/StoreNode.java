@@ -25,14 +25,15 @@ import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 class StoreNode extends AbstractNode {
 
-    private final Proc.Backend backend;
+    private final Backend backend;
 
-    StoreNode(Proc.Backend backend) {
+    StoreNode(Backend backend) {
         this.backend = backend;
     }
 
