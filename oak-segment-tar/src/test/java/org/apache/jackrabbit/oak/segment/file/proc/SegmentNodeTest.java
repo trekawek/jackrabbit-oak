@@ -39,15 +39,16 @@ import org.junit.Test;
 
 public class SegmentNodeTest {
 
-    private Segment mockSegment() {
+    private Segment mockDataSegment() {
         Segment segment = mock(Segment.class);
         when(segment.getInfo()).thenReturn(Optional.empty());
+        when(segment.isDataSegment()).thenReturn(true);
         return segment;
     }
 
     @Test
     public void shouldHaveGenerationProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.getGeneration()).thenReturn(1);
 
         Backend backend = mock(Backend.class);
@@ -61,7 +62,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveFullGenerationProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.getFullGeneration()).thenReturn(1);
 
         Backend backend = mock(Backend.class);
@@ -75,7 +76,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveCompactedProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.isCompacted()).thenReturn(true);
 
         Backend backend = mock(Backend.class);
@@ -89,7 +90,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveLengthProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.getLength()).thenReturn(1);
 
         Backend backend = mock(Backend.class);
@@ -105,7 +106,7 @@ public class SegmentNodeTest {
     public void shouldHaveDataProperty() {
         InputStream stream = new NullInputStream(1);
 
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.getLength()).thenReturn(1);
 
         Backend backend = mock(Backend.class);
@@ -121,7 +122,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveIdProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
 
         Backend backend = mock(Backend.class);
         when(backend.getSegment("s")).thenReturn(Optional.of(segment));
@@ -134,7 +135,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveVersionProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.getVersion()).thenReturn(1);
 
         Backend backend = mock(Backend.class);
@@ -148,7 +149,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveIsDataSegmentProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.isDataSegment()).thenReturn(true);
 
         Backend backend = mock(Backend.class);
@@ -162,7 +163,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveInfoProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
         when(segment.getInfo()).thenReturn(Optional.of("info"));
 
         Backend backend = mock(Backend.class);
@@ -187,7 +188,7 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldHaveExistsProperty() {
-        Segment segment = mockSegment();
+        Segment segment = mockDataSegment();
 
         Backend backend = mock(Backend.class);
         when(backend.getSegment("s")).thenReturn(Optional.of(segment));
@@ -211,13 +212,23 @@ public class SegmentNodeTest {
 
     @Test
     public void shouldExposeReferences() {
-        NodeState n = new SegmentNode(mock(Backend.class), "s");
+        Segment segment = mockDataSegment();
+
+        Backend backend = mock(Backend.class);
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
+
+        NodeState n = new SegmentNode(backend, "s");
         assertTrue(Iterables.contains(n.getChildNodeNames(), "references"));
     }
 
     @Test
     public void shouldExposeRecordsNode() {
-        NodeState n = new SegmentNode(mock(Backend.class), "s");
+        Segment segment = mockDataSegment();
+
+        Backend backend = mock(Backend.class);
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
+
+        NodeState n = new SegmentNode(backend, "s");
         assertTrue(Iterables.contains(n.getChildNodeNames(), "records"));
     }
 
