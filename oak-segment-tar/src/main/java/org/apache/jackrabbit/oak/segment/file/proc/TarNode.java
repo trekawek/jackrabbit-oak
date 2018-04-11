@@ -20,15 +20,14 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import javax.annotation.Nonnull;
 
 import com.google.common.collect.ImmutableList;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
-import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
@@ -62,7 +61,7 @@ class TarNode extends AbstractNode {
     @Override
     public NodeState getChildNode(@Nonnull String name) throws IllegalArgumentException {
         if (backend.segmentExists(this.name, name)) {
-            return new SegmentNode(backend, name);
+            return SegmentNode.newSegmentNode(backend, name);
         }
         return EmptyNodeState.MISSING_NODE;
     }
@@ -70,13 +69,13 @@ class TarNode extends AbstractNode {
     @Nonnull
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        List<ChildNodeEntry> entries = new ArrayList<>();
+        return StreamSupport.stream(backend.getSegmentIds(name).spliterator(), false)
+            .map(this::newSegmentEntry)
+            .collect(Collectors.toList());
+    }
 
-        for (String segmentId : backend.getSegmentIds(name)) {
-            entries.add(new MemoryChildNodeEntry(segmentId, new SegmentNode(backend, segmentId)));
-        }
-
-        return entries;
+    ChildNodeEntry newSegmentEntry(String segmentId) {
+        return new SegmentEntry(backend, segmentId);
     }
 
 }

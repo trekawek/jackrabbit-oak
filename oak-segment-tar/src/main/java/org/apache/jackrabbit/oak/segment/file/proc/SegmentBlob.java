@@ -19,42 +19,51 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import java.util.Collections;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
+import java.io.InputStream;
 
+import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
+import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
-import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
 
-class ReferencesNode extends AbstractNode {
+class SegmentBlob implements Blob {
 
     private final Backend backend;
 
     private final String segmentId;
 
-    ReferencesNode(Backend backend, String segmentId) {
+    private final Segment segment;
+
+    SegmentBlob(Backend backend, String segmentId, Segment segment) {
         this.backend = backend;
         this.segmentId = segmentId;
+        this.segment = segment;
     }
 
     @Nonnull
     @Override
-    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return backend.getSegmentReferences(segmentId)
-            .map(this::getChildNodeEntries)
-            .orElse(Collections.emptyList());
+    public InputStream getNewStream() {
+        return backend.getSegmentData(segmentId)
+            .orElseThrow(() -> new IllegalStateException("segment not found"));
     }
 
-    private Iterable<ChildNodeEntry> getChildNodeEntries(Iterable<String> references) {
-        return StreamSupport.stream(references.spliterator(), false)
-            .map(this::newSegmentNodeEntry)
-            .collect(Collectors.toList());
+    @Override
+    public long length() {
+        return segment.getLength();
     }
 
-    private ChildNodeEntry newSegmentNodeEntry(String segmentId) {
-        return new SegmentEntry(backend, segmentId);
+    @CheckForNull
+    @Override
+    public String getReference() {
+        return null;
+    }
+
+    @CheckForNull
+    @Override
+    public String getContentIdentity() {
+        return null;
     }
 
 }
