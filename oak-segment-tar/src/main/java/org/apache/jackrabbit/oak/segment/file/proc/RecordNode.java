@@ -56,9 +56,9 @@ class RecordNode extends AbstractNode {
     @Override
     public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
         return record.getRoot()
-                .map(root -> new MemoryChildNodeEntry("root", root))
-                .map(Collections::singletonList)
-                .orElse(Collections.emptyList());
+            .map(root -> new MemoryChildNodeEntry("root", root))
+            .map(Collections::singletonList)
+            .orElseGet(Collections::emptyList);
     }
 
 }
