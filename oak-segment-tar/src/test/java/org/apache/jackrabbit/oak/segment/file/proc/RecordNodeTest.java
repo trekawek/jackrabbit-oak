@@ -20,11 +20,15 @@
 package org.apache.jackrabbit.oak.segment.file.proc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Optional;
+
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
+import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
 import org.junit.Test;
 
@@ -90,6 +94,14 @@ public class RecordNodeTest {
 
         assertEquals(Type.LONG, p.getType());
         assertEquals(1, p.getValue(Type.LONG).intValue());
+    }
+
+    @Test
+    public void mightHaveRootChild() {
+        Record record = mockRecord();
+        when(record.getRoot()).thenReturn(Optional.of(EmptyNodeState.EMPTY_NODE));
+
+        assertTrue(new RecordNode(record).hasChildNode("root"));
     }
 
 }
