@@ -32,6 +32,7 @@ import com.google.common.collect.Sets;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
+import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Segment;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.junit.Test;
 
@@ -39,8 +40,11 @@ public class TarNodeTest {
 
     @Test
     public void shouldExposeSegmentId() {
+        Segment segment = mock(Segment.class);
+
         Backend backend = mock(Backend.class);
         when(backend.segmentExists("t", "s")).thenReturn(true);
+        when(backend.getSegment("s")).thenReturn(Optional.of(segment));
 
         NodeState n = new TarNode(backend, "t");
 

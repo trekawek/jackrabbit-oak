@@ -19,42 +19,33 @@
 
 package org.apache.jackrabbit.oak.segment.file.proc;
 
-import java.util.Collections;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
+import org.apache.jackrabbit.oak.spi.state.NodeState;
 
-class ReferencesNode extends AbstractNode {
+class SegmentEntry implements ChildNodeEntry {
 
     private final Backend backend;
 
     private final String segmentId;
 
-    ReferencesNode(Backend backend, String segmentId) {
+    SegmentEntry(Backend backend, String segmentId) {
         this.backend = backend;
         this.segmentId = segmentId;
     }
 
     @Nonnull
     @Override
-    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return backend.getSegmentReferences(segmentId)
-            .map(this::getChildNodeEntries)
-            .orElse(Collections.emptyList());
+    public String getName() {
+        return segmentId;
     }
 
-    private Iterable<ChildNodeEntry> getChildNodeEntries(Iterable<String> references) {
-        return StreamSupport.stream(references.spliterator(), false)
-            .map(this::newSegmentNodeEntry)
-            .collect(Collectors.toList());
-    }
-
-    private ChildNodeEntry newSegmentNodeEntry(String segmentId) {
-        return new SegmentEntry(backend, segmentId);
+    @Nonnull
+    @Override
+    public NodeState getNodeState() {
+        return SegmentNode.newSegmentNode(backend, segmentId);
     }
 
 }

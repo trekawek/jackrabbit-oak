@@ -22,43 +22,27 @@ package org.apache.jackrabbit.oak.segment.file.proc;
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.util.Arrays;
-import java.util.Collections;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
-import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.segment.file.proc.Proc.Backend.Record;
-import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 
-class RecordNode extends AbstractNode {
+class MissingSegmentNode extends AbstractNode {
 
-    private final Record record;
+    private final String segmentId;
 
-    RecordNode(Record record) {
-        this.record = record;
+    MissingSegmentNode(String segmentId) {
+        this.segmentId = segmentId;
     }
 
     @Nonnull
     @Override
     public Iterable<? extends PropertyState> getProperties() {
         return Arrays.asList(
-            createProperty("number", (long) record.getNumber(), Type.LONG),
-            createProperty("segmentId", record.getSegmentId(), Type.STRING),
-            createProperty("offset", (long) record.getOffset(), Type.LONG),
-            createProperty("address", (long) record.getAddress(), Type.LONG),
-            createProperty("type", record.getType(), Type.STRING)
+            createProperty("id", segmentId, Type.STRING),
+            createProperty("exists", false, Type.BOOLEAN)
         );
-    }
-
-    @Nonnull
-    @Override
-    public Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return record.getRoot()
-            .map(root -> new MemoryChildNodeEntry("root", root))
-            .map(Collections::singletonList)
-            .orElseGet(Collections::emptyList);
     }
 
 }
