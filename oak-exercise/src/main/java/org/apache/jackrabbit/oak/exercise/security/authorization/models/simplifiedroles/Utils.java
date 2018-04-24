@@ -14,26 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.jackrabbit.oak.exercise.security.authorization.models.simplifiedroles;
 
-package org.apache.jackrabbit.oak.segment.file;
+import javax.annotation.Nonnull;
 
-class GCEstimationResult {
+import org.apache.jackrabbit.util.Text;
 
-    private final boolean gcNeeded;
+final class Utils {
 
-    private final String gcLog;
+    private Utils() {}
 
-    GCEstimationResult(boolean gcNeeded, String gcLog) {
-        this.gcNeeded = gcNeeded;
-        this.gcLog = gcLog;
-    }
-
-    boolean isGcNeeded() {
-        return gcNeeded;
-    }
-
-    String getGcLog() {
-        return gcLog;
+    static boolean isSupportedPath(@Nonnull String configuredPath, @Nonnull String path) {
+        return Text.isDescendantOrEqual(configuredPath, path);
     }
 
 }
