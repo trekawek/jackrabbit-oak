@@ -40,6 +40,7 @@ import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 
 class KVNodeState extends AbstractNodeState {
 
@@ -267,6 +268,30 @@ class KVNodeState extends AbstractNodeState {
     @Override
     public String toString() {
         return String.format("KVNodeState{id=%s, node=%s}", id, node);
+    }
+
+    @Override
+    public boolean compareAgainstBaseState(NodeState base, NodeStateDiff diff) {
+        if (base == this) {
+            return true;
+        }
+        if (base instanceof KVNodeState) {
+            return compareAgainstBaseState((KVNodeState) base, diff);
+        }
+        if (base == EmptyNodeState.EMPTY_NODE) {
+            return EmptyNodeState.compareAgainstEmptyState(this, diff);
+        }
+        if (base.exists()) {
+            return AbstractNodeState.compareAgainstBaseState(this, base, diff);
+        }
+        return EmptyNodeState.compareAgainstEmptyState(this, diff);
+    }
+
+    private boolean compareAgainstBaseState(KVNodeState base, NodeStateDiff diff) {
+        if (base.id == this.id) {
+            return true;
+        }
+        return AbstractNodeState.compareAgainstBaseState(this, base, diff);
     }
 
 }
