@@ -21,6 +21,7 @@ package org.apache.jackrabbit.oak.kv;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Objects;
 
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
@@ -62,6 +63,29 @@ class KVBlob implements Blob {
     @Override
     public String getContentIdentity() {
         return blobId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (getClass() != o.getClass()) {
+            return false;
+        }
+        return equals((KVBlob) o);
+    }
+
+    private boolean equals(KVBlob o) {
+        return Objects.equals(blobStore, o.blobStore) && Objects.equals(blobId, o.blobId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(blobStore, blobId);
     }
 
 }
