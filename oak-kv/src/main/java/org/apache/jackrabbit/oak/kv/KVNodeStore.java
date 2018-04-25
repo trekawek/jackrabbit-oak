@@ -27,9 +27,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -42,6 +40,7 @@ import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Store;
 import org.apache.jackrabbit.oak.kv.store.Value;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
+import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
@@ -56,7 +55,7 @@ public class KVNodeStore implements NodeStore, Observable {
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private final Set<Observer> observers = new CopyOnWriteArraySet<>();
+    private final ChangeDispatcher changeDispatcher;
 
     private final Store store;
 
@@ -65,12 +64,12 @@ public class KVNodeStore implements NodeStore, Observable {
     public KVNodeStore(Store store, BlobStore blobStore) {
         this.store = store;
         this.blobStore = blobStore;
+        this.changeDispatcher = new ChangeDispatcher(getRoot());
     }
 
     @Override
     public Closeable addObserver(Observer observer) {
-        observers.add(observer);
-        return () -> observers.remove(observer);
+        return changeDispatcher.addObserver(observer);
     }
 
     @Override
@@ -164,11 +163,7 @@ public class KVNodeStore implements NodeStore, Observable {
         }
 
         NodeState mergedState = new KVNodeState(store, blobStore, mergedID, store.getNode(mergedID));
-
-        for (Observer observer : observers) {
-            observer.contentChanged(mergedState, commitInfo);
-        }
-
+        changeDispatcher.contentChanged(mergedState, commitInfo);
         builder.reset(mergedState);
         return mergedState;
     }
