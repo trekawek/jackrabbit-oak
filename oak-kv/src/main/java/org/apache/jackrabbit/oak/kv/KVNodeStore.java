@@ -277,7 +277,7 @@ public class KVNodeStore implements NodeStore, Observable {
     }
 
     private String writeBlob(Blob blob) throws IOException {
-        return blobStore.getReference(blobStore.writeBlob(blob.getNewStream()));
+        return blobStore.writeBlob(blob.getNewStream());
     }
 
     @Override

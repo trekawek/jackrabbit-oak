@@ -165,33 +165,29 @@ class KVNodeState extends AbstractNodeState {
     private Object convertValue(Value value) {
         switch (value.getType()) {
             case BINARY:
-                return convertBlobReference((String) value.getValue());
+                return convertBlobID((String) value.getValue());
             default:
                 return value.getValue();
         }
     }
 
-    private Blob convertBlobReference(String reference) {
-        String blobID = blobStore.getBlobId(reference);
-        if (blobID == null) {
-            throw new IllegalStateException("blob not found");
-        }
+    private Blob convertBlobID(String blobID) {
         return new KVBlob(blobStore, blobID);
     }
 
     private Object convertArray(Value value) {
         switch (value.getType()) {
             case BINARY:
-                return convertBlobReferences((Iterable<String>) value.getValue());
+                return convertBlobIDs((Iterable<String>) value.getValue());
             default:
                 return value.getValue();
         }
     }
 
-    private Iterable<Blob> convertBlobReferences(Iterable<String> references) {
+    private Iterable<Blob> convertBlobIDs(Iterable<String> references) {
         List<Blob> blobs = new ArrayList<>();
         for (String reference : references) {
-            blobs.add(convertBlobReference(reference));
+            blobs.add(convertBlobID(reference));
         }
         return blobs;
     }
