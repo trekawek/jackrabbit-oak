@@ -20,9 +20,11 @@
 package org.apache.jackrabbit.oak.kv;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -92,9 +94,9 @@ class KVCheckpoints {
             ID id = store.getTag("checkpoints");
 
             if (id == null) {
-                id = initializeCheckpoints(reference, checkpoint);
+                id = createCheckpoints(reference, checkpoint);
             } else {
-                id = addCheckpoint(store.getNode(id), reference, checkpoint);
+                id = updateCheckpointsWithAdd(store.getNode(id), reference, checkpoint);
             }
 
             store.putTag("checkpoints", id);
@@ -103,13 +105,19 @@ class KVCheckpoints {
         }
     }
 
-    private ID initializeCheckpoints(String reference, ID checkpoint) throws IOException {
+    private ID createCheckpoints(String reference, ID checkpoint) throws IOException {
         return store.putNode(Collections.emptyMap(), Collections.singletonMap(reference, checkpoint));
     }
 
-    private ID addCheckpoint(Node node, String reference, ID checkpoint) throws IOException {
+    private ID updateCheckpointsWithAdd(Node node, String reference, ID checkpoint) throws IOException {
         Map<String, ID> children = new HashMap<>(node.getChildren());
         children.put(reference, checkpoint);
+        return store.putNode(node.getProperties(), children);
+    }
+
+    private ID updateCheckpointsWithRemove(Node node, String reference) throws IOException {
+        Map<String, ID> children = new HashMap<>(node.getChildren());
+        children.remove(reference);
         return store.putNode(node.getProperties(), children);
     }
 
@@ -130,7 +138,7 @@ class KVCheckpoints {
         Node checkpoints = store.getNode(checkpointsID);
 
         if (checkpoints == null) {
-            throw new IOException("invalid checkpoints ID");
+            throw new IllegalStateException("checkpoints node not found");
         }
 
         ID checkpointID = checkpoints.getChildren().get(reference);
@@ -142,19 +150,19 @@ class KVCheckpoints {
         Node checkpoint = store.getNode(checkpointID);
 
         if (checkpoint == null) {
-            throw new IOException("invalid checkpoint ID");
+            throw new IllegalStateException("checkpoint node not found");
         }
 
         ID propertiesID = checkpoint.getChildren().get("properties");
 
         if (propertiesID == null) {
-            return Collections.emptyMap();
+            throw new IllegalStateException("checkpoint properties ID not found");
         }
 
         Node properties = store.getNode(propertiesID);
 
         if (properties == null) {
-            throw new IOException("invalid properties ID");
+            throw new IllegalStateException("checkpoint properties not found");
         }
 
         Map<String, String> values = new HashMap<>();
@@ -183,7 +191,7 @@ class KVCheckpoints {
         Node checkpoints = store.getNode(checkpointsID);
 
         if (checkpoints == null) {
-            return Collections.emptySet();
+            throw new IllegalStateException("checkpoints node not found");
         }
 
         Set<String> valid = new HashSet<>();
@@ -194,7 +202,7 @@ class KVCheckpoints {
             Node checkpoint = store.getNode(entry.getValue());
 
             if (checkpoint == null) {
-                continue;
+                throw new IllegalStateException("checkpoint nod not found");
             }
 
             long created = (long) checkpoint.getProperties().get("created").getValue();
@@ -227,7 +235,7 @@ class KVCheckpoints {
         Node checkpoints = store.getNode(checkpointsID);
 
         if (checkpoints == null) {
-            return null;
+            throw new IllegalStateException("checkpoints node not found");
         }
 
         ID checkpointID = checkpoints.getChildren().get(reference);
@@ -239,19 +247,19 @@ class KVCheckpoints {
         Node checkpoint = store.getNode(checkpointID);
 
         if (checkpoint == null) {
-            return null;
+            throw new IllegalStateException("checkpoint node not found");
         }
 
         ID rootID = checkpoint.getChildren().get("root");
 
         if (rootID == null) {
-            return null;
+            throw new IllegalStateException("checkpoint root ID not found");
         }
 
         Node root = store.getNode(rootID);
 
         if (root == null) {
-            return null;
+            throw new IllegalStateException("checkpoint root not found");
         }
 
         return new KVNodeState(store, blobStore, rootID, root);
@@ -269,24 +277,80 @@ class KVCheckpoints {
             Node checkpoints = store.getNode(id);
 
             if (checkpoints == null) {
-                return true;
+                throw new IllegalStateException("checkpoints node not found");
             }
 
-            if (!checkpoints.getChildren().containsKey(reference)) {
-                return true;
+            if (checkpoints.getChildren().containsKey(reference)) {
+                store.putTag("checkpoints", updateCheckpointsWithRemove(checkpoints, reference));
             }
-
-            store.putTag("checkpoints", removeCheckpoint(checkpoints, reference));
         } finally {
             lock.writeLock().unlock();
         }
         return true;
     }
 
-    private ID removeCheckpoint(Node node, String reference) throws IOException {
-        Map<String, ID> children = new HashMap<>(node.getChildren());
-        children.remove(reference);
-        return store.putNode(node.getProperties(), children);
+    Iterable<KVCheckpoint> getCheckpoints() throws IOException {
+        ID id;
+
+        lock.readLock().lock();
+        try {
+            id = store.getTag("checkpoints");
+        } finally {
+            lock.readLock().unlock();
+        }
+
+        if (id == null) {
+            return Collections.emptyList();
+        }
+
+        Node checkpoints = store.getNode(id);
+
+        if (checkpoints == null) {
+            throw new IllegalStateException("checkpoints node not found");
+        }
+
+        List<KVCheckpoint> valid = new ArrayList<>();
+
+        for (Entry<String, ID> e : checkpoints.getChildren().entrySet()) {
+            addCheckpoint(valid, e.getKey(), e.getValue());
+        }
+
+        return valid;
     }
-    
+
+    private void addCheckpoint(List<KVCheckpoint> checkpoints, String handle, ID id) throws IOException {
+        Node checkpoint = store.getNode(id);
+
+        if (checkpoint == null) {
+            throw new IllegalStateException("checkpoint node not found");
+        }
+
+        long created = (long) checkpoint.getProperties().get("created").getValue();
+        long lifetime = (long) checkpoint.getProperties().get("lifetime").getValue();
+
+        if (created + lifetime > System.currentTimeMillis()) {
+            return;
+        }
+
+        ID propertiesID = checkpoint.getChildren().get("properties");
+
+        if (propertiesID == null) {
+            throw new IllegalStateException("checkpoint properties ID not found");
+        }
+
+        Node properties = store.getNode(propertiesID);
+
+        if (properties == null) {
+            throw new IllegalStateException("checkpoint properties node not found");
+        }
+
+        Map<String, String> normalized = new HashMap<>();
+
+        for (Entry<String, Value> e : properties.getProperties().entrySet()) {
+            normalized.put(e.getKey(), (String) e.getValue().getValue());
+        }
+
+        checkpoints.add(new KVCheckpoint(handle, created, lifetime, normalized));
+    }
+
 }

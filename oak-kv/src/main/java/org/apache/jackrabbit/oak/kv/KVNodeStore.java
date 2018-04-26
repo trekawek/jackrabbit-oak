@@ -433,5 +433,9 @@ public class KVNodeStore implements NodeStore, Observable {
             throw new RuntimeException(e);
         }
     }
-    
+
+    public Iterable<KVCheckpoint> getCheckpoints() throws IOException {
+        return checkpoints.getCheckpoints();
+    }
+
 }
