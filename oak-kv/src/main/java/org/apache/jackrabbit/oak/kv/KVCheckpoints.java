@@ -82,6 +82,7 @@ class KVCheckpoints {
     private ID createCheckpoint(long lifetime, ID propertiesID, ID rootID) throws IOException {
         Map<String, Value> properties = new HashMap<>();
         properties.put("lifetime", Value.newLongValue(lifetime));
+        properties.put("created", Value.newLongValue(System.currentTimeMillis()));
 
         Map<String, ID> children = new HashMap<>();
         children.put("properties", propertiesID);
