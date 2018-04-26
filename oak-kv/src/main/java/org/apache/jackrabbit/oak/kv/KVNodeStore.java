@@ -371,7 +371,11 @@ public class KVNodeStore implements NodeStore, Observable {
             lock.readLock().unlock();
         }
 
-        return checkpoints.checkpoint(root, lifetime, properties);
+        try {
+            return checkpoints.checkpoint(root, lifetime, properties);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -387,27 +391,47 @@ public class KVNodeStore implements NodeStore, Observable {
             lock.readLock().unlock();
         }
 
-        return checkpoints.checkpoint(root, lifetime);
+        try {
+            return checkpoints.checkpoint(root, lifetime);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public Map<String, String> checkpointInfo(String checkpoint) {
-        return checkpoints.checkpointInfo(checkpoint);
+        try {
+            return checkpoints.checkpointInfo(checkpoint);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public Iterable<String> checkpoints() {
-        return checkpoints.checkpoints();
+        try {
+            return checkpoints.checkpoints();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public NodeState retrieve(String checkpoint) {
-        return checkpoints.retrieve(checkpoint);
+        try {
+            return checkpoints.retrieve(checkpoint);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public boolean release(String checkpoint) {
-        return checkpoints.release(checkpoint);
+        try {
+            return checkpoints.release(checkpoint);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
-
+    
 }

@@ -22,7 +22,10 @@ package org.apache.jackrabbit.oak.kv;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -47,26 +50,18 @@ class KVCheckpoints {
         this.blobStore = blobStore;
     }
 
-    String checkpoint(ID root, long lifetime) {
+    String checkpoint(ID root, long lifetime) throws IOException {
         return checkpoint(root, lifetime, Collections.emptyMap());
     }
 
-    String checkpoint(ID root, long lifetime, Map<String, String> properties) {
+    String checkpoint(ID root, long lifetime, Map<String, String> properties) throws IOException {
         String reference = UUID.randomUUID().toString();
 
-        try {
-            addCheckpoint(root, reference, lifetime, properties);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        return reference;
-    }
-
-    private void addCheckpoint(ID root, String reference, long lifetime, Map<String, String> properties) throws IOException {
         ID propertiesID = createProperties(properties);
         ID checkpointID = createCheckpoint(lifetime, propertiesID, root);
         createOrUpdateCheckpoints(reference, checkpointID);
+
+        return reference;
     }
 
     private ID createProperties(Map<String, String> values) throws IOException {
@@ -118,15 +113,7 @@ class KVCheckpoints {
         return store.putNode(node.getProperties(), children);
     }
 
-    Map<String, String> checkpointInfo(String reference) {
-        try {
-            return readCheckpointInfo(reference);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private Map<String, String> readCheckpointInfo(String reference) throws IOException {
+    Map<String, String> checkpointInfo(String reference) throws IOException {
         ID checkpointsID;
 
         lock.readLock().lock();
@@ -172,22 +159,14 @@ class KVCheckpoints {
 
         Map<String, String> values = new HashMap<>();
 
-        for (Map.Entry<String, Value> entry : properties.getProperties().entrySet()) {
+        for (Entry<String, Value> entry : properties.getProperties().entrySet()) {
             values.put(entry.getKey(), (String) entry.getValue().getValue());
         }
 
         return values;
     }
 
-    Iterable<String> checkpoints() {
-        try {
-            return readCheckpoints();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private Iterable<String> readCheckpoints() throws IOException {
+    Iterable<String> checkpoints() throws IOException {
         ID checkpointsID;
 
         lock.readLock().lock();
@@ -204,21 +183,34 @@ class KVCheckpoints {
         Node checkpoints = store.getNode(checkpointsID);
 
         if (checkpoints == null) {
-            throw new IOException("invalid checkpoints ID");
+            return Collections.emptySet();
         }
 
-        return checkpoints.getChildren().keySet();
-    }
+        Set<String> valid = new HashSet<>();
 
-    NodeState retrieve(String reference) {
-        try {
-            return readRoot(reference);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        long now = System.currentTimeMillis();
+
+        for (Entry<String, ID> entry : checkpoints.getChildren().entrySet()) {
+            Node checkpoint = store.getNode(entry.getValue());
+
+            if (checkpoint == null) {
+                continue;
+            }
+
+            long created = (long) checkpoint.getProperties().get("created").getValue();
+            long lifetime = (long) checkpoint.getProperties().get("lifetime").getValue();
+
+            if (created + lifetime >= now) {
+                continue;
+            }
+
+            valid.add(entry.getKey());
         }
+
+        return valid;
     }
 
-    private NodeState readRoot(String reference) throws IOException {
+    NodeState retrieve(String reference) throws IOException {
         ID checkpointsID;
 
         lock.readLock().lock();
@@ -235,7 +227,7 @@ class KVCheckpoints {
         Node checkpoints = store.getNode(checkpointsID);
 
         if (checkpoints == null) {
-            throw new IOException("invalid checkpoints ID");
+            return null;
         }
 
         ID checkpointID = checkpoints.getChildren().get(reference);
@@ -247,33 +239,25 @@ class KVCheckpoints {
         Node checkpoint = store.getNode(checkpointID);
 
         if (checkpoint == null) {
-            throw new IOException("invalid checkpoint ID");
+            return null;
         }
 
         ID rootID = checkpoint.getChildren().get("root");
 
         if (rootID == null) {
-            throw new IOException("missing root ID");
+            return null;
         }
 
         Node root = store.getNode(rootID);
 
         if (root == null) {
-            throw new IOException("invalid root ID");
+            return null;
         }
 
         return new KVNodeState(store, blobStore, rootID, root);
     }
 
-    boolean release(String reference) {
-        try {
-            return deleteCheckpoint(reference);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private boolean deleteCheckpoint(String reference) throws IOException {
+    boolean release(String reference) throws IOException {
         lock.writeLock().lock();
         try {
             ID id = store.getTag("checkpoints");
@@ -285,7 +269,7 @@ class KVCheckpoints {
             Node checkpoints = store.getNode(id);
 
             if (checkpoints == null) {
-                throw new IOException("invalid checkpoints ID");
+                return true;
             }
 
             if (!checkpoints.getChildren().containsKey(reference)) {
@@ -304,5 +288,5 @@ class KVCheckpoints {
         children.remove(reference);
         return store.putNode(node.getProperties(), children);
     }
-
+    
 }
