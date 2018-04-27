@@ -168,7 +168,7 @@ class KVCheckpoints {
         Map<String, String> values = new HashMap<>();
 
         for (Entry<String, Value> entry : properties.getProperties().entrySet()) {
-            values.put(entry.getKey(), (String) entry.getValue().getValue());
+            values.put(entry.getKey(), entry.getValue().asStringValue());
         }
 
         return values;
@@ -205,8 +205,8 @@ class KVCheckpoints {
                 throw new IllegalStateException("checkpoint nod not found");
             }
 
-            long created = (long) checkpoint.getProperties().get("created").getValue();
-            long lifetime = (long) checkpoint.getProperties().get("lifetime").getValue();
+            long created = checkpoint.getProperties().get("created").asLongValue();
+            long lifetime = checkpoint.getProperties().get("lifetime").asLongValue();
 
             if (created + lifetime >= now) {
                 continue;
@@ -325,8 +325,8 @@ class KVCheckpoints {
             throw new IllegalStateException("checkpoint node not found");
         }
 
-        long created = (long) checkpoint.getProperties().get("created").getValue();
-        long lifetime = (long) checkpoint.getProperties().get("lifetime").getValue();
+        long created = checkpoint.getProperties().get("created").asLongValue();
+        long lifetime = checkpoint.getProperties().get("lifetime").asLongValue();
 
         if (created + lifetime > System.currentTimeMillis()) {
             return;
@@ -347,7 +347,7 @@ class KVCheckpoints {
         Map<String, String> normalized = new HashMap<>();
 
         for (Entry<String, Value> e : properties.getProperties().entrySet()) {
-            normalized.put(e.getKey(), (String) e.getValue().getValue());
+            normalized.put(e.getKey(), e.getValue().asStringValue());
         }
 
         checkpoints.add(new KVCheckpoint(handle, created, lifetime, normalized));

@@ -164,10 +164,32 @@ class KVNodeState extends AbstractNodeState {
 
     private Object convertValue(Value value) {
         switch (value.getType()) {
+            case STRING:
+                return value.asStringValue();
             case BINARY:
-                return convertBlobID((String) value.getValue());
+                return convertBlobID(value.asStringValue());
+            case LONG:
+                return value.asLongValue();
+            case DOUBLE:
+                return value.asDoubleValue();
+            case DATE:
+                return value.asStringValue();
+            case BOOLEAN:
+                return value.asBooleanValue();
+            case NAME:
+                return value.asStringValue();
+            case PATH:
+                return value.asStringValue();
+            case REFERENCE:
+                return value.asStringValue();
+            case WEAK_REFERENCE:
+                return value.asStringValue();
+            case URI:
+                return value.asStringValue();
+            case DECIMAL:
+                return value.asDecimalValue();
             default:
-                return value.getValue();
+                throw new IllegalArgumentException("value");
         }
     }
 
@@ -177,10 +199,32 @@ class KVNodeState extends AbstractNodeState {
 
     private Object convertArray(Value value) {
         switch (value.getType()) {
+            case STRING:
+                return value.asStringArray();
             case BINARY:
-                return convertBlobIDs((Iterable<String>) value.getValue());
+                return convertBlobIDs(value.asStringArray());
+            case LONG:
+                return value.asLongArray();
+            case DOUBLE:
+                return value.asDoubleArray();
+            case DATE:
+                return value.asStringArray();
+            case BOOLEAN:
+                return value.asBooleanArray();
+            case NAME:
+                return value.asStringArray();
+            case PATH:
+                return value.asStringArray();
+            case REFERENCE:
+                return value.asStringArray();
+            case WEAK_REFERENCE:
+                return value.asStringArray();
+            case URI:
+                return value.asStringArray();
+            case DECIMAL:
+                return value.asDecimalArray();
             default:
-                return value.getValue();
+                throw new IllegalArgumentException("value");
         }
     }
 

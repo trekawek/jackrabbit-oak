@@ -19,15 +19,20 @@
 
 package org.apache.jackrabbit.oak.kv.osgi;
 
+import java.io.File;
+
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
+import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.kv.KVNodeStore;
+import org.apache.jackrabbit.oak.kv.store.leveldb.LevelDBStore;
 import org.apache.jackrabbit.oak.kv.store.memory.MemoryStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
-import org.osgi.framework.BundleContext;
+import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
+import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 
 @Component(configurationPolicy = ConfigurationPolicy.REQUIRE)
@@ -36,11 +41,27 @@ public class KVNodeStoreService {
     @Reference
     private BlobStore blobStore;
 
+    private LevelDBStore store;
+
     @Activate
-    public void activate(BundleContext context) {
+    public void activate(ComponentContext context) throws Exception {
+        store = new LevelDBStore(getPath(context));
         KVNodeStore nodeStore = new KVNodeStore(new MemoryStore(), blobStore);
-        context.registerService(NodeStore.class.getName(), nodeStore, null);
-        context.registerService(CheckpointMBean.class.getName(), new KVCheckpointMBean(nodeStore), null);
+        context.getBundleContext().registerService(NodeStore.class.getName(), nodeStore, null);
+        context.getBundleContext().registerService(CheckpointMBean.class.getName(), new KVCheckpointMBean(nodeStore), null);
+    }
+
+    @Deactivate
+    public void deactivate() throws Exception {
+        store.close();
+    }
+
+    private static File getPath(ComponentContext context) {
+        String path = PropertiesUtil.toString(context.getProperties().get("path"), null);
+        if (path == null) {
+            throw new IllegalStateException("path");
+        }
+        return new File(path);
     }
 
 }
