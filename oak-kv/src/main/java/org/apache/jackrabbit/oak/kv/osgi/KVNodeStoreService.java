@@ -19,6 +19,9 @@
 
 package org.apache.jackrabbit.oak.kv.osgi;
 
+import static java.util.Collections.emptyMap;
+import static org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils.registerMBean;
+
 import java.io.File;
 
 import org.apache.jackrabbit.oak.api.Descriptors;
@@ -27,8 +30,10 @@ import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.kv.KVNodeStore;
 import org.apache.jackrabbit.oak.kv.store.leveldb.LevelDBStore;
 import org.apache.jackrabbit.oak.kv.store.memory.MemoryStore;
+import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.apache.jackrabbit.oak.spi.whiteboard.Whiteboard;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -48,9 +53,11 @@ public class KVNodeStoreService {
     public void activate(ComponentContext context) throws Exception {
         store = new LevelDBStore(getPath(context));
         KVNodeStore nodeStore = new KVNodeStore(new MemoryStore(), blobStore);
-        context.getBundleContext().registerService(NodeStore.class.getName(), nodeStore, null);
-        context.getBundleContext().registerService(CheckpointMBean.class.getName(), new KVCheckpointMBean(nodeStore), null);
-        context.getBundleContext().registerService(Descriptors.class.getName(), new KVDiscoveryLiteDescriptors(nodeStore), null);
+
+        Whiteboard whiteboard = new OsgiWhiteboard(context.getBundleContext());
+        whiteboard.register(NodeStore.class, nodeStore, emptyMap());
+        whiteboard.register(Descriptors.class, new KVDiscoveryLiteDescriptors(nodeStore), emptyMap());
+        registerMBean(whiteboard, CheckpointMBean.class, new KVCheckpointMBean(nodeStore), CheckpointMBean.TYPE, "Oak KV Checkpoints");
     }
 
     @Deactivate
