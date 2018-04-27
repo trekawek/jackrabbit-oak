@@ -21,6 +21,7 @@ package org.apache.jackrabbit.oak.kv.osgi;
 
 import java.io.File;
 
+import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
 import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.kv.KVNodeStore;
@@ -49,6 +50,7 @@ public class KVNodeStoreService {
         KVNodeStore nodeStore = new KVNodeStore(new MemoryStore(), blobStore);
         context.getBundleContext().registerService(NodeStore.class.getName(), nodeStore, null);
         context.getBundleContext().registerService(CheckpointMBean.class.getName(), new KVCheckpointMBean(nodeStore), null);
+        context.getBundleContext().registerService(Descriptors.class.getName(), new KVDiscoveryLiteDescriptors(nodeStore), null);
     }
 
     @Deactivate
