@@ -50,7 +50,7 @@ class KVCheckpointMBean extends AbstractCheckpointMBean {
             tab.put(toCompositeData(
                 checkpoint.getCheckpoint(),
                 Long.toString(checkpoint.getCreated()),
-                Long.toString(checkpoint.getCreated() + checkpoint.getLifetime()),
+                Long.toString(checkpoint.getTimestamp()),
                 checkpoint.getInfo()
             ));
         }

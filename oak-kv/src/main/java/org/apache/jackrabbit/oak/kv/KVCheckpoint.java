@@ -27,14 +27,14 @@ public class KVCheckpoint {
 
     private final long created;
 
-    private final long lifetime;
+    private final long timestamp;
 
     private final Map<String, String> info;
 
-    KVCheckpoint(String checkpoint, long created, long lifetime, Map<String, String> info) {
+    KVCheckpoint(String checkpoint, long created, long timestamp, Map<String, String> info) {
         this.checkpoint = checkpoint;
         this.created = created;
-        this.lifetime = lifetime;
+        this.timestamp = timestamp;
         this.info = info;
     }
 
@@ -46,8 +46,8 @@ public class KVCheckpoint {
         return created;
     }
 
-    public long getLifetime() {
-        return lifetime;
+    public long getTimestamp() {
+        return timestamp;
     }
 
     public Map<String, String> getInfo() {

@@ -19,16 +19,23 @@
 
 package org.apache.jackrabbit.oak.kv;
 
+import static java.lang.System.currentTimeMillis;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.emptySet;
+import static java.util.Collections.singletonMap;
+import static java.util.UUID.randomUUID;
+import static org.apache.jackrabbit.oak.kv.store.Value.newLongValue;
+import static org.apache.jackrabbit.oak.kv.store.Value.newStringValue;
+
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -53,15 +60,16 @@ class KVCheckpoints {
     }
 
     String checkpoint(ID root, long lifetime) throws IOException {
-        return checkpoint(root, lifetime, Collections.emptyMap());
+        return checkpoint(root, lifetime, emptyMap());
     }
 
     String checkpoint(ID root, long lifetime, Map<String, String> properties) throws IOException {
-        String reference = UUID.randomUUID().toString();
+        String reference = randomUUID().toString();
+        long now = currentTimeMillis();
 
         ID propertiesID = createProperties(properties);
-        ID checkpointID = createCheckpoint(lifetime, propertiesID, root);
-        createOrUpdateCheckpoints(reference, checkpointID);
+        ID checkpointID = createCheckpoint(now, lifetime, propertiesID, root);
+        createOrUpdateCheckpoints(now, reference, checkpointID);
 
         return reference;
     }
@@ -70,16 +78,24 @@ class KVCheckpoints {
         Map<String, Value> properties = new HashMap<>();
 
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            properties.put(entry.getKey(), Value.newStringValue(entry.getValue()));
+            properties.put(entry.getKey(), newStringValue(entry.getValue()));
         }
 
-        return store.putNode(properties, Collections.emptyMap());
+        return store.putNode(properties, emptyMap());
     }
 
-    private ID createCheckpoint(long lifetime, ID propertiesID, ID rootID) throws IOException {
+    private ID createCheckpoint(long now, long lifetime, ID propertiesID, ID rootID) throws IOException {
+        long timestamp;
+
+        if (Long.MAX_VALUE - now > lifetime) {
+            timestamp = now + lifetime;
+        } else {
+            timestamp = Long.MAX_VALUE;
+        }
+
         Map<String, Value> properties = new HashMap<>();
-        properties.put("lifetime", Value.newLongValue(lifetime));
-        properties.put("created", Value.newLongValue(System.currentTimeMillis()));
+        properties.put("timestamp", newLongValue(timestamp));
+        properties.put("created", newLongValue(now));
 
         Map<String, ID> children = new HashMap<>();
         children.put("properties", propertiesID);
@@ -88,7 +104,7 @@ class KVCheckpoints {
         return store.putNode(properties, children);
     }
 
-    private void createOrUpdateCheckpoints(String reference, ID checkpoint) throws IOException {
+    private void createOrUpdateCheckpoints(long now, String reference, ID checkpoint) throws IOException {
         lock.writeLock().lock();
         try {
             ID id = store.getTag("checkpoints");
@@ -96,7 +112,7 @@ class KVCheckpoints {
             if (id == null) {
                 id = createCheckpoints(reference, checkpoint);
             } else {
-                id = updateCheckpointsWithAdd(store.getNode(id), reference, checkpoint);
+                id = updateCheckpointsWithAdd(now, store.getNode(id), reference, checkpoint);
             }
 
             store.putTag("checkpoints", id);
@@ -106,12 +122,36 @@ class KVCheckpoints {
     }
 
     private ID createCheckpoints(String reference, ID checkpoint) throws IOException {
-        return store.putNode(Collections.emptyMap(), Collections.singletonMap(reference, checkpoint));
+        return store.putNode(emptyMap(), singletonMap(reference, checkpoint));
     }
 
-    private ID updateCheckpointsWithAdd(Node node, String reference, ID checkpoint) throws IOException {
-        Map<String, ID> children = new HashMap<>(node.getChildren());
+    private ID updateCheckpointsWithAdd(long now, Node node, String reference, ID checkpoint) throws IOException {
+        Map<String, ID> children = new HashMap<>();
+
+        // Remove outdated checkpoints
+
+        for (Entry<String, ID> e : node.getChildren().entrySet()) {
+            Node c = store.getNode(e.getValue());
+
+            if (c == null) {
+                continue;
+            }
+
+            Value timestamp = c.getProperties().get("timestamp");
+
+            if (timestamp == null) {
+                continue;
+            }
+
+            if (timestamp.asLongValue() < now) {
+                continue;
+            }
+
+            children.put(e.getKey(), e.getValue());
+        }
+
         children.put(reference, checkpoint);
+
         return store.putNode(node.getProperties(), children);
     }
 
@@ -132,7 +172,7 @@ class KVCheckpoints {
         }
 
         if (checkpointsID == null) {
-            return Collections.emptyMap();
+            return emptyMap();
         }
 
         Node checkpoints = store.getNode(checkpointsID);
@@ -144,7 +184,7 @@ class KVCheckpoints {
         ID checkpointID = checkpoints.getChildren().get(reference);
 
         if (checkpointID == null) {
-            return Collections.emptyMap();
+            return emptyMap();
         }
 
         Node checkpoint = store.getNode(checkpointID);
@@ -185,7 +225,7 @@ class KVCheckpoints {
         }
 
         if (checkpointsID == null) {
-            return Collections.emptySet();
+            return emptySet();
         }
 
         Node checkpoints = store.getNode(checkpointsID);
@@ -196,7 +236,7 @@ class KVCheckpoints {
 
         Set<String> valid = new HashSet<>();
 
-        long now = System.currentTimeMillis();
+        long now = currentTimeMillis();
 
         for (Entry<String, ID> entry : checkpoints.getChildren().entrySet()) {
             Node checkpoint = store.getNode(entry.getValue());
@@ -205,10 +245,9 @@ class KVCheckpoints {
                 throw new IllegalStateException("checkpoint nod not found");
             }
 
-            long created = checkpoint.getProperties().get("created").asLongValue();
-            long lifetime = checkpoint.getProperties().get("lifetime").asLongValue();
+            long timestamp = checkpoint.getProperties().get("timestamp").asLongValue();
 
-            if (created + lifetime >= now) {
+            if (timestamp > now) {
                 continue;
             }
 
@@ -300,7 +339,7 @@ class KVCheckpoints {
         }
 
         if (id == null) {
-            return Collections.emptyList();
+            return emptyList();
         }
 
         Node checkpoints = store.getNode(id);
@@ -326,11 +365,7 @@ class KVCheckpoints {
         }
 
         long created = checkpoint.getProperties().get("created").asLongValue();
-        long lifetime = checkpoint.getProperties().get("lifetime").asLongValue();
-
-        if (created + lifetime > System.currentTimeMillis()) {
-            return;
-        }
+        long timestamp = checkpoint.getProperties().get("timestamp").asLongValue();
 
         ID propertiesID = checkpoint.getChildren().get("properties");
 
@@ -350,7 +385,7 @@ class KVCheckpoints {
             normalized.put(e.getKey(), e.getValue().asStringValue());
         }
 
-        checkpoints.add(new KVCheckpoint(handle, created, lifetime, normalized));
+        checkpoints.add(new KVCheckpoint(handle, created, timestamp, normalized));
     }
 
 }
