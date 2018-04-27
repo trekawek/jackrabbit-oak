@@ -32,6 +32,7 @@ import org.apache.jackrabbit.oak.kv.store.leveldb.LevelDBStore;
 import org.apache.jackrabbit.oak.kv.store.memory.MemoryStore;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
+import org.apache.jackrabbit.oak.spi.commit.ObserverTracker;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.apache.jackrabbit.oak.spi.whiteboard.Whiteboard;
 import org.osgi.service.component.ComponentContext;
@@ -53,6 +54,9 @@ public class KVNodeStoreService {
     public void activate(ComponentContext context) throws Exception {
         store = new LevelDBStore(getPath(context));
         KVNodeStore nodeStore = new KVNodeStore(new MemoryStore(), blobStore);
+
+        ObserverTracker observerTracker = new ObserverTracker(nodeStore);
+        observerTracker.start(context.getBundleContext());
 
         Whiteboard whiteboard = new OsgiWhiteboard(context.getBundleContext());
         whiteboard.register(NodeStore.class, nodeStore, emptyMap());
