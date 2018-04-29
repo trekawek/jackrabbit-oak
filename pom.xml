@@ -74,6 +74,7 @@
     <module>oak-segment-azure</module>
     <module>oak-benchmarks</module>
     <module>oak-kv</module>
+    <module>oak-kv-benchmark</module>
   </modules>
 
   <scm>
