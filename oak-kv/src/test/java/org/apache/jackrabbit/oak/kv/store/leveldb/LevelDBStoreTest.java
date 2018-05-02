@@ -131,13 +131,6 @@ public class LevelDBStoreTest {
     }
 
     @Test
-    public void testPutDeleteGetNode() throws Exception {
-        ID id = store.putNode(emptyMap(), emptyMap());
-        store.deleteNode(id);
-        assertNull(store.getNode(id));
-    }
-
-    @Test
     public void testGetTag() throws Exception {
         ID id = store.putNode(emptyMap(), emptyMap());
         store.putTag("tag", id);

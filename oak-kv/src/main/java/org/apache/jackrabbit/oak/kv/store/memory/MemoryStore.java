@@ -94,14 +94,4 @@ public class MemoryStore implements Store {
         return id;
     }
 
-    @Override
-    public void deleteNode(ID id) {
-        lock.writeLock().lock();
-        try {
-            nodes.remove(id);
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
 }

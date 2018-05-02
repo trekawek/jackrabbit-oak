@@ -119,19 +119,6 @@ public class LevelDBStore implements Store, Closeable {
     }
 
     @Override
-    public void deleteNode(ID id) throws IOException {
-        if (id instanceof LevelDBID) {
-            deleteNode((LevelDBID) id);
-        } else {
-            throw new IllegalArgumentException("id");
-        }
-    }
-
-    private void deleteNode(LevelDBID id) {
-        deleteString(id.getID());
-    }
-
-    @Override
     public void close() throws IOException {
         db.close();
     }

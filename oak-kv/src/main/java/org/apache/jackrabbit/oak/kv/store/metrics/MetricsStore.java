@@ -61,11 +61,4 @@ public class MetricsStore implements Store {
         return id;
     }
 
-    @Override
-    public void deleteNode(ID id) throws IOException {
-        Stopwatch stopwatch = createStarted();
-        store.deleteNode(id);
-        metrics.onNodeDelete(stopwatch.elapsed(NANOSECONDS));
-    }
-
 }

@@ -54,9 +54,4 @@ public class CachedStore implements Store {
         return store.putNode(properties, children);
     }
 
-    @Override
-    public void deleteNode(ID id) throws IOException {
-        store.deleteNode(id);
-    }
-
 }

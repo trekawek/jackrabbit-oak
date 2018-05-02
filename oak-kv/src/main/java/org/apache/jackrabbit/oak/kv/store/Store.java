@@ -34,6 +34,4 @@ public interface Store {
 
     ID putNode(Map<String, Value> properties, Map<String, ID> children) throws IOException;
 
-    void deleteNode(ID id) throws IOException;
-
 }
