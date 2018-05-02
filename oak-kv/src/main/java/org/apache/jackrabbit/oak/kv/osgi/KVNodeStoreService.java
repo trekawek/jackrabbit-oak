@@ -24,12 +24,14 @@ import static org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils.registerM
 
 import java.io.File;
 
+import com.google.common.cache.CacheBuilder;
 import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
 import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.kv.KVNodeStore;
+import org.apache.jackrabbit.oak.kv.store.Store;
+import org.apache.jackrabbit.oak.kv.store.cache.CachedStore;
 import org.apache.jackrabbit.oak.kv.store.leveldb.LevelDBStore;
-import org.apache.jackrabbit.oak.kv.store.memory.MemoryStore;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.ObserverTracker;
@@ -52,8 +54,11 @@ public class KVNodeStoreService {
 
     @Activate
     public void activate(ComponentContext context) throws Exception {
-        store = new LevelDBStore(getPath(context));
-        KVNodeStore nodeStore = new KVNodeStore(new MemoryStore(), blobStore);
+        this.store = new LevelDBStore(getPath(context));
+
+        Store store = this.store;
+        store = new CachedStore(store, CacheBuilder.newBuilder().maximumSize(getCacheMaximumSize(context)).build());
+        KVNodeStore nodeStore = new KVNodeStore(store, blobStore);
 
         ObserverTracker observerTracker = new ObserverTracker(nodeStore);
         observerTracker.start(context.getBundleContext());
@@ -75,6 +80,10 @@ public class KVNodeStoreService {
             throw new IllegalStateException("path");
         }
         return new File(path);
+    }
+
+    private static long getCacheMaximumSize(ComponentContext context) {
+        return PropertiesUtil.toLong(context.getProperties().get("cacheMaximumSize"), 50000);
     }
 
 }
