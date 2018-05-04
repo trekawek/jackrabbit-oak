@@ -14,28 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.plugins.tree.impl;
+package org.apache.jackrabbit.oak.security.authorization.permission;
 
+import java.util.Collection;
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.Tree;
-import org.apache.jackrabbit.oak.plugins.tree.TreeProvider;
-import org.apache.jackrabbit.oak.plugins.tree.factories.TreeFactory;
-import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.osgi.service.component.annotations.Component;
 
-@Component(service = {TreeProvider.class})
-public class TreeProviderService implements TreeProvider {
+interface PermissionCache {
 
-    @Nonnull
-    @Override
-    public Tree createReadOnlyTree(@Nonnull NodeState rootState) {
-        return TreeFactory.createReadOnlyTree(rootState);
-    }
+    Collection<PermissionEntry> getEntries(@Nonnull String path);
 
-    @Nonnull
-    @Override
-    public Tree createReadOnlyTree(@Nonnull Tree readOnlyParent, @Nonnull String childName, @Nonnull NodeState childState) {
-        return TreeFactory.createReadOnlyTree(readOnlyParent, childName, childState);
-    }
+    Collection<PermissionEntry> getEntries(@Nonnull Tree accessControlledTree);
 }
