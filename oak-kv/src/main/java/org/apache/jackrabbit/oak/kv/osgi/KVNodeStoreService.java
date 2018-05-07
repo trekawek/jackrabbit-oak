@@ -22,16 +22,17 @@ package org.apache.jackrabbit.oak.kv.osgi;
 import static java.util.Collections.emptyMap;
 import static org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils.registerMBean;
 
+import java.io.Closeable;
 import java.io.File;
 
 import com.google.common.cache.CacheBuilder;
 import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
-import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.kv.KVNodeStore;
 import org.apache.jackrabbit.oak.kv.store.Store;
 import org.apache.jackrabbit.oak.kv.store.cache.CachedStore;
 import org.apache.jackrabbit.oak.kv.store.leveldb.LevelDBStore;
+import org.apache.jackrabbit.oak.kv.store.redis.RedisStore;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.ObserverTracker;
@@ -43,21 +44,35 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
+import redis.clients.jedis.Jedis;
 
-@Component(configurationPolicy = ConfigurationPolicy.REQUIRE)
+@Component(
+        configurationPolicy = ConfigurationPolicy.REQUIRE,
+        configurationPid = {Configuration.PID})
 public class KVNodeStoreService {
 
     @Reference
     private BlobStore blobStore;
 
-    private LevelDBStore store;
+    private Store store;
 
     @Activate
-    public void activate(ComponentContext context) throws Exception {
-        this.store = new LevelDBStore(getPath(context));
+    public void activate(Configuration configuration, ComponentContext context) throws Exception {
+        switch (configuration.type()) {
+            case "leveldb":
+                this.store = new LevelDBStore(getPath(configuration));
+                break;
+
+            case "redis":
+                this.store = new RedisStore(new Jedis(configuration.redisHost(), configuration.redisPort()));
+                break;
+
+            default:
+                throw new IllegalArgumentException("Invalid store type: " + configuration.type());
+        }
 
         Store store = this.store;
-        store = new CachedStore(store, CacheBuilder.newBuilder().maximumSize(getCacheMaximumSize(context)).build());
+        store = new CachedStore(store, CacheBuilder.newBuilder().maximumSize(configuration.cacheMaximumSize()).build());
         KVNodeStore nodeStore = new KVNodeStore(store, blobStore);
 
         ObserverTracker observerTracker = new ObserverTracker(nodeStore);
@@ -71,19 +86,16 @@ public class KVNodeStoreService {
 
     @Deactivate
     public void deactivate() throws Exception {
-        store.close();
+        if (store instanceof Closeable) {
+            ((Closeable) store).close();
+        }
     }
 
-    private static File getPath(ComponentContext context) {
-        String path = PropertiesUtil.toString(context.getProperties().get("path"), null);
-        if (path == null) {
+    private static File getPath(Configuration configuration) {
+        if (configuration.path() == null) {
             throw new IllegalStateException("path");
         }
-        return new File(path);
-    }
-
-    private static long getCacheMaximumSize(ComponentContext context) {
-        return PropertiesUtil.toLong(context.getProperties().get("cacheMaximumSize"), 50000);
+        return new File(configuration.path());
     }
 
 }
