@@ -20,18 +20,19 @@
 package org.apache.jackrabbit.oak.kv.store.leveldb;
 
 import java.util.Objects;
+import java.util.UUID;
 
 import org.apache.jackrabbit.oak.kv.store.ID;
 
 class LevelDBID implements ID {
 
-    private final String id;
+    private final UUID id;
 
-    LevelDBID(String id) {
+    LevelDBID(UUID id) {
         this.id = id;
     }
 
-    String getID() {
+    UUID getID() {
         return id;
     }
 

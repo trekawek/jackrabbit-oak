@@ -20,7 +20,6 @@
 package org.apache.jackrabbit.oak.kv.store.leveldb;
 
 import static java.lang.String.format;
-import static org.fusesource.leveldbjni.JniDBFactory.asString;
 import static org.fusesource.leveldbjni.JniDBFactory.bytes;
 
 import java.io.Closeable;
@@ -29,8 +28,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import org.apache.jackrabbit.oak.kv.store.ID;
 import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Store;
@@ -41,13 +38,6 @@ import org.iq80.leveldb.Options;
 
 public class LevelDBStore implements Store, Closeable {
 
-    private final Gson gson = new GsonBuilder()
-        .registerTypeAdapter(Value.class, Converters.jsonToValue)
-        .registerTypeAdapter(Value.class, Converters.valueToJson)
-        .registerTypeAdapter(ID.class, Converters.jsonToID)
-        .registerTypeAdapter(LevelDBID.class, Converters.idToJson)
-        .create();
-
     private final DB db;
 
     public LevelDBStore(File path) throws IOException {
@@ -56,51 +46,35 @@ public class LevelDBStore implements Store, Closeable {
         db = JniDBFactory.factory.open(path, options);
     }
 
-    private String getString(String key) {
-        return asString(db.get(bytes(key)));
-    }
-
-    private void putString(String key, String value) {
-        db.put(bytes(key), bytes(value));
-    }
-
-    private void deleteString(String key) {
-        db.delete(bytes(key));
-    }
-
-    private static String tagKey(String tag) {
-        return format("t-%s", tag);
+    private static byte[] tagKey(String tag) {
+        return bytes(format("t-%s", tag));
     }
 
     @Override
-    public ID getTag(String tag) throws IOException {
-        String value = getString(tagKey(tag));
+    public ID getTag(String tag) {
+        byte[] value = db.get(tagKey(tag));
         if (value == null) {
             return null;
         }
-        return new LevelDBID(value);
+        return Converters.readID(value);
     }
 
     @Override
-    public void putTag(String tag, ID id) throws IOException {
+    public void putTag(String tag, ID id) {
         if (id instanceof LevelDBID) {
-            putTag(tag, (LevelDBID) id);
+            db.put(tagKey(tag), Converters.write(id));
         } else {
             throw new IllegalArgumentException("id");
         }
     }
 
-    private void putTag(String tag, LevelDBID id) {
-        putString(tagKey(tag), id.getID());
+    @Override
+    public void deleteTag(String tag) {
+        db.delete(tagKey(tag));
     }
 
     @Override
-    public void deleteTag(String tag) throws IOException {
-        deleteString(tagKey(tag));
-    }
-
-    @Override
-    public Node getNode(ID id) throws IOException {
+    public Node getNode(ID id) {
         if (id instanceof LevelDBID) {
             return getNode((LevelDBID) id);
         }
@@ -108,13 +82,17 @@ public class LevelDBStore implements Store, Closeable {
     }
 
     private Node getNode(LevelDBID id) {
-        return gson.fromJson(getString(id.getID()), LevelDBNode.class);
+        byte[] value = db.get(Converters.write(id));
+        if (value == null) {
+            return null;
+        }
+        return Converters.readNode(value);
     }
 
     @Override
-    public ID putNode(Map<String, Value> properties, Map<String, ID> children) throws IOException {
-        LevelDBID id = new LevelDBID(UUID.randomUUID().toString());
-        putString(id.getID(), gson.toJson(new LevelDBNode(properties, children)));
+    public ID putNode(Map<String, Value> properties, Map<String, ID> children) {
+        LevelDBID id = new LevelDBID(UUID.randomUUID());
+        db.put(Converters.write(id), Converters.write(properties, children));
         return id;
     }
 

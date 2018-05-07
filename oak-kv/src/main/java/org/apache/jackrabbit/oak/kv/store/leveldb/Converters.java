@@ -19,43 +19,22 @@
 
 package org.apache.jackrabbit.oak.kv.store.leveldb;
 
-import static org.apache.jackrabbit.oak.kv.store.Value.newBinaryArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newBinaryValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newBooleanArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newBooleanValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newDateArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newDateValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newDecimalArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newDecimalValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newDoubleArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newDoubleValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newLongArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newLongValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newNameArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newNameValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newPathArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newPathValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newReferenceArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newReferenceValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newStringArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newStringValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newURIArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newURIValue;
-import static org.apache.jackrabbit.oak.kv.store.Value.newWeakReferenceArray;
-import static org.apache.jackrabbit.oak.kv.store.Value.newWeakReferenceValue;
+import static org.apache.jackrabbit.oak.kv.store.Type.values;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.UUID;
 
-import com.google.gson.JsonDeserializationContext;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonSerializationContext;
-import com.google.gson.JsonSerializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import com.google.common.collect.Lists;
 import org.apache.jackrabbit.oak.kv.store.ID;
+import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Type;
 import org.apache.jackrabbit.oak.kv.store.Value;
 
@@ -65,110 +44,55 @@ class Converters {
         // Prevent instantiation.
     }
 
-    static final JsonDeserializer<ID> jsonToID = (element, type, context) ->
-        new LevelDBID(context.deserialize(element, String.class));
-
-    static final JsonSerializer<LevelDBID> idToJson = (id, type, context) ->
-        context.serialize(id.getID());
-
-    static final JsonSerializer<Value> valueToJson = (value, type, context) -> {
-        JsonObject object = new JsonObject();
-        object.add("type", context.serialize(value.getType()));
-        object.add("isArray", context.serialize(value.isArray()));
-        object.add("value", toJson(value, context));
-        return object;
-    };
-
-    static final JsonDeserializer<Value> jsonToValue = (element, type, context) -> {
-        if (element.isJsonObject()) {
-            return toValue((JsonObject) element, context);
+    static byte[] write(Map<String, Value> properties, Map<String, ID> children) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try (Output output = new Output(stream)) {
+            output.writeVarInt(properties.size(), true);
+            for (Entry<String, Value> e : properties.entrySet()) {
+                output.writeString(e.getKey());
+                write(output, e.getValue());
+            }
+            output.writeVarInt(children.size(), true);
+            for (Entry<String, ID> e : children.entrySet()) {
+                output.writeString(e.getKey());
+                write(output, e.getValue());
+            }
         }
-        throw new JsonParseException("invalid element");
-    };
-
-    private static Value toValue(JsonObject object, JsonDeserializationContext context) {
-        Type valueType = context.deserialize(object.get("type"), Type.class);
-        boolean isArray = context.deserialize(object.get("isArray"), Boolean.class);
-        return toValue(valueType, isArray, object.get("value"), context);
+        return stream.toByteArray();
     }
 
-    private static Value toValue(Type type, boolean isArray, JsonElement element, JsonDeserializationContext context) {
-        if (isArray) {
-            return toArray(type, element, context);
+    static byte[] write(ID id) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try (Output output = new Output(stream)) {
+            write(output, id);
         }
-        return toValue(type, element, context);
+        return stream.toByteArray();
     }
 
-    private static Value toValue(Type type, JsonElement element, JsonDeserializationContext context) {
-        switch (type) {
-            case STRING:
-                return newStringValue(context.deserialize(element, String.class));
-            case BINARY:
-                return newBinaryValue(context.deserialize(element, String.class));
-            case LONG:
-                return newLongValue(context.deserialize(element, Long.TYPE));
-            case DOUBLE:
-                return newDoubleValue(context.deserialize(element, Double.TYPE));
-            case DATE:
-                return newDateValue(context.deserialize(element, String.class));
-            case BOOLEAN:
-                return newBooleanValue(context.deserialize(element, Boolean.TYPE));
-            case NAME:
-                return newNameValue(context.deserialize(element, String.class));
-            case PATH:
-                return newPathValue(context.deserialize(element, String.class));
-            case REFERENCE:
-                return newReferenceValue(context.deserialize(element, String.class));
-            case WEAK_REFERENCE:
-                return newWeakReferenceValue(context.deserialize(element, String.class));
-            case URI:
-                return newURIValue(context.deserialize(element, String.class));
-            case DECIMAL:
-                return newDecimalValue(new BigDecimal((String) context.deserialize(element, String.class)));
-            default:
-                throw new JsonParseException("value");
+    private static void write(Output output, ID id) {
+        if (id instanceof LevelDBID) {
+            write(output, (LevelDBID) id);
+        } else {
+            throw new IllegalArgumentException("id");
         }
     }
 
-    private static Value toArray(Type type, JsonElement element, JsonDeserializationContext context) {
-        switch (type) {
-            case STRING:
-                return newStringArray(context.deserialize(element, List.class));
-            case BINARY:
-                return newBinaryArray(context.deserialize(element, List.class));
-            case LONG:
-                return newLongArray(toLongArray(context.deserialize(element, List.class)));
-            case DOUBLE:
-                return newDoubleArray(context.deserialize(element, List.class));
-            case DATE:
-                return newDateArray(context.deserialize(element, List.class));
-            case BOOLEAN:
-                return newBooleanArray(context.deserialize(element, List.class));
-            case NAME:
-                return newNameArray(context.deserialize(element, List.class));
-            case PATH:
-                return newPathArray(context.deserialize(element, List.class));
-            case REFERENCE:
-                return newReferenceArray(context.deserialize(element, List.class));
-            case WEAK_REFERENCE:
-                return newWeakReferenceArray(context.deserialize(element, List.class));
-            case URI:
-                return newURIArray(context.deserialize(element, List.class));
-            case DECIMAL:
-                return newDecimalArray(toDecimalArray(context.deserialize(element, List.class)));
-            default:
-                throw new JsonParseException("value");
-        }
+    private static void write(Output output, LevelDBID id) {
+        output.writeLong(id.getID().getMostSignificantBits());
+        output.writeLong(id.getID().getLeastSignificantBits());
     }
 
-    private static JsonElement toJson(Value value, JsonSerializationContext context) {
+    private static void write(Output output, Value value) {
+        output.writeVarInt(value.getType().ordinal(), true);
+        output.writeBoolean(value.isArray());
         if (value.isArray()) {
-            return toJsonArray(value, context);
+            writeArray(output, value);
+        } else {
+            writeValue(output, value);
         }
-        return toJsonValue(value, context);
     }
 
-    private static JsonElement toJsonArray(Value value, JsonSerializationContext context) {
+    private static void writeValue(Output output, Value value) {
         switch (value.getType()) {
             case STRING:
             case BINARY:
@@ -178,21 +102,26 @@ class Converters {
             case REFERENCE:
             case WEAK_REFERENCE:
             case URI:
-                return context.serialize(value.asStringArray());
+                output.writeString(value.asStringValue());
+                break;
             case LONG:
-                return context.serialize(value.asLongArray());
+                output.writeLong(value.asLongValue());
+                break;
             case DOUBLE:
-                return context.serialize(value.asDoubleArray());
+                output.writeDouble(value.asDoubleValue());
+                break;
             case BOOLEAN:
-                return context.serialize(value.asBooleanArray());
+                output.writeBoolean(value.asBooleanValue());
+                break;
             case DECIMAL:
-                return context.serialize(toStringArray(value.asDecimalArray()));
+                output.writeString(value.asDecimalValue().toString());
+                break;
             default:
-                throw new IllegalStateException("value");
+                throw new IllegalArgumentException("value");
         }
     }
 
-    private static JsonElement toJsonValue(Value value, JsonSerializationContext context) {
+    private static void writeArray(Output output, Value value) {
         switch (value.getType()) {
             case STRING:
             case BINARY:
@@ -202,48 +131,211 @@ class Converters {
             case REFERENCE:
             case WEAK_REFERENCE:
             case URI:
-                return context.serialize(value.asStringValue());
+                writeStringArray(output, value.asStringArray());
+                break;
             case LONG:
-                return context.serialize(value.asLongValue());
+                writeLongArray(output, value.asLongArray());
+                break;
             case DOUBLE:
-                return context.serialize(value.asDoubleValue());
+                writeDoubleArray(output, value.asDoubleArray());
+                break;
             case BOOLEAN:
-                return context.serialize(value.asBooleanValue());
+                writeBooleanArray(output, value.asBooleanArray());
+                break;
             case DECIMAL:
-                return context.serialize(value.asDecimalValue().toString());
+                writeDecimalArray(output, value.asDecimalArray());
+                break;
             default:
-                throw new IllegalStateException("value");
+                throw new IllegalArgumentException("value");
         }
     }
 
-    private static Iterable<String> toStringArray(Iterable<BigDecimal> values) {
-        List<String> strings = new ArrayList<>();
+    private static void writeStringArray(Output output, Iterable<String> i) {
+        List<String> values = Lists.newArrayList(i);
+        output.writeVarInt(values.size(), true);
+        for (String value : values) {
+            output.writeString(value);
+        }
+    }
 
+    private static void writeLongArray(Output output, Iterable<Long> i) {
+        List<Long> values = Lists.newArrayList(i);
+        output.writeVarInt(values.size(), true);
+        for (Long value : values) {
+            output.writeLong(value);
+        }
+    }
+
+    private static void writeDoubleArray(Output output, Iterable<Double> i) {
+        List<Double> values = Lists.newArrayList(i);
+        output.writeVarInt(values.size(), true);
+        for (Double value : values) {
+            output.writeDouble(value);
+        }
+    }
+
+    private static void writeBooleanArray(Output output, Iterable<Boolean> i) {
+        List<Boolean> values = Lists.newArrayList(i);
+        output.writeVarInt(values.size(), true);
+        for (Boolean value : values) {
+            output.writeBoolean(value);
+        }
+    }
+
+    private static void writeDecimalArray(Output output, Iterable<BigDecimal> i) {
+        List<BigDecimal> values = Lists.newArrayList(i);
+        output.writeVarInt(values.size(), true);
         for (BigDecimal value : values) {
-            strings.add(value.toString());
+            output.writeString(value.toString());
         }
-
-        return strings;
     }
 
-    private static Iterable<Long> toLongArray(Iterable<Double> doubles) {
-        List<Long> longs = new ArrayList<>();
-
-        for (double value : doubles) {
-            longs.add((long) value);
+    static Node readNode(byte[] bytes) {
+        try (Input input = new Input(bytes)) {
+            int propertiesSize = input.readVarInt(true);
+            Map<String, Value> properties = new HashMap<>(propertiesSize);
+            for (int i = 0; i < propertiesSize; i++) {
+                String key = input.readString();
+                Value value = readValue(input);
+                properties.put(key, value);
+            }
+            int childrenCount = input.readVarInt(true);
+            Map<String, ID> children = new HashMap<>(childrenCount);
+            for (int i = 0; i < childrenCount; i++) {
+                String key = input.readString();
+                ID value = readID(input);
+                children.put(key, value);
+            }
+            return new LevelDBNode(properties, children);
         }
-
-        return longs;
     }
 
-    private static Iterable<BigDecimal> toDecimalArray(Iterable<String> strings) {
-        List<BigDecimal> decimals = new ArrayList<>();
-
-        for (String value : strings) {
-            decimals.add(new BigDecimal(value));
+    static ID readID(byte[] bytes) {
+        try (Input input = new Input(bytes)) {
+            return readID(input);
         }
+    }
 
-        return decimals;
+    private static Value readValue(Input input) {
+        Type type = values()[input.readVarInt(true)];
+        boolean isArray = input.readBoolean();
+        if (isArray) {
+            return readArray(input, type);
+        }
+        return readValue(input, type);
+    }
+
+    private static Value readValue(Input input, Type type) {
+        switch (type) {
+            case STRING:
+                return Value.newStringValue(input.readString());
+            case BINARY:
+                return Value.newBinaryValue(input.readString());
+            case LONG:
+                return Value.newLongValue(input.readLong());
+            case DOUBLE:
+                return Value.newDoubleValue(input.readDouble());
+            case DATE:
+                return Value.newDateValue(input.readString());
+            case BOOLEAN:
+                return Value.newBooleanValue(input.readBoolean());
+            case NAME:
+                return Value.newNameValue(input.readString());
+            case PATH:
+                return Value.newPathValue(input.readString());
+            case REFERENCE:
+                return Value.newReferenceValue(input.readString());
+            case WEAK_REFERENCE:
+                return Value.newWeakReferenceValue(input.readString());
+            case URI:
+                return Value.newURIValue(input.readString());
+            case DECIMAL:
+                return Value.newDecimalValue(new BigDecimal(input.readString()));
+            default:
+                throw new IllegalArgumentException("type");
+        }
+    }
+
+    private static Value readArray(Input input, Type type) {
+        switch (type) {
+            case STRING:
+                return Value.newStringArray(readStringArray(input));
+            case BINARY:
+                return Value.newBinaryArray(readStringArray(input));
+            case DATE:
+                return Value.newDateArray(readStringArray(input));
+            case NAME:
+                return Value.newNameArray(readStringArray(input));
+            case PATH:
+                return Value.newPathArray(readStringArray(input));
+            case REFERENCE:
+                return Value.newReferenceArray(readStringArray(input));
+            case WEAK_REFERENCE:
+                return Value.newWeakReferenceArray(readStringArray(input));
+            case URI:
+                return Value.newURIArray(readStringArray(input));
+            case DECIMAL:
+                return Value.newDecimalArray(readDecimalArray(input));
+            case LONG:
+                return Value.newLongArray(readLongArray(input));
+            case DOUBLE:
+                return Value.newDoubleArray(readDoubleArray(input));
+            case BOOLEAN:
+                return Value.newBooleanArray(readBooleanArray(input));
+            default:
+                throw new IllegalArgumentException("type");
+        }
+    }
+
+    private static Iterable<String> readStringArray(Input input) {
+        int size = input.readVarInt(true);
+        List<String> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(input.readString());
+        }
+        return values;
+    }
+
+    private static Iterable<Long> readLongArray(Input input) {
+        int size = input.readVarInt(true);
+        List<Long> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(input.readLong());
+        }
+        return values;
+    }
+
+    private static Iterable<Double> readDoubleArray(Input input) {
+        int size = input.readVarInt(true);
+        List<Double> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(input.readDouble());
+        }
+        return values;
+    }
+
+    private static Iterable<Boolean> readBooleanArray(Input input) {
+        int size = input.readVarInt(true);
+        List<Boolean> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(input.readBoolean());
+        }
+        return values;
+    }
+
+    private static Iterable<BigDecimal> readDecimalArray(Input input) {
+        int size = input.readVarInt(true);
+        List<BigDecimal> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(new BigDecimal(input.readString()));
+        }
+        return values;
+    }
+
+    static ID readID(Input input) {
+        long msb = input.readLong();
+        long lsb = input.readLong();
+        return new LevelDBID(new UUID(msb, lsb));
     }
 
 }
