@@ -80,7 +80,7 @@ public class LevelDBStoreTest {
     }
 
     @Test
-    public void testProperties() throws Exception {
+    public void testProperties() {
         Map<String, Value> properties = new HashMap<>();
 
         properties.put("string", newStringValue("string"));
@@ -114,7 +114,7 @@ public class LevelDBStoreTest {
     }
 
     @Test
-    public void testChildren() throws Exception {
+    public void testChildren() {
         Map<String, ID> children = new HashMap<>();
 
         children.put("a", store.putNode(emptyMap(), emptyMap()));
@@ -125,20 +125,20 @@ public class LevelDBStoreTest {
     }
 
     @Test
-    public void testPutGetNode() throws Exception {
+    public void testPutGetNode() {
         ID id = store.putNode(emptyMap(), emptyMap());
         assertNotNull(store.getNode(id));
     }
 
     @Test
-    public void testGetTag() throws Exception {
+    public void testGetTag() {
         ID id = store.putNode(emptyMap(), emptyMap());
         store.putTag("tag", id);
         assertEquals(id, store.getTag("tag"));
     }
 
     @Test
-    public void testPutTag() throws Exception {
+    public void testPutTag() {
         ID a = store.putNode(emptyMap(), emptyMap());
         store.putTag("tag", a);
         ID b = store.putNode(emptyMap(), emptyMap());
@@ -147,7 +147,7 @@ public class LevelDBStoreTest {
     }
 
     @Test
-    public void testDeleteTag() throws Exception {
+    public void testDeleteTag() {
         ID id = store.putNode(emptyMap(), emptyMap());
         store.putTag("tag", id);
         store.deleteTag("tag");
