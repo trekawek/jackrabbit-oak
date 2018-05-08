@@ -43,7 +43,7 @@ public class TestListIterator {
 
     @Test
     public void testEmptyIterator() {
-        ListIterator it = new ListIterator(jedis, "xyz", 0);
+        ListIterator it = new ListIterator(jedis, "xyz".getBytes(), 0);
         assertFalse(it.hasNext());
     }
 
@@ -61,11 +61,11 @@ public class TestListIterator {
         for (int i = 0; i < count; i++) {
             jedis.rpush("xyz", "v" + i);
         }
-        ListIterator it = new ListIterator(jedis, "xyz", 0);
+        ListIterator it = new ListIterator(jedis, "xyz".getBytes(), 0);
         for (int i = 0; i < count; i++) {
             it.hasNext();
             assertTrue(it.hasNext());
-            assertEquals("v" + i, it.next());
+            assertEquals("v" + i, new String(it.next()));
         }
         assertFalse(it.hasNext());
     }

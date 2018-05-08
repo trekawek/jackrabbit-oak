@@ -25,31 +25,31 @@ import redis.clients.jedis.Jedis;
 import java.util.Iterator;
 import java.util.List;
 
-public class ListIterator extends AbstractIterator<String> {
+public class ListIterator extends AbstractIterator<byte[]> {
 
     private static final int BATCH_SIZE = 16;
 
     private final Jedis jedis;
 
-    private final String key;
+    private final byte[] key;
 
     private int offset;
 
-    private Iterator<String> results = Iterators.emptyIterator();
+    private Iterator<byte[]> results = Iterators.emptyIterator();
 
-    public ListIterator(Jedis jedis, String key, int startOffset) {
+    public ListIterator(Jedis jedis, byte[] key, int startOffset) {
         this.jedis = jedis;
         this.key = key;
         this.offset = startOffset;
     }
 
     @Override
-    protected String computeNext() {
+    protected byte[] computeNext() {
         if (!results.hasNext()) {
             int start = offset;
             int end = offset + BATCH_SIZE;
             offset = offset + BATCH_SIZE + 1;
-            List<String> range = jedis.lrange(key, start, end);
+            List<byte[]> range = jedis.lrange(key, start, end);
             results = range.iterator();
             if (!results.hasNext()) {
                 return endOfData();

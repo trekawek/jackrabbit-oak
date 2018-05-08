@@ -20,12 +20,15 @@ package org.apache.jackrabbit.oak.kv.store.redis;
 
 import org.apache.jackrabbit.oak.kv.store.ID;
 
+import java.nio.ByteBuffer;
+import java.nio.LongBuffer;
+
 public class RedisID implements ID {
 
     private final long id;
 
-    RedisID(String serializedId) {
-        this.id = Long.parseUnsignedLong(serializedId, 16);
+    RedisID(byte[] serializedId) {
+        id = ByteBuffer.wrap(serializedId).asLongBuffer().get();
     }
 
     RedisID(long id) {
@@ -56,4 +59,31 @@ public class RedisID implements ID {
         return Long.toHexString(id);
     }
 
+    byte[] getAsBytes() {
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES + 1);
+        buffer.asLongBuffer().put(id);
+        return buffer.array();
+    }
+
+    byte[] getPropertyListKey() {
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES + 1);
+        buffer.asLongBuffer().put(id);
+        buffer.put((byte) 0);
+        return buffer.array();
+    }
+
+    byte[] getChildrenHashKey() {
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES + 1);
+        buffer.asLongBuffer().put(id);
+        buffer.put((byte) 1);
+        return buffer.array();
+    }
+
+    byte[] getPropertyKey(long propertyIndex) {
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2 + 1);
+        LongBuffer longBuffer = buffer.asLongBuffer().put(id);
+        buffer.put((byte) 2);
+        longBuffer.put(propertyIndex);
+        return buffer.array();
+    }
 }

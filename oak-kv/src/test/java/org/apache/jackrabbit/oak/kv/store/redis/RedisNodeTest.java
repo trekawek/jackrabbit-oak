@@ -73,7 +73,7 @@ public class RedisNodeTest {
         Map<String, ID> children = new HashMap<>();
 
         for (int i = 0; i < 123; i++) { // not a batch size multiplier
-            children.put("child" + i, RedisID.generateNewId(jedis));
+            children.put("child" + i, new RedisID(i));
         }
 
         Node node = store.getNode(store.putNode(emptyMap(), children));

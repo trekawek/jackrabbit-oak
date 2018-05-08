@@ -20,28 +20,23 @@ package org.apache.jackrabbit.oak.kv.store.redis;
 
 import org.apache.jackrabbit.oak.kv.store.ID;
 import org.apache.jackrabbit.oak.kv.store.Node;
-import org.apache.jackrabbit.oak.kv.store.Type;
 import org.apache.jackrabbit.oak.kv.store.Value;
-import org.apache.jackrabbit.oak.kv.store.redis.iterators.ListIterator;
 import org.apache.jackrabbit.oak.kv.store.redis.iterators.ScanIterator;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.ScanParams;
 
-import java.math.BigDecimal;
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 
-import static com.google.common.collect.Iterables.transform;
 import static com.google.common.collect.Iterators.transform;
 
 /**
  * <pre>
- * UUID:p:jcr:mixinTypes = [ "string", "mix:versionable", "mix:referenceable" ]
- * UUID:p:sling:resourceType = [ "string", "libs/sling/page" ]
- * UUID:c = { "child1" => UUID1, "child2" => UUID2, "child3" => UUID3 }
+ * ff123:p = [ "jcr:primaryType", "jcr:mixinTypes" ]
+ * ff123:p:0 = [ "string", "s", "nt:unstructured" ]
+ * ff123:p:1 = [ "string", "a", "mix:referenceable", "mix:versionable" ]
+ * ff123:c = { "child1" => ff124, "child2" => ff125, "child3" => ff126 }
  * </pre>
  */
 public class RedisNode implements Node {
@@ -55,120 +50,24 @@ public class RedisNode implements Node {
         this.id = id;
     }
 
-    private Iterator<String> getPropertyNames() {
-        String pattern = id + ":p:*";
-        ScanParams params = new ScanParams().match(pattern);
-        return transform(
-                new ScanIterator<String>(cursor -> jedis.scan(cursor, params)),
-                s -> s.substring(pattern.length() - 1)
-        );
+    private Iterator<Map.Entry<String, Value>> getPropertyIterator() {
+        return new PropertyIterator(jedis, id);
     }
 
     private Iterator<Map.Entry<String, RedisID>> getChildrenIterator() {
-        String key = id + ":c";
         return transform(
-                new ScanIterator<Map.Entry<String, String>>(cursor -> jedis.hscan(key, cursor)),
-                e -> new AbstractMap.SimpleEntry<>(e.getKey(), new RedisID(e.getValue()))
+                new ScanIterator<>(cursor -> jedis.hscan(id.getChildrenHashKey(), cursor.getBytes())),
+                e -> new AbstractMap.SimpleEntry<>(new String(e.getKey()), new RedisID(e.getValue()))
         );
-    }
-
-    private Value getProperty(String name) {
-        String key = id + ":p:" + name;
-        List<String> list = jedis.lrange(key, 0, 2);
-
-        Type type = Type.values()[Integer.parseInt(list.get(0), 16)];
-        boolean isArray = Boolean.parseBoolean(list.get(1));
-
-        if (isArray) {
-            Iterable<String> values = () -> new ListIterator(jedis, key, 2);
-            switch (type) {
-                case STRING:
-                    return Value.newStringArray(values);
-
-                case BINARY:
-                    return Value.newBinaryArray(values);
-
-                case LONG:
-                    return Value.newLongArray(transform(values, Long::parseLong));
-
-                case DOUBLE:
-                    return Value.newDoubleArray(transform(values, Double::parseDouble));
-
-                case DATE:
-                    return Value.newDateArray(values);
-
-                case BOOLEAN:
-                    return Value.newBooleanArray(transform(values, Boolean::parseBoolean));
-
-                case NAME:
-                    return Value.newNameArray(values);
-
-                case PATH:
-                    return Value.newPathArray(values);
-
-                case REFERENCE:
-                    return Value.newReferenceArray(values);
-
-                case WEAK_REFERENCE:
-                    return Value.newWeakReferenceArray(values);
-
-                case URI:
-                    return Value.newURIArray(values);
-
-                case DECIMAL:
-                    return Value.newDecimalArray(transform(values, BigDecimal::new));
-            }
-        } else {
-            String value = list.get(2);
-
-            switch (type) {
-                case STRING:
-                    return Value.newStringValue(value);
-
-                case BINARY:
-                    return Value.newBinaryValue(value);
-
-                case LONG:
-                    return Value.newLongValue(Long.parseLong(value));
-
-                case DOUBLE:
-                    return Value.newDoubleValue(Double.parseDouble(value));
-
-                case DATE:
-                    return Value.newDateValue(value);
-
-                case BOOLEAN:
-                    return Value.newBooleanValue(Boolean.parseBoolean(value));
-
-                case NAME:
-                    return Value.newNameValue(value);
-
-                case PATH:
-                    return Value.newPathValue(value);
-
-                case REFERENCE:
-                    return Value.newReferenceValue(value);
-
-                case WEAK_REFERENCE:
-                    return Value.newWeakReferenceValue(value);
-
-                case URI:
-                    return Value.newURIValue(value);
-
-                case DECIMAL:
-                    return Value.newDecimalValue(new BigDecimal(value));
-            }
-        }
-        throw new IllegalStateException("Invalid property type " + name + ": " + list);
     }
 
     @Override
     public Map<String, Value> getProperties() {
         Map<String, Value> properties = new HashMap<>();
-        Iterator<String> it = getPropertyNames();
+        Iterator<Map.Entry<String, Value>> it = getPropertyIterator();
         while (it.hasNext()) {
-            String key = it.next();
-            properties.put(key, getProperty(key));
+            Map.Entry<String, Value> e = it.next();
+            properties.put(e.getKey(), e.getValue());
         }
         return properties;
     }

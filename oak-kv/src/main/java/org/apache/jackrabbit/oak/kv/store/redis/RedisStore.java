@@ -19,7 +19,6 @@
 package org.apache.jackrabbit.oak.kv.store.redis;
 
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Maps;
 import org.apache.jackrabbit.oak.kv.store.ID;
 import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Store;
@@ -30,6 +29,7 @@ import redis.clients.jedis.exceptions.JedisException;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -42,7 +42,7 @@ public class RedisStore implements Store, Closeable {
      */
     private static final int BATCH_SIZE = 16;
 
-    private static final String TAG_HASH = "tags";
+    private static final byte[] TAG_HASH = "tags".getBytes();
 
     private final Jedis jedis;
 
@@ -54,9 +54,9 @@ public class RedisStore implements Store, Closeable {
     @Override
     public ID getTag(String tag) throws IOException {
         checkNotNull(tag);
-        String id;
+        byte[] id;
         try {
-            id = jedis.hget(TAG_HASH, tag);
+            id = jedis.hget(TAG_HASH, tag.getBytes());
         } catch (JedisException e) {
             throw new IOException(e);
         }
@@ -72,7 +72,7 @@ public class RedisStore implements Store, Closeable {
         checkNotNull(tag);
         checkArgument(id instanceof RedisID, "id is not RedisID");
         try {
-            jedis.hset(TAG_HASH, tag, id.toString());
+            jedis.hset(TAG_HASH, tag.getBytes(), ((RedisID) id).getAsBytes());
         } catch (JedisException e) {
             throw new IOException(e);
         }
@@ -82,7 +82,7 @@ public class RedisStore implements Store, Closeable {
     public void deleteTag(String tag) throws IOException {
         checkNotNull(tag);
         try {
-            jedis.hdel(TAG_HASH, tag);
+            jedis.hdel(TAG_HASH, tag.getBytes());
         } catch (JedisException e) {
             throw new IOException(e);
         }
@@ -103,11 +103,16 @@ public class RedisStore implements Store, Closeable {
         try {
             Transaction t = jedis.multi();
             if (!children.isEmpty()) {
-                t.hmset(id + ":c", Maps.transformValues(children, ID::toString));
+                Map<byte[], byte[]> childrenHash = new HashMap<>(children.size());
+                children.forEach((k, v) -> childrenHash.put(k.getBytes(), ((RedisID) v).getAsBytes()));
+                t.hmset(id.getChildrenHashKey(), childrenHash);
             }
             if (!properties.isEmpty()) {
+                byte[] propertyListKey = id.getPropertyListKey();
+                long i = 0;
                 for (Map.Entry<String, Value> e : properties.entrySet()) {
-                    setProperty(t, id, e.getKey(), e.getValue());
+                    setProperty(t, id.getPropertyKey(i++), e.getValue());
+                    t.rpush(propertyListKey, e.getKey().getBytes());
                 }
             }
             t.exec();
@@ -117,34 +122,33 @@ public class RedisStore implements Store, Closeable {
         return id;
     }
 
-    private static void setProperty(Transaction t, RedisID id, String name, Value value) {
-        String key = id + ":p:" + name;
+    private static void setProperty(Transaction t, byte[] propertyKey, Value value) {
         if (value.isArray()) {
-            String[] list = new String[BATCH_SIZE];
+            byte[][] list = new byte[BATCH_SIZE][];
             int i = 0;
-            list[i++] = Integer.toHexString(value.getType().ordinal());
-            list[i++] = Boolean.toString(value.isArray());
+            list[i++] = new byte[] { (byte) value.getType().ordinal() };
+            list[i++] = new byte[] { 1 };
             for (String v : getAsStringIterable(value)) {
-                list[i++] = v;
+                list[i++] = v.getBytes();
                 if (i == list.length) {
-                    t.rpush(key, list);
+                    t.rpush(propertyKey, list);
                     i = 0;
                 }
             }
             if (i != 0) {
-                String[] list2 = new String[i];
+                byte[][] list2 = new byte[i][];
                 for (int j = 0; j < i; j++) {
                     list2[j] = list[j];
                 }
-                t.rpush(key, list2);
+                t.rpush(propertyKey, list2);
             }
         } else {
-            String[] list = new String[3];
+            byte[][] list = new byte[3][];
             int i = 0;
-            list[i++] = Integer.toHexString(value.getType().ordinal());
-            list[i++] = Boolean.toString(value.isArray());
-            list[i++] = getAsString(value);
-            t.rpush(key, list);
+            list[i++] = new byte[] { (byte) value.getType().ordinal() };
+            list[i++] = new byte[] { 0 };
+            list[i++] = getAsString(value).getBytes();
+            t.rpush(propertyKey, list);
         }
     }
 
