@@ -122,7 +122,7 @@ public class RedisStore implements Store, Closeable {
         if (value.isArray()) {
             String[] list = new String[BATCH_SIZE];
             int i = 0;
-            list[i++] = value.getType().name();
+            list[i++] = Integer.toHexString(value.getType().ordinal());
             list[i++] = Boolean.toString(value.isArray());
             for (String v : getAsStringIterable(value)) {
                 list[i++] = v;
@@ -141,7 +141,7 @@ public class RedisStore implements Store, Closeable {
         } else {
             String[] list = new String[3];
             int i = 0;
-            list[i++] = value.getType().name();
+            list[i++] = Integer.toHexString(value.getType().ordinal());
             list[i++] = Boolean.toString(value.isArray());
             list[i++] = getAsString(value);
             t.rpush(key, list);

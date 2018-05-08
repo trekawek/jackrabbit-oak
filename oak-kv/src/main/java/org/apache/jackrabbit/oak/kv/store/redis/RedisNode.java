@@ -76,7 +76,7 @@ public class RedisNode implements Node {
         String key = id + ":p:" + name;
         List<String> list = jedis.lrange(key, 0, 2);
 
-        Type type = Type.valueOf(list.get(0));
+        Type type = Type.values()[Integer.parseInt(list.get(0), 16)];
         boolean isArray = Boolean.parseBoolean(list.get(1));
 
         if (isArray) {
