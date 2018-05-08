@@ -24,6 +24,7 @@ import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Store;
 import org.apache.jackrabbit.oak.kv.store.Value;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.exceptions.JedisException;
 
@@ -44,18 +45,18 @@ public class RedisStore implements Store, Closeable {
 
     private static final byte[] TAG_HASH = "tags".getBytes();
 
-    private final Jedis jedis;
+    private final JedisPool jedisPool;
 
-    public RedisStore(Jedis jedis) {
-        checkNotNull(jedis);
-        this.jedis = jedis;
+    public RedisStore(JedisPool jedisPool) {
+        checkNotNull(jedisPool);
+        this.jedisPool = jedisPool;
     }
 
     @Override
     public ID getTag(String tag) throws IOException {
         checkNotNull(tag);
         byte[] id;
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
             id = jedis.hget(TAG_HASH, tag.getBytes());
         } catch (JedisException e) {
             throw new IOException(e);
@@ -71,7 +72,7 @@ public class RedisStore implements Store, Closeable {
     public void putTag(String tag, ID id) throws IOException {
         checkNotNull(tag);
         checkArgument(id instanceof RedisID, "id is not RedisID");
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
             jedis.hset(TAG_HASH, tag.getBytes(), ((RedisID) id).getAsBytes());
         } catch (JedisException e) {
             throw new IOException(e);
@@ -81,7 +82,7 @@ public class RedisStore implements Store, Closeable {
     @Override
     public void deleteTag(String tag) throws IOException {
         checkNotNull(tag);
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
             jedis.hdel(TAG_HASH, tag.getBytes());
         } catch (JedisException e) {
             throw new IOException(e);
@@ -91,7 +92,7 @@ public class RedisStore implements Store, Closeable {
     @Override
     public Node getNode(ID id) {
         checkArgument(id instanceof RedisID, "id is not RedisID");
-        return new RedisNode(jedis, (RedisID) id);
+        return new RedisNode(jedisPool, (RedisID) id);
     }
 
     @Override
@@ -99,8 +100,8 @@ public class RedisStore implements Store, Closeable {
         checkNotNull(properties);
         checkNotNull(children);
         checkArgument(children.values().stream().allMatch(id -> id instanceof RedisID), "id is not RedisID");
-        RedisID id = generateNewId();
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
+            RedisID id = generateNewId(jedis);
             Transaction t = jedis.multi();
             if (!children.isEmpty()) {
                 Map<byte[], byte[]> childrenHash = new HashMap<>(children.size());
@@ -116,10 +117,10 @@ public class RedisStore implements Store, Closeable {
                 }
             }
             t.exec();
+            return id;
         } catch (JedisException e) {
             throw new IOException(e);
         }
-        return id;
     }
 
     private static void setProperty(Transaction t, byte[] propertyKey, Value value) {
@@ -209,13 +210,13 @@ public class RedisStore implements Store, Closeable {
     @Override
     public void close() throws IOException {
         try {
-            jedis.close();
+            jedisPool.close();
         } catch (JedisException e) {
             throw new IOException(e);
         }
     }
 
-    private RedisID generateNewId() throws IOException {
+    private static RedisID generateNewId(Jedis jedis) throws IOException {
         try {
             long id = jedis.incr("seq_id");
             return new RedisID(id);

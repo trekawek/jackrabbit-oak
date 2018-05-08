@@ -21,7 +21,6 @@ package org.apache.jackrabbit.oak.kv.store.redis;
 import org.apache.jackrabbit.oak.kv.store.ID;
 
 import java.nio.ByteBuffer;
-import java.nio.LongBuffer;
 
 public class RedisID implements ID {
 

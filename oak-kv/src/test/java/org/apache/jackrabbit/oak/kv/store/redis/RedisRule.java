@@ -26,6 +26,7 @@ import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class RedisRule implements TestRule {
 
@@ -47,6 +48,11 @@ public class RedisRule implements TestRule {
     public Jedis getJedis()  {
         int mappedPort = wrappedRule.getContainer().getPortBinding("6379/tcp").getPort();
         return new Jedis("localhost", mappedPort);
+    }
+
+    public JedisPool getJedisPool() {
+        int mappedPort = wrappedRule.getContainer().getPortBinding("6379/tcp").getPort();
+        return new JedisPool("localhost", mappedPort);
     }
 
     @Override

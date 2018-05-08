@@ -45,6 +45,7 @@ import org.osgi.service.component.annotations.ConfigurationPolicy;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 @Component(
         configurationPolicy = ConfigurationPolicy.REQUIRE,
@@ -64,7 +65,8 @@ public class KVNodeStoreService {
                 break;
 
             case "redis":
-                this.store = new RedisStore(new Jedis(configuration.redisHost(), configuration.redisPort()));
+                JedisPool jedisPool = new JedisPool(configuration.redisHost(), configuration.redisPort());
+                this.store = new RedisStore(jedisPool);
                 break;
 
             default:

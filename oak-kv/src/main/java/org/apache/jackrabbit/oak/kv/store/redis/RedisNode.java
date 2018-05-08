@@ -23,6 +23,7 @@ import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Value;
 import org.apache.jackrabbit.oak.kv.store.redis.iterators.ScanIterator;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 import java.util.AbstractMap;
 import java.util.HashMap;
@@ -30,60 +31,77 @@ import java.util.Iterator;
 import java.util.Map;
 
 import static com.google.common.collect.Iterators.transform;
+import static java.util.Collections.unmodifiableMap;
 
 /**
+ * The node structure within Redis is as follows:
+ *
  * <pre>
- * property list: NNNNNNNN0 => [ "property_name_1", "property_name_2", ... ]
- * children list: NNNNNNNN1 => { "child1" => "MMMMMMMM", "child2" => "OOOOOOO" }
+ * property list:  NNNNNNNN0     => [ "prop1", "prop2", ... ]
+ * children list:  NNNNNNNN1     => { "child1" => "MMMMMMMM", "child2" => "OOOOOOO" }
  * property value: NNNNNNNN2PPPP => [ T, A, "value1" [, "value2", ...] ]
  *
- * NNNNNNNN, MMMMMMMM, OOOOOOOO - 8-byte node id
- * PPPP - 4-byte property id
- * T - value type byte: (Value.ordinal())
- * A - arity byte: 0x00 or singular, 0x01 for array
+ * NNNNNNNN - 8-byte node id
+ *     PPPP - 4-byte property index (0x00 for prop1, 0x01 for prop2, etc.)
+ *        T - value type byte: (Value.ordinal())
+ *        A - arity byte: 0x00 or singular, 0x01 for array
  * </pre>
  */
 public class RedisNode implements Node {
 
-    private final Jedis jedis;
+    private final JedisPool jedisPool;
 
     private final RedisID id;
 
-    RedisNode(Jedis jedis, RedisID id) {
-        this.jedis = jedis;
+    private Map<String, Value> properties;
+
+    private Map<String, ID> children;
+
+    RedisNode(JedisPool jedisPool, RedisID id) {
+        this.jedisPool = jedisPool;
         this.id = id;
-    }
-
-    private Iterator<Map.Entry<String, Value>> getPropertyIterator() {
-        return new PropertyIterator(jedis, id);
-    }
-
-    private Iterator<Map.Entry<String, RedisID>> getChildrenIterator() {
-        return transform(
-                new ScanIterator<>(cursor -> jedis.hscan(id.getChildrenHashKey(), cursor.getBytes())),
-                e -> new AbstractMap.SimpleEntry<>(new String(e.getKey()), new RedisID(e.getValue()))
-        );
     }
 
     @Override
     public Map<String, Value> getProperties() {
-        Map<String, Value> properties = new HashMap<>();
-        Iterator<Map.Entry<String, Value>> it = getPropertyIterator();
-        while (it.hasNext()) {
-            Map.Entry<String, Value> e = it.next();
-            properties.put(e.getKey(), e.getValue());
+        if (properties == null) {
+            try (Jedis jedis = jedisPool.getResource()) {
+                Map<String, Value> map = new HashMap<>();
+                Iterator<Map.Entry<String, Value>> it = getPropertyIterator(jedis, id);
+                while (it.hasNext()) {
+                    Map.Entry<String, Value> e = it.next();
+                    map.put(e.getKey(), e.getValue());
+                }
+                properties = unmodifiableMap(map);
+            }
         }
         return properties;
     }
 
     @Override
     public Map<String, ID> getChildren() {
-        Map<String, ID> children = new HashMap<>();
-        Iterator<Map.Entry<String, RedisID>> it = getChildrenIterator();
-        while (it.hasNext()) {
-            Map.Entry<String, RedisID> child = it.next();
-            children.put(child.getKey(), child.getValue());
+        if (children == null) {
+            try (Jedis jedis = jedisPool.getResource()) {
+                Map<String, ID> map = new HashMap<>();
+                Iterator<Map.Entry<String, RedisID>> it = getChildrenIterator(jedis, id);
+                while (it.hasNext()) {
+                    Map.Entry<String, RedisID> child = it.next();
+                    map.put(child.getKey(), child.getValue());
+                }
+                children = unmodifiableMap(map);
+            }
         }
         return children;
+    }
+
+    private static Iterator<Map.Entry<String, Value>> getPropertyIterator(Jedis jedis, RedisID id) {
+        return new PropertyIterator(jedis, id);
+    }
+
+    private static Iterator<Map.Entry<String, RedisID>> getChildrenIterator(Jedis jedis, RedisID id) {
+        return transform(
+                new ScanIterator<>(cursor -> jedis.hscan(id.getChildrenHashKey(), cursor.getBytes())),
+                e -> new AbstractMap.SimpleEntry<>(new String(e.getKey()), new RedisID(e.getValue()))
+        );
     }
 }

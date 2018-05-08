@@ -25,7 +25,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
-import redis.clients.jedis.Jedis;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -40,15 +39,12 @@ public class RedisNodeTest {
     @ClassRule
     public static RedisRule redisRule = new RedisRule();
 
-    private Jedis jedis;
-
     private RedisStore store;
 
     @Before
     public void setup() {
-        jedis = redisRule.getJedis();
-        jedis.flushAll();
-        store = new RedisStore(jedis);
+        redisRule.getJedis().flushAll();
+        store = new RedisStore(redisRule.getJedisPool());
     }
 
     @After

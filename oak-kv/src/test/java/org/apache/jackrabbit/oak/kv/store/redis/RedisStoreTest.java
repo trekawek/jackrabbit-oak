@@ -25,7 +25,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
-import redis.clients.jedis.Jedis;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -44,9 +43,8 @@ public class RedisStoreTest extends AbstractStoreTest {
 
     @Before
     public void setup() {
-        Jedis jedis = redisRule.getJedis();
-        jedis.flushAll();
-        store = new RedisStore(jedis);
+        redisRule.getJedis().flushAll();
+        store = new RedisStore(redisRule.getJedisPool());
     }
 
     @After
