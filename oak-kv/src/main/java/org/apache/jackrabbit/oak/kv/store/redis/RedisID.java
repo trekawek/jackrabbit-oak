@@ -79,11 +79,11 @@ public class RedisID implements ID {
         return buffer.array();
     }
 
-    byte[] getPropertyKey(long propertyIndex) {
+    byte[] getPropertyKey(int propertyIndex) {
         ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2 + 1);
-        LongBuffer longBuffer = buffer.asLongBuffer().put(id);
+        buffer.asLongBuffer().put(id);
         buffer.put((byte) 2);
-        longBuffer.put(propertyIndex);
+        buffer.asIntBuffer().put(propertyIndex);
         return buffer.array();
     }
 }

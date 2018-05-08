@@ -33,10 +33,14 @@ import static com.google.common.collect.Iterators.transform;
 
 /**
  * <pre>
- * ff123:p = [ "jcr:primaryType", "jcr:mixinTypes" ]
- * ff123:p:0 = [ "string", "s", "nt:unstructured" ]
- * ff123:p:1 = [ "string", "a", "mix:referenceable", "mix:versionable" ]
- * ff123:c = { "child1" => ff124, "child2" => ff125, "child3" => ff126 }
+ * property list: NNNNNNNN0 => [ "property_name_1", "property_name_2", ... ]
+ * children list: NNNNNNNN1 => { "child1" => "MMMMMMMM", "child2" => "OOOOOOO" }
+ * property value: NNNNNNNN2PPPP => [ T, A, "value1" [, "value2", ...] ]
+ *
+ * NNNNNNNN, MMMMMMMM, OOOOOOOO - 8-byte node id
+ * PPPP - 4-byte property id
+ * T - value type byte: (Value.ordinal())
+ * A - arity byte: 0x00 or singular, 0x01 for array
  * </pre>
  */
 public class RedisNode implements Node {

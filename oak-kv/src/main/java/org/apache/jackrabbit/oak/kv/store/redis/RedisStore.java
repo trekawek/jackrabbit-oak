@@ -109,7 +109,7 @@ public class RedisStore implements Store, Closeable {
             }
             if (!properties.isEmpty()) {
                 byte[] propertyListKey = id.getPropertyListKey();
-                long i = 0;
+                int i = 0;
                 for (Map.Entry<String, Value> e : properties.entrySet()) {
                     setProperty(t, id.getPropertyKey(i++), e.getValue());
                     t.rpush(propertyListKey, e.getKey().getBytes());

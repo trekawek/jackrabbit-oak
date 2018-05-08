@@ -39,7 +39,7 @@ public class PropertyIterator extends AbstractIterator<Map.Entry<String, Value>>
 
     private final ListIterator it;
 
-    private long i;
+    private int i;
 
     public PropertyIterator(Jedis jedis, RedisID nodeID) {
         this.jedis = jedis;
@@ -57,7 +57,6 @@ public class PropertyIterator extends AbstractIterator<Map.Entry<String, Value>>
             return endOfData();
         }
     }
-
 
     private Value getPropertyByKey(byte[] key) {
         List<byte[]> list = jedis.lrange(key, 0, 2);
