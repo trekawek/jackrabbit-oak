@@ -56,7 +56,7 @@ public class RedisNode implements Node {
     }
 
     private Iterator<String> getPropertyNames() {
-        String pattern = id.getUUID() + ":p:*";
+        String pattern = id + ":p:*";
         ScanParams params = new ScanParams().match(pattern);
         return transform(
                 new ScanIterator<String>(cursor -> jedis.scan(cursor, params)),
@@ -65,7 +65,7 @@ public class RedisNode implements Node {
     }
 
     private Iterator<Map.Entry<String, RedisID>> getChildrenIterator() {
-        String key = id.getUUID() + ":c";
+        String key = id + ":c";
         return transform(
                 new ScanIterator<Map.Entry<String, String>>(cursor -> jedis.hscan(key, cursor)),
                 e -> new AbstractMap.SimpleEntry<>(e.getKey(), new RedisID(e.getValue()))
@@ -73,7 +73,7 @@ public class RedisNode implements Node {
     }
 
     private Value getProperty(String name) {
-        String key = id.getUUID() + ":p:" + name;
+        String key = id + ":p:" + name;
         List<String> list = jedis.lrange(key, 0, 2);
 
         Type type = Type.valueOf(list.get(0));

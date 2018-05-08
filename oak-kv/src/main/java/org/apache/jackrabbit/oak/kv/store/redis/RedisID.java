@@ -20,27 +20,16 @@ package org.apache.jackrabbit.oak.kv.store.redis;
 
 import org.apache.jackrabbit.oak.kv.store.ID;
 
-import java.util.Objects;
-import java.util.UUID;
-
 public class RedisID implements ID {
 
-    private final UUID uuid;
+    private final long id;
 
-    RedisID(String uuid) {
-        this.uuid = UUID.fromString(uuid);
+    RedisID(String serializedId) {
+        this.id = Long.parseUnsignedLong(serializedId, 16);
     }
 
-    RedisID(UUID uuid) {
-        this.uuid = uuid;
-    }
-
-    static RedisID newRandomID() {
-        return new RedisID(UUID.randomUUID());
-    }
-
-    UUID getUUID() {
-        return uuid;
+    RedisID(long id) {
+        this.id = id;
     }
 
     @Override
@@ -54,21 +43,17 @@ public class RedisID implements ID {
         if (getClass() != o.getClass()) {
             return false;
         }
-        return equals((RedisID) o);
-    }
-
-    private boolean equals(RedisID o) {
-        return Objects.equals(uuid, o.uuid);
+        return id == ((RedisID) o).id;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(uuid);
+        return Long.valueOf(id).hashCode();
     }
 
     @Override
     public String toString() {
-        return uuid.toString();
+        return Long.toHexString(id);
     }
 
 }

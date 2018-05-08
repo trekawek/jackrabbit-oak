@@ -72,7 +72,7 @@ public class RedisStore implements Store, Closeable {
         checkNotNull(tag);
         checkArgument(id instanceof RedisID, "id is not RedisID");
         try {
-            jedis.hset(TAG_HASH, tag, ((RedisID) id).getUUID().toString());
+            jedis.hset(TAG_HASH, tag, id.toString());
         } catch (JedisException e) {
             throw new IOException(e);
         }
@@ -89,7 +89,7 @@ public class RedisStore implements Store, Closeable {
     }
 
     @Override
-    public Node getNode(ID id) throws IOException {
+    public Node getNode(ID id) {
         checkArgument(id instanceof RedisID, "id is not RedisID");
         return new RedisNode(jedis, (RedisID) id);
     }
@@ -99,11 +99,11 @@ public class RedisStore implements Store, Closeable {
         checkNotNull(properties);
         checkNotNull(children);
         checkArgument(children.values().stream().allMatch(id -> id instanceof RedisID), "id is not RedisID");
-        RedisID id = RedisID.newRandomID();
+        RedisID id = generateNewId();
         try {
             Transaction t = jedis.multi();
             if (!children.isEmpty()) {
-                t.hmset(id.getUUID() + ":c", Maps.transformValues(children, ID::toString));
+                t.hmset(id + ":c", Maps.transformValues(children, ID::toString));
             }
             if (!properties.isEmpty()) {
                 for (Map.Entry<String, Value> e : properties.entrySet()) {
@@ -118,7 +118,7 @@ public class RedisStore implements Store, Closeable {
     }
 
     private static void setProperty(Transaction t, RedisID id, String name, Value value) {
-        String key = id.getUUID() + ":p:" + name;
+        String key = id + ":p:" + name;
         if (value.isArray()) {
             String[] list = new String[BATCH_SIZE];
             int i = 0;
@@ -204,6 +204,20 @@ public class RedisStore implements Store, Closeable {
 
     @Override
     public void close() throws IOException {
-        jedis.close();
+        try {
+            jedis.close();
+        } catch (JedisException e) {
+            throw new IOException(e);
+        }
     }
+
+    private RedisID generateNewId() throws IOException {
+        try {
+            long id = jedis.incr("seq_id");
+            return new RedisID(id);
+        } catch (JedisException e) {
+            throw new IOException(e);
+        }
+    }
+
 }

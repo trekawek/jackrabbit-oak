@@ -40,11 +40,13 @@ public class RedisNodeTest {
     @ClassRule
     public static RedisRule redisRule = new RedisRule();
 
+    private Jedis jedis;
+
     private RedisStore store;
 
     @Before
     public void setup() {
-        Jedis jedis = redisRule.getJedis();
+        jedis = redisRule.getJedis();
         jedis.flushAll();
         store = new RedisStore(jedis);
     }
@@ -71,7 +73,7 @@ public class RedisNodeTest {
         Map<String, ID> children = new HashMap<>();
 
         for (int i = 0; i < 123; i++) { // not a batch size multiplier
-            children.put("child" + i, RedisID.newRandomID());
+            children.put("child" + i, RedisID.generateNewId(jedis));
         }
 
         Node node = store.getNode(store.putNode(emptyMap(), children));
