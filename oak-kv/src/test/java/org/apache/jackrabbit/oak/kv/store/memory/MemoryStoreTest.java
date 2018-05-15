@@ -16,28 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-package org.apache.jackrabbit.oak.kv.store.leveldb;
+package org.apache.jackrabbit.oak.kv.store.memory;
 
 import org.apache.jackrabbit.oak.kv.store.AbstractStoreTest;
-import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
 
-public class LevelDBStoreTest extends AbstractStoreTest {
-
-    @Rule
-    public TemporaryFolder folder = new TemporaryFolder();
+public class MemoryStoreTest extends AbstractStoreTest {
 
     @Before
     public void setUp() throws Exception {
-        store = new LevelDBStore(folder.getRoot());
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        ((LevelDBStore) store).close();
+        store = new MemoryStore();
     }
 
 }
