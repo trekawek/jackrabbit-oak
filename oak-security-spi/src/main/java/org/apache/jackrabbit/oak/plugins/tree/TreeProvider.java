@@ -30,4 +30,7 @@ public interface TreeProvider {
 
     @Nonnull
     Tree createReadOnlyTree(@Nonnull Tree readOnlyParent, @Nonnull String childName, @Nonnull NodeState childState);
+
+    @Nonnull
+    NodeState asNodeState(@Nonnull Tree readOnlyTree);
 }
