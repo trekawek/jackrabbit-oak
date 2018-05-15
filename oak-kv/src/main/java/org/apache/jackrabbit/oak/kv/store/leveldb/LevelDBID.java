@@ -24,15 +24,15 @@ import java.util.UUID;
 
 import org.apache.jackrabbit.oak.kv.store.ID;
 
-class LevelDBID implements ID {
+public class LevelDBID implements ID {
 
     private final UUID id;
 
-    LevelDBID(UUID id) {
+    public LevelDBID(UUID id) {
         this.id = id;
     }
 
-    UUID getID() {
+    public UUID getID() {
         return id;
     }
 
@@ -59,4 +59,7 @@ class LevelDBID implements ID {
         return Objects.hash(id);
     }
 
+    public String toString() {
+        return id.toString();
+    }
 }

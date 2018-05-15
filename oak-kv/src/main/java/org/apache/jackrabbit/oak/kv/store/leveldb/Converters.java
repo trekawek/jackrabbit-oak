@@ -38,13 +38,13 @@ import org.apache.jackrabbit.oak.kv.store.Node;
 import org.apache.jackrabbit.oak.kv.store.Type;
 import org.apache.jackrabbit.oak.kv.store.Value;
 
-class Converters {
+public class Converters {
 
     private Converters() {
         // Prevent instantiation.
     }
 
-    static byte[] write(Map<String, Value> properties, Map<String, ID> children) {
+    public static byte[] write(Map<String, Value> properties, Map<String, ID> children) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try (Output output = new Output(stream)) {
             output.writeVarInt(properties.size(), true);
@@ -61,7 +61,7 @@ class Converters {
         return stream.toByteArray();
     }
 
-    static byte[] write(ID id) {
+    public static byte[] write(ID id) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try (Output output = new Output(stream)) {
             write(output, id);
@@ -190,7 +190,7 @@ class Converters {
         }
     }
 
-    static Node readNode(byte[] bytes) {
+    public static Node readNode(byte[] bytes) {
         try (Input input = new Input(bytes)) {
             int propertiesSize = input.readVarInt(true);
             Map<String, Value> properties = new HashMap<>(propertiesSize);
@@ -332,7 +332,7 @@ class Converters {
         return values;
     }
 
-    static ID readID(Input input) {
+    public static ID readID(Input input) {
         long msb = input.readLong();
         long lsb = input.readLong();
         return new LevelDBID(new UUID(msb, lsb));
