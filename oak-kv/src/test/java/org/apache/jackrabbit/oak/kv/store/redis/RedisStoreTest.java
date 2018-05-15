@@ -18,13 +18,8 @@
  */
 package org.apache.jackrabbit.oak.kv.store.redis;
 
-import org.apache.jackrabbit.oak.kv.store.AbstractStoreTest;
-import org.apache.jackrabbit.oak.kv.store.Node;
-import org.apache.jackrabbit.oak.kv.store.Value;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.ClassRule;
-import org.junit.Test;
+import static java.util.Collections.emptyMap;
+import static org.junit.Assert.assertEquals;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -33,9 +28,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static java.util.Collections.emptyMap;
-import static org.junit.Assert.assertEquals;
+import org.apache.jackrabbit.oak.kv.store.AbstractStoreTest;
+import org.apache.jackrabbit.oak.kv.store.Node;
+import org.apache.jackrabbit.oak.kv.store.Value;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.ClassRule;
+import org.junit.Ignore;
+import org.junit.Test;
 
+@Ignore
 public class RedisStoreTest extends AbstractStoreTest {
 
     @ClassRule

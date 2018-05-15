@@ -18,22 +18,21 @@
  */
 package org.apache.jackrabbit.oak.kv.store.redis.iterators;
 
-import org.apache.jackrabbit.oak.kv.store.redis.RedisRule;
-import org.junit.Before;
-import org.junit.ClassRule;
-import org.junit.Test;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.ScanParams;
-import redis.clients.jedis.ScanResult;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.function.Function;
-
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.apache.jackrabbit.oak.kv.store.redis.RedisRule;
+import org.junit.Before;
+import org.junit.ClassRule;
+import org.junit.Ignore;
+import org.junit.Test;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.ScanParams;
+
+@Ignore
 public class TestScanIterator {
 
     @ClassRule
