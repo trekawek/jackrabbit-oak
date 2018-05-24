@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.segment.azure.queue;
+package org.apache.jackrabbit.oak.segment.spi.asyncwrite;
 
-import org.apache.jackrabbit.oak.segment.azure.AzureSegmentArchiveEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,17 +33,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class SegmentWriteQueue implements Closeable {
+public class SegmentWriteQueue<T extends SegmentArchiveEntry> implements Closeable {
 
-    public static final int THREADS = Integer.getInteger("oak.segment.azure.threads", 5);
+    public static final int THREADS = Integer.getInteger("oak.segment.asyncwrite.threads", 5);
 
-    private static final int QUEUE_SIZE = Integer.getInteger("oak.segment.org.apache.jackrabbit.oak.segment.azure.queue", 20);
+    private static final int QUEUE_SIZE = Integer.getInteger("oak.segment.asyncwrite.queue", 20);
 
     private static final Logger log = LoggerFactory.getLogger(SegmentWriteQueue.class);
 
-    private final BlockingDeque<SegmentWriteAction> queue;
+    private final BlockingDeque<SegmentWriteAction<T>> queue;
 
-    private final Map<UUID, SegmentWriteAction> segmentsByUUID;
+    private final Map<UUID, SegmentWriteAction<T>> segmentsByUUID;
 
     private final ExecutorService executor;
 
@@ -57,11 +57,11 @@ public class SegmentWriteQueue implements Closeable {
 
     private volatile boolean broken;
 
-    public SegmentWriteQueue(SegmentConsumer writer) {
+    public SegmentWriteQueue(SegmentConsumer<T> writer) {
         this(writer, QUEUE_SIZE, THREADS);
     }
 
-    SegmentWriteQueue(SegmentConsumer writer, int queueSize, int threadNo) {
+    SegmentWriteQueue(SegmentConsumer<T> writer, int queueSize, int threadNo) {
         this.writer = writer;
         segmentsByUUID = new ConcurrentHashMap<>();
         flushLock = new ReentrantReadWriteLock();
@@ -153,13 +153,13 @@ public class SegmentWriteQueue implements Closeable {
         }
     }
 
-    public void addToQueue(AzureSegmentArchiveEntry indexEntry, byte[] data, int offset, int size) throws IOException {
+    public void addToQueue(T indexEntry, byte[] data, int offset, int size) throws IOException {
         waitWhileBroken();
         if (shutdown) {
             throw new IllegalStateException("Can't accept the new segment - shutdown in progress");
         }
 
-        SegmentWriteAction action = new SegmentWriteAction(indexEntry, data, offset, size);
+        SegmentWriteAction action = new SegmentWriteAction<T>(indexEntry, data, offset, size);
         flushLock.readLock().lock();
         try {
             segmentsByUUID.put(action.getUuid(), action);
@@ -194,7 +194,7 @@ public class SegmentWriteQueue implements Closeable {
         }
     }
 
-    public SegmentWriteAction read(UUID id) {
+    public SegmentWriteAction<T> read(UUID id) {
         return segmentsByUUID.get(id);
     }
 
@@ -259,17 +259,17 @@ public class SegmentWriteQueue implements Closeable {
         }
     }
 
-    public interface SegmentConsumer {
+    public interface SegmentConsumer<T extends SegmentArchiveEntry> {
 
-        void consume(AzureSegmentArchiveEntry indexEntry, byte[] data, int offset, int size) throws IOException;
+        void consume(T indexEntry, byte[] data, int offset, int size) throws IOException;
 
     }
 
     public static class SegmentConsumeException extends Exception {
 
-        private final SegmentWriteAction segment;
+        private final SegmentWriteAction<?> segment;
 
-        public SegmentConsumeException(SegmentWriteAction segment, IOException cause) {
+        public SegmentConsumeException(SegmentWriteAction<?> segment, IOException cause) {
             super(cause);
             this.segment = segment;
         }

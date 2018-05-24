@@ -14,9 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.segment.azure.queue;
+package org.apache.jackrabbit.oak.segment.spi.asyncwrite;
 
-import org.apache.jackrabbit.oak.segment.azure.AzureSegmentArchiveEntry;
+import org.apache.jackrabbit.oak.segment.file.tar.index.SimpleIndexEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 import org.junit.After;
 import org.junit.Test;
 
@@ -40,7 +41,7 @@ public class SegmentWriteQueueTest {
 
     private static final byte[] EMPTY_DATA = new byte[0];
 
-    private SegmentWriteQueue queue;
+    private SegmentWriteQueue<SegmentArchiveEntry> queue;
 
     @After
     public void shutdown() throws IOException {
@@ -53,7 +54,7 @@ public class SegmentWriteQueueTest {
     public void testQueue() throws IOException, InterruptedException {
         Set<UUID> added = Collections.synchronizedSet(new HashSet<>());
         Semaphore semaphore = new Semaphore(0);
-        queue = new SegmentWriteQueue((tarEntry, data, offset, size) -> {
+        queue = new SegmentWriteQueue<>((tarEntry, data, offset, size) -> {
             try {
                 semaphore.acquire();
             } catch (InterruptedException e) {
@@ -85,7 +86,7 @@ public class SegmentWriteQueueTest {
     public void testFlush() throws IOException, InterruptedException {
         Set<UUID> added = Collections.synchronizedSet(new HashSet<>());
         Semaphore semaphore = new Semaphore(0);
-        queue = new SegmentWriteQueue((tarEntry, data, offset, size) -> {
+        queue = new SegmentWriteQueue<>((tarEntry, data, offset, size) -> {
             try {
                 semaphore.acquire();
             } catch (InterruptedException e) {
@@ -151,7 +152,7 @@ public class SegmentWriteQueueTest {
         Semaphore semaphore = new Semaphore(0);
         AtomicBoolean doBreak = new AtomicBoolean(true);
         List<Long> writeAttempts = Collections.synchronizedList(new ArrayList<>());
-        queue = new SegmentWriteQueue((tarEntry, data, offset, size) -> {
+        queue = new SegmentWriteQueue<>((tarEntry, data, offset, size) -> {
             writeAttempts.add(System.currentTimeMillis());
             try {
                 semaphore.acquire();
@@ -220,8 +221,8 @@ public class SegmentWriteQueueTest {
         }
     }
 
-    private static AzureSegmentArchiveEntry tarEntry(long i) {
-        return new AzureSegmentArchiveEntry(0, i, 0, 0, 0, 0, false);
+    private static SegmentArchiveEntry tarEntry(long i) {
+        return new SimpleIndexEntry(0, i, 0, 0, 0, 0, false);
     }
 
     private static UUID uuid(long i) {

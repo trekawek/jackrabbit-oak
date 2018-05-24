@@ -73,6 +73,7 @@
     <module>oak-it</module>
     <module>oak-segment-tar</module>
     <module>oak-segment-azure</module>
+    <module>oak-segment-dynamodb</module>
     <module>oak-benchmarks</module>
   </modules>
 

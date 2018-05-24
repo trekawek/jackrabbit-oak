@@ -14,17 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.segment.azure.queue;
+package org.apache.jackrabbit.oak.segment.spi.asyncwrite;
 
-import org.apache.jackrabbit.oak.segment.azure.AzureSegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 
 import java.io.IOException;
 import java.util.UUID;
 
-public class SegmentWriteAction {
+public class SegmentWriteAction<T extends SegmentArchiveEntry> {
 
-    private final AzureSegmentArchiveEntry indexEntry;
+    private final T indexEntry;
 
     private final byte[] buffer;
 
@@ -32,7 +32,7 @@ public class SegmentWriteAction {
 
     private final int length;
 
-    public SegmentWriteAction(AzureSegmentArchiveEntry indexEntry, byte[] buffer, int offset, int length) {
+    public SegmentWriteAction(T indexEntry, byte[] buffer, int offset, int length) {
         this.indexEntry = indexEntry;
 
         this.buffer = new byte[length];
@@ -51,7 +51,7 @@ public class SegmentWriteAction {
         return Buffer.wrap(buffer, offset, length);
     }
 
-    void passTo(SegmentWriteQueue.SegmentConsumer consumer) throws IOException {
+    void passTo(SegmentWriteQueue.SegmentConsumer<T> consumer) throws IOException {
         consumer.consume(indexEntry, buffer, offset, length);
     }
 

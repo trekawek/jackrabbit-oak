@@ -34,8 +34,8 @@ import com.google.common.base.Stopwatch;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
-import org.apache.jackrabbit.oak.segment.azure.queue.SegmentWriteAction;
-import org.apache.jackrabbit.oak.segment.azure.queue.SegmentWriteQueue;
+import org.apache.jackrabbit.oak.segment.spi.asyncwrite.SegmentWriteAction;
+import org.apache.jackrabbit.oak.segment.spi.asyncwrite.SegmentWriteQueue;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
@@ -49,7 +49,7 @@ public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
 
     private final FileStoreMonitor monitor;
 
-    private final Optional<SegmentWriteQueue> queue;
+    private final Optional<SegmentWriteQueue<AzureSegmentArchiveEntry>> queue;
 
     private Map<UUID, AzureSegmentArchiveEntry> index = Collections.synchronizedMap(new LinkedHashMap<>());
 
@@ -63,7 +63,7 @@ public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
         this.archiveDirectory = archiveDirectory;
         this.ioMonitor = ioMonitor;
         this.monitor = monitor;
-        this.queue = SegmentWriteQueue.THREADS > 0 ? Optional.of(new SegmentWriteQueue(this::doWriteEntry)) : Optional.empty();
+        this.queue = SegmentWriteQueue.THREADS > 0 ? Optional.of(new SegmentWriteQueue<AzureSegmentArchiveEntry>(this::doWriteEntry)) : Optional.empty();
     }
 
     @Override
@@ -101,7 +101,7 @@ public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
     @Override
     public Buffer readSegment(long msb, long lsb) throws IOException {
         UUID uuid = new UUID(msb, lsb);
-        Optional<SegmentWriteAction> segment = queue.map(q -> q.read(uuid));
+        Optional<SegmentWriteAction<AzureSegmentArchiveEntry>> segment = queue.map(q -> q.read(uuid));
         if (segment.isPresent()) {
             return segment.get().toBuffer();
         }
