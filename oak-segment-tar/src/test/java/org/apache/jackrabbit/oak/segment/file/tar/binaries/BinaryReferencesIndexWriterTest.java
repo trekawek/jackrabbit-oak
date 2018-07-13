@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.junit.Test;
 
 public class BinaryReferencesIndexWriterTest {
@@ -53,7 +55,7 @@ public class BinaryReferencesIndexWriterTest {
 
         byte[] data = writer.write();
 
-        ByteBuffer buffer = loadBinaryReferencesIndex((whence, length) -> ByteBuffer.wrap(data, data.length - whence, length));
+        OakByteBuffer buffer = loadBinaryReferencesIndex((whence, length) -> WrappedOakByteBuffer.wrap(ByteBuffer.wrap(data, data.length - whence, length)));
         BinaryReferencesIndex index = parseBinaryReferencesIndex(buffer);
 
         Generation g1 = new Generation(1, 2, false);

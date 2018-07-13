@@ -18,11 +18,13 @@
  */
 package org.apache.jackrabbit.oak.segment;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.Integer.parseInt;
 import static org.apache.jackrabbit.oak.segment.CacheWeights.OBJECT_HEADER_SIZE;
 
-import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -103,12 +105,12 @@ public final class RecordId implements Comparable<RecordId> {
      * @return  this record id as byte array
      */
     @Nonnull
-    ByteBuffer getBytes() {
+    OakByteBuffer getBytes() {
         byte[] buffer = new byte[SERIALIZED_RECORD_ID_BYTES];
         BinaryUtils.writeLong(buffer, 0, segmentId.getMostSignificantBits());
         BinaryUtils.writeLong(buffer, 8, segmentId.getLeastSignificantBits());
         BinaryUtils.writeInt(buffer, 16, offset);
-        return ByteBuffer.wrap(buffer);
+        return WrappedOakByteBuffer.wrap(buffer);
     }
 
     //--------------------------------------------------------< Comparable >--

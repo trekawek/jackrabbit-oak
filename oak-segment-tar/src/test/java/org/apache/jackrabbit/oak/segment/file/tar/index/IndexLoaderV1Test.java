@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNotNull;
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.junit.Test;
 
 public class IndexLoaderV1Test {
@@ -36,7 +37,7 @@ public class IndexLoaderV1Test {
             ByteBuffer slice = buffer.duplicate();
             slice.position(slice.limit() - whence);
             slice.limit(slice.position() + length);
-            return slice.slice();
+            return WrappedOakByteBuffer.wrap(slice.slice());
         });
     }
 

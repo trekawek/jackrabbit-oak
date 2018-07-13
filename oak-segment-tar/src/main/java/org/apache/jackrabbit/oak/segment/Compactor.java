@@ -28,7 +28,6 @@ import static org.apache.jackrabbit.oak.plugins.memory.MultiBinaryPropertyState.
 import static org.apache.jackrabbit.oak.plugins.memory.PropertyStates.createProperty;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 
 import javax.annotation.CheckForNull;
@@ -41,6 +40,7 @@ import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryNodeBuilder;
 import org.apache.jackrabbit.oak.segment.file.GCNodeWriteMonitor;
 import org.apache.jackrabbit.oak.segment.file.cancel.Canceller;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
@@ -126,7 +126,7 @@ public class Compactor {
     }
 
     @CheckForNull
-    private static ByteBuffer getStableIdBytes(NodeState state) {
+    private static OakByteBuffer getStableIdBytes(NodeState state) {
         if (state instanceof SegmentNodeState) {
             return ((SegmentNodeState) state).getStableIdBytes();
         } else {

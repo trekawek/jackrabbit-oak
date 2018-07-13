@@ -29,7 +29,6 @@ import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGener
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +44,7 @@ import javax.annotation.Nonnull;
 
 import com.google.common.base.Predicate;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.BinaryReferencesIndexLoader;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.BinaryReferencesIndex;
@@ -306,7 +306,7 @@ public class TarReader implements Closeable {
      * @param lsb the least significant bits of the segment id
      * @return the byte buffer, or null if not in this file.
      */
-    ByteBuffer readEntry(long msb, long lsb) throws IOException {
+    OakByteBuffer readEntry(long msb, long lsb) throws IOException {
         return archive.readSegment(msb, lsb);
     }
 
@@ -587,7 +587,7 @@ public class TarReader implements Closeable {
      * @return The parsed graph, or {@code null} if one was not found.
      */
     Map<UUID, List<UUID>> getGraph() throws IOException {
-        ByteBuffer buffer = archive.getGraph();
+        OakByteBuffer buffer = archive.getGraph();
         if (buffer == null) {
             return null;
         } else {

@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.util.ReaderAtEnd;
 
 class IndexLoaderV1 {
@@ -36,7 +37,7 @@ class IndexLoaderV1 {
     }
 
     IndexV1 loadIndex(ReaderAtEnd reader) throws InvalidIndexException, IOException {
-        ByteBuffer meta = reader.readAtEnd(IndexV1.FOOTER_SIZE, IndexV1.FOOTER_SIZE);
+        OakByteBuffer meta = reader.readAtEnd(IndexV1.FOOTER_SIZE, IndexV1.FOOTER_SIZE);
 
         int crc32 = meta.getInt();
         int count = meta.getInt();
@@ -56,11 +57,11 @@ class IndexLoaderV1 {
             throw new InvalidIndexException("Invalid size alignment");
         }
 
-        ByteBuffer entries = reader.readAtEnd(IndexV1.FOOTER_SIZE + count * IndexEntryV1.SIZE, count * IndexEntryV1.SIZE);
+        OakByteBuffer entries = reader.readAtEnd(IndexV1.FOOTER_SIZE + count * IndexEntryV1.SIZE, count * IndexEntryV1.SIZE);
 
         CRC32 checksum = new CRC32();
         entries.mark();
-        checksum.update(entries);
+        checksum.update(entries.toByteBuffer());
         entries.reset();
         if (crc32 != (int) checksum.getValue()) {
             throw new InvalidIndexException("Invalid checksum");

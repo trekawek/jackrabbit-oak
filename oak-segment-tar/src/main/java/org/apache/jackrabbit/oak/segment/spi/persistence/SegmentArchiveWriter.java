@@ -19,7 +19,6 @@
 package org.apache.jackrabbit.oak.segment.spi.persistence;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -75,7 +74,7 @@ public interface SegmentArchiveWriter {
      * @return byte buffer containing the segment data or null if segment doesn't exist
      */
     @Nullable
-    ByteBuffer readSegment(long msb, long lsb) throws IOException;
+    OakByteBuffer readSegment(long msb, long lsb) throws IOException;
 
     /**
      * Check if the segment exists.

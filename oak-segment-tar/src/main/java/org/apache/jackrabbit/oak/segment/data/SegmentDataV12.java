@@ -19,9 +19,9 @@ package org.apache.jackrabbit.oak.segment.data;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteBuffer;
 
 import com.google.common.base.Charsets;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 
 class SegmentDataV12 implements SegmentData {
 
@@ -65,9 +65,9 @@ class SegmentDataV12 implements SegmentData {
 
     private static final int MAX_MEDIUM_LENGTH_VALUE = (1 << 14) + MAX_SMALL_LENGTH_VALUE;
 
-    final ByteBuffer buffer;
+    final OakByteBuffer buffer;
 
-    SegmentDataV12(ByteBuffer buffer) {
+    SegmentDataV12(OakByteBuffer buffer) {
         this.buffer = buffer;
     }
 
@@ -192,10 +192,10 @@ class SegmentDataV12 implements SegmentData {
     }
 
     private StringData internalReadString(int index, int length) {
-        ByteBuffer duplicate = buffer.duplicate();
+        OakByteBuffer duplicate = buffer.duplicate();
         duplicate.position(index);
         duplicate.limit(index + length);
-        String string = Charsets.UTF_8.decode(duplicate).toString();
+        String string = Charsets.UTF_8.decode(duplicate.toByteBuffer()).toString();
         return new StringData(string, length);
     }
 
@@ -231,7 +231,7 @@ class SegmentDataV12 implements SegmentData {
     }
 
     @Override
-    public ByteBuffer readBytes(int recordReferenceOffset, int size) {
+    public OakByteBuffer readBytes(int recordReferenceOffset, int size) {
         return SegmentDataUtils.readBytes(buffer, index(recordReferenceOffset), size);
     }
 

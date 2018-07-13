@@ -53,6 +53,7 @@ import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
 import org.apache.jackrabbit.oak.segment.file.tar.TarFiles;
 import org.apache.jackrabbit.oak.segment.spi.persistence.RepositoryLock;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -499,7 +500,7 @@ public class FileStore extends AbstractFileStore {
                     data = ByteBuffer.wrap(buffer, offset, length);
                 }
 
-                segment = new Segment(tracker, segmentReader, id, data);
+                segment = new Segment(tracker, segmentReader, id, WrappedOakByteBuffer.wrap(data));
                 generation = segment.getGcGeneration();
                 references = readReferences(segment);
                 binaryReferences = readBinaryReferences(segment);

@@ -19,11 +19,11 @@ package org.apache.jackrabbit.oak.segment.data;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 
 import org.apache.commons.io.HexDump;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 
 class SegmentDataUtils {
 
@@ -33,33 +33,33 @@ class SegmentDataUtils {
 
     private static final int MAX_SEGMENT_SIZE = 1 << 18;
 
-    static void hexDump(ByteBuffer buffer, OutputStream stream) throws IOException {
+    static void hexDump(OakByteBuffer buffer, OutputStream stream) throws IOException {
         byte[] data = new byte[buffer.remaining()];
         buffer.duplicate().get(data);
         HexDump.dump(data, 0, stream, 0);
     }
 
-    static void binDump(ByteBuffer buffer, OutputStream stream) throws IOException {
-        ByteBuffer data = buffer.duplicate();
+    static void binDump(OakByteBuffer buffer, OutputStream stream) throws IOException {
+        OakByteBuffer data = buffer.duplicate();
         try (WritableByteChannel channel = Channels.newChannel(stream)) {
             while (data.hasRemaining()) {
-                channel.write(data);
+                channel.write(buffer.toByteBuffer());
             }
         }
     }
 
-    static int estimateMemoryUsage(ByteBuffer buffer) {
+    static int estimateMemoryUsage(OakByteBuffer buffer) {
         return buffer.isDirect() ? 0 : buffer.remaining();
     }
 
-    static ByteBuffer readBytes(ByteBuffer buffer, int index, int size) {
-        ByteBuffer duplicate = buffer.duplicate();
+    static OakByteBuffer readBytes(OakByteBuffer buffer, int index, int size) {
+        OakByteBuffer duplicate = buffer.duplicate();
         duplicate.position(index);
         duplicate.limit(index + size);
         return duplicate.slice();
     }
 
-    static int index(ByteBuffer buffer, int recordReferenceOffset) {
+    static int index(OakByteBuffer buffer, int recordReferenceOffset) {
         return buffer.limit() - (MAX_SEGMENT_SIZE - recordReferenceOffset);
     }
 

@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.zip.CRC32;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.file.tar.binaries.BinaryReferencesIndexWriter;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
@@ -117,7 +118,7 @@ class TarWriter implements Closeable {
      * @param lsb the least significant bits of the segment id
      * @return the byte buffer, or null if not in this file
      */
-    ByteBuffer readEntry(long msb, long lsb) throws IOException {
+    OakByteBuffer readEntry(long msb, long lsb) throws IOException {
         synchronized (this) {
             checkState(!closed);
         }

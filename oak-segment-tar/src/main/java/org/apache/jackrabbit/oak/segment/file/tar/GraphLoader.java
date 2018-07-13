@@ -18,12 +18,12 @@
  */
 package org.apache.jackrabbit.oak.segment.file.tar;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.util.ReaderAtEnd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,8 +48,8 @@ public final class GraphLoader {
      * @return the graph or {@code null} if one was not found
      * @throws IOException if the tar file could not be read
      */
-    public static ByteBuffer loadGraph(ReaderAtEnd readerAtEnd) throws IOException {
-        ByteBuffer meta = readerAtEnd.readAtEnd(FOOTER_SIZE, FOOTER_SIZE);
+    public static OakByteBuffer loadGraph(ReaderAtEnd readerAtEnd) throws IOException {
+        OakByteBuffer meta = readerAtEnd.readAtEnd(FOOTER_SIZE, FOOTER_SIZE);
 
         int crc32 = meta.getInt();
         int count = meta.getInt();
@@ -71,7 +71,7 @@ public final class GraphLoader {
             return null;
         }
 
-        ByteBuffer graph = readerAtEnd.readAtEnd(bytes, bytes);
+        OakByteBuffer graph = readerAtEnd.readAtEnd(bytes, bytes);
 
         byte[] b = new byte[bytes - FOOTER_SIZE];
 
@@ -90,7 +90,7 @@ public final class GraphLoader {
         return graph;
     }
 
-    public static Map<UUID, List<UUID>> parseGraph(ByteBuffer buffer) {
+    public static Map<UUID, List<UUID>> parseGraph(OakByteBuffer buffer) {
         int nEntries = buffer.getInt(buffer.limit() - 12);
 
         Map<UUID, List<UUID>> graph = newHashMapWithExpectedSize(nEntries);

@@ -17,17 +17,17 @@
 
 package org.apache.jackrabbit.oak.segment.file.tar.index;
 
-import java.nio.ByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 
 class IndexEntryV1 implements IndexEntry {
 
     static final int SIZE = 28;
 
-    private final ByteBuffer index;
+    private final OakByteBuffer index;
 
     private final int position;
 
-    IndexEntryV1(ByteBuffer index, int position) {
+    IndexEntryV1(OakByteBuffer index, int position) {
         this.index = index;
         this.position = position;
     }

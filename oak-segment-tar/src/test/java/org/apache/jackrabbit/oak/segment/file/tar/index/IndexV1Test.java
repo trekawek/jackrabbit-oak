@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.junit.Test;
 
 public class IndexV1Test {
@@ -37,7 +38,7 @@ public class IndexV1Test {
         Set<UUID> expected = new HashSet<>();
         expected.add(new UUID(1, 2));
         expected.add(new UUID(6, 7));
-        assertEquals(expected, new IndexV1(buffer).getUUIDs());
+        assertEquals(expected, new IndexV1(WrappedOakByteBuffer.wrap(buffer)).getUUIDs());
     }
 
     @Test
@@ -48,7 +49,7 @@ public class IndexV1Test {
                 .putLong(1).putLong(3).putInt(0).putInt(0).putInt(0)
                 .putLong(3).putLong(1).putInt(0).putInt(0).putInt(0)
                 .putLong(3).putLong(3).putInt(0).putInt(0).putInt(0);
-        IndexV1 index = new IndexV1(buffer);
+        IndexV1 index = new IndexV1(WrappedOakByteBuffer.wrap(buffer));
         assertEquals(-1, index.findEntry(1, 0));
         assertEquals(0, index.findEntry(1, 1));
         assertEquals(-1, index.findEntry(1, 2));
@@ -64,7 +65,7 @@ public class IndexV1Test {
         ByteBuffer buffer = ByteBuffer.allocate(IndexEntryV1.SIZE);
         buffer.duplicate()
                 .putLong(1).putLong(2).putInt(3).putInt(4).putInt(5);
-        assertEquals(IndexEntryV1.SIZE + IndexV1.FOOTER_SIZE, new IndexV1(buffer).size());
+        assertEquals(IndexEntryV1.SIZE + IndexV1.FOOTER_SIZE, new IndexV1(WrappedOakByteBuffer.wrap(buffer)).size());
     }
 
     @Test
@@ -73,7 +74,7 @@ public class IndexV1Test {
         buffer.duplicate()
                 .putLong(1).putLong(2).putInt(3).putInt(4).putInt(5)
                 .putLong(6).putLong(7).putInt(8).putInt(9).putInt(10);
-        assertEquals(2, new IndexV1(buffer).count());
+        assertEquals(2, new IndexV1(WrappedOakByteBuffer.wrap(buffer)).count());
     }
 
     @Test
@@ -81,7 +82,7 @@ public class IndexV1Test {
         ByteBuffer buffer = ByteBuffer.allocate(IndexEntryV1.SIZE);
         buffer.duplicate()
                 .putLong(1).putLong(2).putInt(3).putInt(4).putInt(5);
-        IndexEntryV1 entry = new IndexV1(buffer).entry(0);
+        IndexEntryV1 entry = new IndexV1(WrappedOakByteBuffer.wrap(buffer)).entry(0);
         assertEquals(1, entry.getMsb());
         assertEquals(2, entry.getLsb());
         assertEquals(3, entry.getPosition());

@@ -40,6 +40,7 @@ import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.segment.SegmentStore;
 import org.apache.jackrabbit.oak.segment.SegmentTracker;
 import org.apache.jackrabbit.oak.segment.SegmentWriter;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 
 /**
@@ -116,7 +117,7 @@ public class MemoryStore implements SegmentStore {
         ByteBuffer buffer = ByteBuffer.allocate(length);
         buffer.put(data, offset, length);
         buffer.rewind();
-        Segment segment = new Segment(tracker, segmentReader, id, buffer);
+        Segment segment = new Segment(tracker, segmentReader, id, WrappedOakByteBuffer.wrap(buffer));
         if (segments.putIfAbsent(id, segment) != null) {
             throw new IOException("Segment override: " + id);
         }

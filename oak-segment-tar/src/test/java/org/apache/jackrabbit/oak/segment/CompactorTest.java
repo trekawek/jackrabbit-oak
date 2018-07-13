@@ -32,7 +32,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Random;
 
@@ -45,6 +44,7 @@ import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.GCNodeWriteMonitor;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.file.cancel.Canceller;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
@@ -209,7 +209,7 @@ public class CompactorTest {
 
         @Nonnull
         @Override
-        public RecordId writeNode(@Nonnull NodeState state, @Nullable ByteBuffer stableIdBytes)
+        public RecordId writeNode(@Nonnull NodeState state, @Nullable OakByteBuffer stableIdBytes)
         throws IOException {
             if (state.hasChildNode(failOnName)) {
                 throw new IOException("Encountered node with name " + failOnName);

@@ -40,7 +40,9 @@ import org.apache.jackrabbit.oak.segment.file.tar.index.IndexWriter;
 import org.apache.jackrabbit.oak.segment.file.tar.index.SimpleIndexEntry;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,7 +133,7 @@ public class SegmentTarWriter implements SegmentArchiveWriter {
     }
 
     @Override
-    public ByteBuffer readSegment(long msb, long lsb) throws IOException {
+    public OakByteBuffer readSegment(long msb, long lsb) throws IOException {
         IndexEntry indexEntry = index.get(new UUID(msb, lsb));
         if (indexEntry == null) {
             return null;
@@ -140,7 +142,7 @@ public class SegmentTarWriter implements SegmentArchiveWriter {
         ByteBuffer data = ByteBuffer.allocate(indexEntry.getLength());
         channel.read(data, indexEntry.getPosition());
         data.rewind();
-        return data;
+        return WrappedOakByteBuffer.wrap(data);
     }
 
     @Override

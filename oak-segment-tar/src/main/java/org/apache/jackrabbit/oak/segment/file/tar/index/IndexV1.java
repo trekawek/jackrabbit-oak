@@ -17,10 +17,11 @@
 
 package org.apache.jackrabbit.oak.segment.file.tar.index;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+
 import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.collect.Sets.newHashSetWithExpectedSize;
 
-import java.nio.ByteBuffer;
 import java.util.Set;
 import java.util.UUID;
 
@@ -28,9 +29,9 @@ class IndexV1 implements Index {
 
     static final int FOOTER_SIZE = 16;
 
-    private final ByteBuffer entries;
+    private final OakByteBuffer entries;
 
-    IndexV1(ByteBuffer entries) {
+    IndexV1(OakByteBuffer entries) {
         this.entries = entries;
     }
 

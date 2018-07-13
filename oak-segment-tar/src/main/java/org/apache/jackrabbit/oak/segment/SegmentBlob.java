@@ -200,7 +200,7 @@ public class SegmentBlob extends Record implements Blob {
 
     private static String readShortBlobId(Segment segment, int recordNumber, byte head) {
         int length = (head & 0x0f) << 8 | (segment.readByte(recordNumber, 1) & 0xff);
-        return UTF_8.decode(segment.readBytes(recordNumber, 2, length)).toString();
+        return UTF_8.decode(segment.readBytes(recordNumber, 2, length).toByteBuffer()).toString();
     }
 
     private static String readLongBlobId(Segment segment, int recordNumber) {

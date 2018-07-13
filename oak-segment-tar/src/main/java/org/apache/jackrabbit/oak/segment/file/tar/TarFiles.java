@@ -28,7 +28,6 @@ import static java.util.Collections.emptySet;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -55,6 +54,7 @@ import org.apache.jackrabbit.oak.segment.file.FileReaper;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitorAdapter;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.slf4j.Logger;
@@ -502,14 +502,14 @@ public class TarFiles implements Closeable {
         return false;
     }
 
-    public ByteBuffer readSegment(long msb, long lsb) {
+    public OakByteBuffer readSegment(long msb, long lsb) {
         try {
             Node head;
 
             lock.readLock().lock();
             try {
                 if (writer != null) {
-                    ByteBuffer b = writer.readEntry(msb, lsb);
+                    OakByteBuffer b = writer.readEntry(msb, lsb);
                     if (b != null) {
                         return b;
                     }
@@ -520,7 +520,7 @@ public class TarFiles implements Closeable {
             }
 
             for (TarReader reader : iterable(head)) {
-                ByteBuffer b = reader.readEntry(msb, lsb);
+                OakByteBuffer b = reader.readEntry(msb, lsb);
                 if (b != null) {
                     return b;
                 }

@@ -17,6 +17,8 @@
 
 package org.apache.jackrabbit.oak.segment.util;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -38,6 +40,6 @@ public interface ReaderAtEnd {
      * @throws IOException if an error occurs while reading from the underlying
      *                     data source.
      */
-    ByteBuffer readAtEnd(int whence, int amount) throws IOException;
+    OakByteBuffer readAtEnd(int whence, int amount) throws IOException;
 
 }

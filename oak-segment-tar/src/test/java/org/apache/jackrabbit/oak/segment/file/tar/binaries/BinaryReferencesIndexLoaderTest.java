@@ -29,6 +29,8 @@ import java.util.UUID;
 import java.util.zip.CRC32;
 
 import com.google.common.base.Charsets;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.junit.Test;
 
 public class BinaryReferencesIndexLoaderTest {
@@ -50,11 +52,11 @@ public class BinaryReferencesIndexLoaderTest {
     }
 
     private static BinaryReferencesIndex loadIndex(ByteBuffer buffer) throws Exception {
-        ByteBuffer data = BinaryReferencesIndexLoader.loadBinaryReferencesIndex((whence, length) -> {
+        OakByteBuffer data = BinaryReferencesIndexLoader.loadBinaryReferencesIndex((whence, length) -> {
             ByteBuffer slice = buffer.duplicate();
             slice.position(slice.limit() - whence);
             slice.limit(slice.position() + length);
-            return slice.slice();
+            return WrappedOakByteBuffer.wrap(slice.slice());
         });
         return BinaryReferencesIndexLoader.parseBinaryReferencesIndex(data);
     }

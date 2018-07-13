@@ -22,8 +22,10 @@ import com.microsoft.azure.storage.blob.CloudBlob;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 
 import java.io.File;
 import java.io.IOException;
@@ -68,7 +70,7 @@ public class AzureSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public ByteBuffer readSegment(long msb, long lsb) throws IOException {
+    public OakByteBuffer readSegment(long msb, long lsb) throws IOException {
         AzureSegmentArchiveEntry indexEntry = index.get(new UUID(msb, lsb));
         if (indexEntry == null) {
             return null;
@@ -79,7 +81,7 @@ public class AzureSegmentArchiveReader implements SegmentArchiveReader {
         readBufferFully(getBlob(getSegmentFileName(indexEntry)), buffer);
         long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
         ioMonitor.afterSegmentRead(pathAsFile(), msb, lsb, indexEntry.getLength(), elapsed);
-        return buffer;
+        return WrappedOakByteBuffer.wrap(buffer);
     }
 
     @Override
@@ -93,10 +95,10 @@ public class AzureSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public ByteBuffer getGraph() throws IOException {
+    public OakByteBuffer getGraph() throws IOException {
         ByteBuffer graph = readBlob(getName() + ".gph");
         hasGraph = graph != null;
-        return graph;
+        return WrappedOakByteBuffer.wrap(graph);
     }
 
     @Override
@@ -110,8 +112,8 @@ public class AzureSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public ByteBuffer getBinaryReferences() throws IOException {
-        return readBlob(getName() + ".brf");
+    public OakByteBuffer getBinaryReferences() throws IOException {
+        return WrappedOakByteBuffer.wrap(readBlob(getName() + ".brf"));
     }
 
     @Override

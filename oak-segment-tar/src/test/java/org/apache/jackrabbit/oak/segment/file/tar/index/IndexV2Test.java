@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.junit.Test;
 
 public class IndexV2Test {
@@ -37,7 +38,7 @@ public class IndexV2Test {
         Set<UUID> expected = new HashSet<>();
         expected.add(new UUID(1, 2));
         expected.add(new UUID(7, 8));
-        assertEquals(expected, new IndexV2(buffer).getUUIDs());
+        assertEquals(expected, new IndexV2(WrappedOakByteBuffer.wrap(buffer)).getUUIDs());
     }
 
     @Test
@@ -48,7 +49,7 @@ public class IndexV2Test {
                 .putLong(1).putLong(3).putInt(0).putInt(0).putInt(0).putInt(0).put((byte) 0)
                 .putLong(3).putLong(1).putInt(0).putInt(0).putInt(0).putInt(0).put((byte) 0)
                 .putLong(3).putLong(3).putInt(0).putInt(0).putInt(0).putInt(0).put((byte) 0);
-        IndexV2 index = new IndexV2(buffer);
+        IndexV2 index = new IndexV2(WrappedOakByteBuffer.wrap(buffer));
         assertEquals(-1, index.findEntry(1, 0));
         assertEquals(0, index.findEntry(1, 1));
         assertEquals(-1, index.findEntry(1, 2));
@@ -64,7 +65,7 @@ public class IndexV2Test {
         ByteBuffer buffer = ByteBuffer.allocate(IndexEntryV2.SIZE);
         buffer.duplicate()
                 .putLong(1).putLong(2).putInt(3).putInt(4).putInt(5).putInt(6).put((byte) 0);
-        assertEquals(IndexEntryV2.SIZE + IndexV2.FOOTER_SIZE, new IndexV2(buffer).size());
+        assertEquals(IndexEntryV2.SIZE + IndexV2.FOOTER_SIZE, new IndexV2(WrappedOakByteBuffer.wrap(buffer)).size());
     }
 
     @Test
@@ -73,7 +74,7 @@ public class IndexV2Test {
         buffer.duplicate()
                 .putLong(1).putLong(2).putInt(3).putInt(4).putInt(5).putInt(6).put((byte) 0)
                 .putLong(7).putLong(8).putInt(9).putInt(10).putInt(11).putInt(12).put((byte) 1);
-        assertEquals(2, new IndexV2(buffer).count());
+        assertEquals(2, new IndexV2(WrappedOakByteBuffer.wrap(buffer)).count());
     }
 
     @Test
@@ -81,7 +82,7 @@ public class IndexV2Test {
         ByteBuffer buffer = ByteBuffer.allocate(IndexEntryV2.SIZE);
         buffer.duplicate()
                 .putLong(1).putLong(2).putInt(3).putInt(4).putInt(5).putInt(6).put((byte) 1);
-        IndexEntryV2 entry = new IndexV2(buffer).entry(0);
+        IndexEntryV2 entry = new IndexV2(WrappedOakByteBuffer.wrap(buffer)).entry(0);
         assertEquals(1, entry.getMsb());
         assertEquals(2, entry.getLsb());
         assertEquals(3, entry.getPosition());

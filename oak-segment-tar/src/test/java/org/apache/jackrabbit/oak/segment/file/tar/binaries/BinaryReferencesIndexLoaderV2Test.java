@@ -28,6 +28,8 @@ import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
 import com.google.common.base.Charsets;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.junit.Test;
 
 public class BinaryReferencesIndexLoaderV2Test {
@@ -41,11 +43,11 @@ public class BinaryReferencesIndexLoaderV2Test {
     }
 
     private static BinaryReferencesIndex loadIndex(ByteBuffer buffer) throws Exception {
-        ByteBuffer data = loadBinaryReferencesIndex((whence, length) -> {
+        OakByteBuffer data = loadBinaryReferencesIndex((whence, length) -> {
             ByteBuffer slice = buffer.duplicate();
             slice.position(slice.limit() - whence);
             slice.limit(slice.position() + length);
-            return slice.slice();
+            return WrappedOakByteBuffer.wrap(slice.slice());
         });
         return parseBinaryReferencesIndex(data);
     }

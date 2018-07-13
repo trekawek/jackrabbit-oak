@@ -37,7 +37,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.UUID;
@@ -59,6 +58,8 @@ import org.apache.jackrabbit.oak.segment.data.RecordIdData;
 import org.apache.jackrabbit.oak.segment.data.SegmentData;
 import org.apache.jackrabbit.oak.segment.data.StringData;
 import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 
 /**
  * A list of records.
@@ -182,9 +183,9 @@ public class Segment {
         this.reader = checkNotNull(reader);
         this.info = checkNotNull(info);
         if (id.isDataSegmentId()) {
-            this.data = newSegmentData(ByteBuffer.wrap(buffer));
+            this.data = newSegmentData(WrappedOakByteBuffer.wrap(buffer));
         } else {
-            this.data = newRawSegmentData(ByteBuffer.wrap(buffer));
+            this.data = newRawSegmentData(WrappedOakByteBuffer.wrap(buffer));
         }
         this.version = SegmentVersion.fromByte(buffer[3]);
         this.recordNumbers = recordNumbers;
@@ -195,7 +196,7 @@ public class Segment {
     public Segment(@Nonnull SegmentIdProvider idProvider,
                    @Nonnull SegmentReader reader,
                    @Nonnull final SegmentId id,
-                   @Nonnull final ByteBuffer data) {
+                   @Nonnull final OakByteBuffer data) {
         this.reader = checkNotNull(reader);
         this.id = checkNotNull(id);
         if (id.isDataSegmentId()) {
@@ -205,7 +206,7 @@ public class Segment {
 
                     @Override
                     public String toString() {
-                        return String.format("Invalid segment format. Dumping segment %s\n%s", id, toHex(data.array()));
+                        return String.format("Invalid segment format. Dumping segment %s\n%s", id, toHex(data.toByteBuffer().array()));
                     }
 
             });
@@ -420,7 +421,7 @@ public class Segment {
         readBytes(recordNumber, position, length).get(buffer, offset, length);
     }
 
-    ByteBuffer readBytes(int recordNumber, int position, int length) {
+    OakByteBuffer readBytes(int recordNumber, int position, int length) {
         return data.readBytes(recordNumbers.getOffset(recordNumber) + position, length);
     }
 

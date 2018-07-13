@@ -18,8 +18,8 @@
 package org.apache.jackrabbit.oak.segment.file.tar.binaries;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.util.ReaderAtEnd;
 
 public class BinaryReferencesIndexLoader {
@@ -41,7 +41,7 @@ public class BinaryReferencesIndexLoader {
      * @throws InvalidBinaryReferencesIndexException if the index is invalid or
      *                                               malformed.
      */
-    public static ByteBuffer loadBinaryReferencesIndex(ReaderAtEnd reader) throws IOException, InvalidBinaryReferencesIndexException {
+    public static OakByteBuffer loadBinaryReferencesIndex(ReaderAtEnd reader) throws IOException, InvalidBinaryReferencesIndexException {
         switch (readMagic(reader)) {
             case BinaryReferencesIndexLoaderV1.MAGIC:
                 return BinaryReferencesIndexLoaderV1.loadBinaryReferencesIndex(reader);
@@ -52,7 +52,7 @@ public class BinaryReferencesIndexLoader {
         }
     }
 
-    public static BinaryReferencesIndex parseBinaryReferencesIndex(ByteBuffer buffer) throws InvalidBinaryReferencesIndexException {
+    public static BinaryReferencesIndex parseBinaryReferencesIndex(OakByteBuffer buffer) throws InvalidBinaryReferencesIndexException {
         switch (readMagic(buffer)) {
             case BinaryReferencesIndexLoaderV1.MAGIC:
                 return BinaryReferencesIndexLoaderV1.parseBinaryReferencesIndex(buffer);
@@ -67,7 +67,7 @@ public class BinaryReferencesIndexLoader {
         return reader.readAtEnd(Integer.BYTES, Integer.BYTES).getInt();
     }
 
-    private static int readMagic(ByteBuffer buffer) {
+    private static int readMagic(OakByteBuffer buffer) {
         buffer.position(buffer.limit() - Integer.BYTES);
         int magic = buffer.getInt();
         buffer.rewind();

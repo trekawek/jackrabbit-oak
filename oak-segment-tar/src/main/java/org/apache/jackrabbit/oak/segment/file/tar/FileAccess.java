@@ -18,6 +18,9 @@
  */
 package org.apache.jackrabbit.oak.segment.file.tar;
 
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
+
 import static com.google.common.base.Preconditions.checkState;
 import static java.nio.channels.FileChannel.MapMode.READ_ONLY;
 
@@ -36,7 +39,7 @@ abstract class FileAccess {
 
     abstract int length() throws IOException;
 
-    abstract ByteBuffer read(int position, int length) throws IOException;
+    abstract OakByteBuffer read(int position, int length) throws IOException;
 
     abstract void close() throws IOException;
 
@@ -67,11 +70,11 @@ abstract class FileAccess {
         }
 
         @Override
-        public ByteBuffer read(int position, int length) {
+        public OakByteBuffer read(int position, int length) {
             ByteBuffer entry = buffer.asReadOnlyBuffer();
             entry.position(entry.position() + position);
             entry.limit(entry.position() + length);
-            return entry.slice();
+            return WrappedOakByteBuffer.wrap(entry.slice());
         }
 
         @Override
@@ -106,12 +109,12 @@ abstract class FileAccess {
         }
 
         @Override
-        public synchronized ByteBuffer read(int position, int length)
+        public synchronized OakByteBuffer read(int position, int length)
                 throws IOException {
             ByteBuffer entry = ByteBuffer.allocate(length);
             file.seek(position);
             file.readFully(entry.array());
-            return entry;
+            return WrappedOakByteBuffer.wrap(entry);
         }
 
         @Override

@@ -24,7 +24,6 @@ import static org.apache.jackrabbit.oak.segment.data.SegmentData.newSegmentData;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -44,6 +43,7 @@ import org.apache.jackrabbit.oak.segment.SegmentId;
 import org.apache.jackrabbit.oak.segment.SegmentIdFactory;
 import org.apache.jackrabbit.oak.segment.SegmentIdProvider;
 import org.apache.jackrabbit.oak.segment.SegmentNodeState;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.SegmentNotFoundException;
 import org.apache.jackrabbit.oak.segment.SegmentReader;
@@ -55,6 +55,7 @@ import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
 import org.apache.jackrabbit.oak.segment.file.tar.TarFiles;
 import org.apache.jackrabbit.oak.segment.file.tar.TarRecovery;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -200,7 +201,7 @@ public abstract class AbstractFileStore implements SegmentStore, Closeable {
     private void writeSegment(UUID id, byte[] data, EntryRecovery w) throws IOException {
         long msb = id.getMostSignificantBits();
         long lsb = id.getLeastSignificantBits();
-        ByteBuffer buffer = ByteBuffer.wrap(data);
+        OakByteBuffer buffer = WrappedOakByteBuffer.wrap(data);
         GCGeneration generation = SegmentId.isDataSegmentId(lsb)
                 ? Segment.getGcGeneration(newSegmentData(buffer), id)
                 : GCGeneration.NULL;
@@ -264,7 +265,7 @@ public abstract class AbstractFileStore implements SegmentStore, Closeable {
     }
 
     Segment readSegmentUncached(TarFiles tarFiles, SegmentId id) {
-        ByteBuffer buffer = tarFiles.readSegment(id.getMostSignificantBits(), id.getLeastSignificantBits());
+        OakByteBuffer buffer = tarFiles.readSegment(id.getMostSignificantBits(), id.getLeastSignificantBits());
         if (buffer == null) {
             throw new SegmentNotFoundException(id);
         }

@@ -24,8 +24,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 
-import java.nio.ByteBuffer;
-
 import javax.annotation.Nonnull;
 
 import com.google.common.base.Supplier;
@@ -33,6 +31,7 @@ import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.tar.GCGeneration;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -89,7 +88,7 @@ public class NodeRecordTest {
         }
     }
 
-    private static final byte[] asByteArray(ByteBuffer bytes) {
+    private static final byte[] asByteArray(OakByteBuffer bytes) {
         byte[] buffer = new byte[RecordId.SERIALIZED_RECORD_ID_BYTES];
         bytes.get(buffer);
         return buffer;

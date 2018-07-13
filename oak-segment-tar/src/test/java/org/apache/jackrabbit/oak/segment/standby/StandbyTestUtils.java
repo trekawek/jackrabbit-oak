@@ -19,7 +19,6 @@ package org.apache.jackrabbit.oak.segment.standby;
 
 import static org.mockito.Mockito.mock;
 
-import java.nio.ByteBuffer;
 import java.util.UUID;
 
 import com.google.common.base.Charsets;
@@ -32,6 +31,8 @@ import org.apache.jackrabbit.oak.segment.SegmentId;
 import org.apache.jackrabbit.oak.segment.SegmentIdProvider;
 import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.segment.SegmentStore;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
+import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 
 public class StandbyTestUtils {
 
@@ -50,7 +51,7 @@ public class StandbyTestUtils {
         long msb = uuid.getMostSignificantBits();
         long lsb = uuid.getLeastSignificantBits();
         SegmentId id = new SegmentId(store, msb, lsb);
-        ByteBuffer data = ByteBuffer.wrap(buffer);
+        OakByteBuffer data = WrappedOakByteBuffer.wrap(buffer);
         return new Segment(idProvider, reader, id, data);
     }
 

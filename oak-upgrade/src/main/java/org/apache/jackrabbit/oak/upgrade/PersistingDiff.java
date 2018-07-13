@@ -24,6 +24,7 @@ import org.apache.jackrabbit.oak.segment.SegmentNodeState;
 import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.segment.SegmentWriter;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
+import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
@@ -33,7 +34,6 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -215,7 +215,7 @@ public class PersistingDiff implements NodeStateDiff {
     }
 
     @CheckForNull
-    private static ByteBuffer getStableIdBytes(NodeState state) {
+    private static OakByteBuffer getStableIdBytes(NodeState state) {
         if (state instanceof SegmentNodeState) {
             return ((SegmentNodeState) state).getStableIdBytes();
         } else {
