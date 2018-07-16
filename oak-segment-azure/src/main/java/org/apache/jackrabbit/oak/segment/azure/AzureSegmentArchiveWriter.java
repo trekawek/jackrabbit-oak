@@ -34,6 +34,8 @@ import com.google.common.base.Stopwatch;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import org.apache.jackrabbit.oak.segment.azure.cache.BlockCache;
+import org.apache.jackrabbit.oak.segment.azure.cache.CacheByteBuffer;
 import org.apache.jackrabbit.oak.segment.azure.queue.SegmentWriteAction;
 import org.apache.jackrabbit.oak.segment.azure.queue.SegmentWriteQueue;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
@@ -43,6 +45,8 @@ import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
 import org.apache.jackrabbit.oak.segment.spi.persistence.WrappedOakByteBuffer;
 
 public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
+
+    private final BlockCache blockCache;
 
     private final CloudBlobDirectory archiveDirectory;
 
@@ -60,7 +64,8 @@ public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
 
     private volatile boolean created = false;
 
-    public AzureSegmentArchiveWriter(CloudBlobDirectory archiveDirectory, IOMonitor ioMonitor, FileStoreMonitor monitor) {
+    public AzureSegmentArchiveWriter(BlockCache blockCache, CloudBlobDirectory archiveDirectory, IOMonitor ioMonitor, FileStoreMonitor monitor) {
+        this.blockCache = blockCache;
         this.archiveDirectory = archiveDirectory;
         this.ioMonitor = ioMonitor;
         this.monitor = monitor;
@@ -100,7 +105,7 @@ public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
     }
 
     @Override
-    public OakByteBuffer readSegment(long msb, long lsb) throws IOException {
+    public OakByteBuffer readSegment(long msb, long lsb) {
         UUID uuid = new UUID(msb, lsb);
         Optional<SegmentWriteAction> segment = queue.map(q -> q.read(uuid));
         if (segment.isPresent()) {
@@ -110,9 +115,11 @@ public class AzureSegmentArchiveWriter implements SegmentArchiveWriter {
         if (indexEntry == null) {
             return null;
         }
-        ByteBuffer buffer = ByteBuffer.allocate(indexEntry.getLength());
-        readBufferFully(getBlob(getSegmentFileName(indexEntry)), buffer);
-        return WrappedOakByteBuffer.wrap(buffer);
+        return new CacheByteBuffer(blockCache, indexEntry, () -> {
+            ByteBuffer buffer = ByteBuffer.allocate(indexEntry.getLength());
+            readBufferFully(getBlob(getSegmentFileName(indexEntry)), buffer);
+            return buffer;
+        });
     }
 
     @Override

@@ -22,6 +22,7 @@ import com.microsoft.azure.storage.blob.CloudBlob;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import com.microsoft.azure.storage.blob.CopyStatus;
+import org.apache.jackrabbit.oak.segment.azure.cache.BlockCache;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
@@ -59,10 +60,13 @@ public class AzureArchiveManager implements SegmentArchiveManager {
 
     private final FileStoreMonitor monitor;
 
+    private final BlockCache cache;
+
     public AzureArchiveManager(CloudBlobDirectory cloudBlobDirectory, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor) {
         this.cloudBlobDirectory = cloudBlobDirectory;
         this.ioMonitor = ioMonitor;
         this.monitor = fileStoreMonitor;
+        this.cache = new BlockCache(10_000, 1024);
     }
 
     @Override
@@ -91,7 +95,7 @@ public class AzureArchiveManager implements SegmentArchiveManager {
             if (!archiveDirectory.getBlockBlobReference("closed").exists()) {
                 throw new IOException("The archive " + archiveName + " hasn't been closed correctly.");
             }
-            return new AzureSegmentArchiveReader(archiveDirectory, ioMonitor);
+            return new AzureSegmentArchiveReader(cache, archiveDirectory, ioMonitor);
         } catch (StorageException | URISyntaxException e) {
             throw new IOException(e);
         }
@@ -99,7 +103,7 @@ public class AzureArchiveManager implements SegmentArchiveManager {
 
     @Override
     public SegmentArchiveWriter create(String archiveName) throws IOException {
-        return new AzureSegmentArchiveWriter(getDirectory(archiveName), ioMonitor, monitor);
+        return new AzureSegmentArchiveWriter(cache, getDirectory(archiveName), ioMonitor, monitor);
     }
 
     @Override

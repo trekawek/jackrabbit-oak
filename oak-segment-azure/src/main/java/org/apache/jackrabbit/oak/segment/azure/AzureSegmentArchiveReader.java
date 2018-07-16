@@ -21,6 +21,8 @@ import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlob;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import org.apache.jackrabbit.oak.segment.azure.cache.BlockCache;
+import org.apache.jackrabbit.oak.segment.azure.cache.CacheByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
 import org.apache.jackrabbit.oak.segment.spi.persistence.OakByteBuffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
@@ -44,6 +46,8 @@ import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.readBufferF
 
 public class AzureSegmentArchiveReader implements SegmentArchiveReader {
 
+    private final BlockCache blockCache;
+
     private final CloudBlobDirectory archiveDirectory;
 
     private final IOMonitor ioMonitor;
@@ -54,7 +58,8 @@ public class AzureSegmentArchiveReader implements SegmentArchiveReader {
 
     private Boolean hasGraph;
 
-    AzureSegmentArchiveReader(CloudBlobDirectory archiveDirectory, IOMonitor ioMonitor) throws IOException {
+    AzureSegmentArchiveReader(BlockCache blockCache, CloudBlobDirectory archiveDirectory, IOMonitor ioMonitor) throws IOException {
+        this.blockCache = blockCache;
         this.archiveDirectory = archiveDirectory;
         this.ioMonitor = ioMonitor;
         long length = 0;
@@ -70,18 +75,24 @@ public class AzureSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public OakByteBuffer readSegment(long msb, long lsb) throws IOException {
+    public OakByteBuffer readSegment(long msb, long lsb) {
         AzureSegmentArchiveEntry indexEntry = index.get(new UUID(msb, lsb));
         if (indexEntry == null) {
             return null;
         }
+        return new CacheByteBuffer(blockCache, indexEntry, () -> doReadSegment(indexEntry));
+    }
+
+    private ByteBuffer doReadSegment(AzureSegmentArchiveEntry indexEntry) throws IOException {
+        long msb = indexEntry.getMsb();
+        long lsb = indexEntry.getLsb();
         ByteBuffer buffer = ByteBuffer.allocate(indexEntry.getLength());
         ioMonitor.beforeSegmentRead(pathAsFile(), msb, lsb, indexEntry.getLength());
         Stopwatch stopwatch = Stopwatch.createStarted();
         readBufferFully(getBlob(getSegmentFileName(indexEntry)), buffer);
         long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
         ioMonitor.afterSegmentRead(pathAsFile(), msb, lsb, indexEntry.getLength(), elapsed);
-        return WrappedOakByteBuffer.wrap(buffer);
+        return buffer;
     }
 
     @Override
