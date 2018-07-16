@@ -123,7 +123,7 @@ public class WrappedOakByteBuffer implements OakByteBuffer {
 
     @Override
     public int getInt(int index) {
-        return delegate.get(index);
+        return delegate.getInt(index);
     }
 
     @Override
@@ -133,7 +133,7 @@ public class WrappedOakByteBuffer implements OakByteBuffer {
 
     @Override
     public long getLong(int index) {
-        return delegate.get(index);
+        return delegate.getLong(index);
     }
 
     @Override
