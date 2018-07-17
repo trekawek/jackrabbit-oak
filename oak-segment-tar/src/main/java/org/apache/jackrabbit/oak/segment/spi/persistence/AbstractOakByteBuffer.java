@@ -161,7 +161,7 @@ public abstract class AbstractOakByteBuffer implements OakByteBuffer {
         for (int i = 0; i < buffer.length; i++) {
             buffer[i] = get(index + i);
         }
-        return ByteBuffer.wrap(buffer).getInt();
+        return ByteBuffer.wrap(buffer).getLong();
     }
 
     @Override
@@ -186,7 +186,7 @@ public abstract class AbstractOakByteBuffer implements OakByteBuffer {
         for (int i = position; i < limit; i++) {
             buffer.put(get(i));
         }
-        buffer.position(position);
+        buffer.rewind();
         return buffer;
     }
 }
