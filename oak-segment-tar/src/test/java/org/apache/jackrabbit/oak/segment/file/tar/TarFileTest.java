@@ -74,12 +74,12 @@ public class TarFileTest {
 
         try (TarWriter writer = new TarWriter(archiveManager, "data00000a.tar")) {
             writer.writeEntry(msb, lsb, data, 0, data.length, generation(0));
-            assertEquals(ByteBuffer.wrap(data), writer.readEntry(msb, lsb));
+            assertEquals(ByteBuffer.wrap(data), writer.readEntry(msb, lsb).toByteBuffer());
         }
 
         try (TarReader reader = TarReader.open("data00000a.tar", archiveManager)) {
             assertEquals(getWriteAndReadExpectedSize(), reader.size());
-            assertEquals(ByteBuffer.wrap(data), reader.readEntry(msb, lsb));
+            assertEquals(ByteBuffer.wrap(data), reader.readEntry(msb, lsb).toByteBuffer());
         }
     }
 
