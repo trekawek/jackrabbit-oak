@@ -32,21 +32,36 @@ public class CacheByteBuffer extends AbstractOakByteBuffer {
 
     private final SegmentSupplier segmentSupplier;
 
+    private final int positionOffset;
+
     public CacheByteBuffer(BlockCache blockCache, AzureSegmentArchiveEntry indexEntry, SegmentSupplier segmentSupplier) {
         super(-1, 0, indexEntry.getLength(), indexEntry.getLength());
         this.indexEntry = indexEntry;
         this.blockCache = blockCache;
         this.segmentSupplier = segmentSupplier;
+        this.positionOffset = 0;
+    }
+
+    private CacheByteBuffer(CacheByteBuffer original) {
+        this(original, 0);
+    }
+
+    private CacheByteBuffer(CacheByteBuffer original, int positionOffset) {
+        super(original.mark - positionOffset, 0, original.limit - positionOffset, original.capacity - positionOffset);
+        this.indexEntry = original.indexEntry;
+        this.blockCache = original.blockCache;
+        this.segmentSupplier = original.segmentSupplier;
+        this.positionOffset = positionOffset;
     }
 
     @Override
     public OakByteBuffer slice() {
-        return null;
+        return new CacheByteBuffer(this, position() + positionOffset);
     }
 
     @Override
     public OakByteBuffer duplicate() {
-        return null;
+        return new CacheByteBuffer(this);
     }
 
     @Override
@@ -55,28 +70,33 @@ public class CacheByteBuffer extends AbstractOakByteBuffer {
     }
 
     @Override
-    public byte get(int index) {
-        int blockOffset = getBlockOffset(index);
-        return getBlock(blockOffset).get(index - blockOffset);
-    }
-
-    @Override
     public void get(byte[] dst, int offset, int length) {
+        int absoluteIndex = position + positionOffset;
+
         int currentOffset = offset;
         int remaining = length;
-        while (remaining >= 0 && position < capacity) {
-            int blockOffset = getBlockOffset(position);
-            int positionWithinBlock = position - blockOffset;
+        while (remaining >= 0 && absoluteIndex < capacity + positionOffset) {
+            int blockOffset = getBlockOffset(absoluteIndex);
+            int positionWithinBlock = absoluteIndex - blockOffset;
             int lengthForBlock = Integer.min(remaining, blockCache.getBlockSize() - positionWithinBlock);
 
             OakByteBuffer block = getBlock(blockOffset).duplicate();
             block.position(positionWithinBlock);
             block.get(dst, currentOffset, lengthForBlock);
 
-            position += lengthForBlock;
+            absoluteIndex += lengthForBlock;
             currentOffset += lengthForBlock;
             remaining -= lengthForBlock;
         }
+
+        position = absoluteIndex - positionOffset;
+    }
+
+    @Override
+    public byte get(int index) {
+        int absoluteIndex = positionOffset + index;
+        int blockOffset = getBlockOffset(absoluteIndex);
+        return getBlock(blockOffset).get(absoluteIndex - blockOffset);
     }
 
     private int getBlockOffset(int segmentOffset) {
@@ -92,8 +112,6 @@ public class CacheByteBuffer extends AbstractOakByteBuffer {
     }
 
     public interface SegmentSupplier {
-
         ByteBuffer getSegment() throws IOException;
-
     }
 }
