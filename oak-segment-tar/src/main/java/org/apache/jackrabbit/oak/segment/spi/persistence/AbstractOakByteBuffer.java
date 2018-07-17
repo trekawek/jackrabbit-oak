@@ -186,6 +186,7 @@ public abstract class AbstractOakByteBuffer implements OakByteBuffer {
         for (int i = position; i < limit; i++) {
             buffer.put(get(i));
         }
+        buffer.position(position);
         return buffer;
     }
 }
