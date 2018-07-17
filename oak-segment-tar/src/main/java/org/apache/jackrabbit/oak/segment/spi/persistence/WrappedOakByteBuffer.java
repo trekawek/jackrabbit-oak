@@ -143,7 +143,7 @@ public class WrappedOakByteBuffer implements OakByteBuffer {
 
     @Override
     public short getShort(int index) {
-        return delegate.getShort();
+        return delegate.getShort(index);
     }
 
     @Override
