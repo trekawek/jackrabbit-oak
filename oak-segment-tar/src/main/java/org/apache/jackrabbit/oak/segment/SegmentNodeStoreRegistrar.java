@@ -247,6 +247,7 @@ class SegmentNodeStoreRegistrar {
 
             if (cfg.hasCachePersistence()) {
                 cfg.getLogger().info("Using local cache for the custom persistence [{}]", customPersistence);
+                cfg.getCachePersistenceDirectory().mkdirs();
                 DiskCache cache = new DiskCache(cfg.getCachePersistenceDirectory());
                 customPersistence = new CachingPersistence(cache, customPersistence);
             }
