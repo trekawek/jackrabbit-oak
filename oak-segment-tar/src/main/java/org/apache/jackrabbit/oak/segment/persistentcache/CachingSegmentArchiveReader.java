@@ -16,40 +16,33 @@
  *
  */
 
-package org.apache.jackrabbit.oak.segment.azure.persistentcache;
+package org.apache.jackrabbit.oak.segment.persistentcache;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * michid document
  */
-public class CachingSegmentArchiveWriter implements SegmentArchiveWriter {
+public class CachingSegmentArchiveReader implements SegmentArchiveReader {
 
     @NotNull
     private final DiskCache diskCache;
 
     @NotNull
-    private final SegmentArchiveWriter delegate;
+    private final SegmentArchiveReader delegate;
 
-    public CachingSegmentArchiveWriter(
+    public CachingSegmentArchiveReader(
             @NotNull DiskCache diskCache,
-            @NotNull SegmentArchiveWriter delegate) {
+            @NotNull SegmentArchiveReader delegate) {
         this.diskCache = diskCache;
         this.delegate = delegate;
-    }
-
-    @Override
-    public void writeSegment(
-            long msb, long lsb, @NotNull byte[] data, int offset, int size,
-            int generation, int fullGeneration, boolean isCompacted)
-    throws IOException {
-        delegate.writeSegment(msb, lsb, data, offset, size, generation, fullGeneration, isCompacted);
-        diskCache.writeSegment(msb, lsb, data, offset, size, generation, fullGeneration, isCompacted);
     }
 
     @Override
@@ -72,23 +65,36 @@ public class CachingSegmentArchiveWriter implements SegmentArchiveWriter {
     }
 
     @Override
-    public void writeGraph(@NotNull byte[] data) throws IOException {
-        delegate.writeGraph(data);
+    public List<SegmentArchiveEntry> listSegments() {
+        return delegate.listSegments();
     }
 
     @Override
-    public void writeBinaryReferences(@NotNull byte[] data) throws IOException {
-        delegate.writeBinaryReferences(data);
+    @Nullable
+    public ByteBuffer getGraph() throws IOException {
+        return delegate.getGraph();
     }
 
     @Override
-    public long getLength() {
-        return delegate.getLength();
+    public boolean hasGraph() {
+        return delegate.hasGraph();
     }
 
     @Override
-    public int getEntryCount() {
-        return delegate.getEntryCount();
+    @NotNull
+    public ByteBuffer getBinaryReferences() throws IOException {
+        return delegate.getBinaryReferences();
+    }
+
+    @Override
+    public long length() {
+        return delegate.length();
+    }
+
+    @Override
+    @NotNull
+    public String getName() {
+        return delegate.getName();
     }
 
     @Override
@@ -97,18 +103,7 @@ public class CachingSegmentArchiveWriter implements SegmentArchiveWriter {
     }
 
     @Override
-    public boolean isCreated() {
-        return delegate.isCreated();
-    }
-
-    @Override
-    public void flush() throws IOException {
-        delegate.flush();
-    }
-
-    @Override
-    @NotNull
-    public String getName() {
-        return delegate.getName();
+    public int getEntrySize(int size) {
+        return delegate.getEntrySize(size);
     }
 }

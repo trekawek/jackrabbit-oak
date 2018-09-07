@@ -16,7 +16,7 @@
  *
  */
 
-package org.apache.jackrabbit.oak.segment.azure.persistentcache;
+package org.apache.jackrabbit.oak.segment.persistentcache;
 
 import static java.lang.Math.abs;
 import static java.util.Collections.emptySet;

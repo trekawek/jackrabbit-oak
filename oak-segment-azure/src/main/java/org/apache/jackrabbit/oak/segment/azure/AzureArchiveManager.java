@@ -16,10 +16,20 @@
  */
 package org.apache.jackrabbit.oak.segment.azure;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.getName;
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.BlobListingDetails;
+import com.microsoft.azure.storage.blob.CloudBlob;
+import com.microsoft.azure.storage.blob.CloudBlobDirectory;
+import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import com.microsoft.azure.storage.blob.CopyStatus;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
+import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -36,29 +46,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import com.microsoft.azure.storage.StorageException;
-import com.microsoft.azure.storage.blob.BlobListingDetails;
-import com.microsoft.azure.storage.blob.CloudBlob;
-import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import com.microsoft.azure.storage.blob.CloudBlockBlob;
-import com.microsoft.azure.storage.blob.CopyStatus;
-import org.apache.jackrabbit.oak.segment.azure.persistentcache.CachingSegmentArchiveReader;
-import org.apache.jackrabbit.oak.segment.azure.persistentcache.CachingSegmentArchiveWriter;
-import org.apache.jackrabbit.oak.segment.azure.persistentcache.DiskCache;
-import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
-import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.getName;
 
 public class AzureArchiveManager implements SegmentArchiveManager {
 
     private static final Logger log = LoggerFactory.getLogger(AzureSegmentArchiveReader.class);
-
-    private static final String PERSISTENT_CACHE_LOCATION =
-            System.getProperty("oak.segment.azure.cache.dir", ".");
 
     private final CloudBlobDirectory cloudBlobDirectory;
 
@@ -66,18 +59,10 @@ public class AzureArchiveManager implements SegmentArchiveManager {
 
     private final FileStoreMonitor monitor;
 
-    // michid needs closing
-    private final DiskCache diskCache;
-
-    public AzureArchiveManager(
-            CloudBlobDirectory cloudBlobDirectory,
-            IOMonitor ioMonitor,
-            FileStoreMonitor fileStoreMonitor)
-    throws IOException {
+    public AzureArchiveManager(CloudBlobDirectory cloudBlobDirectory, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor) {
         this.cloudBlobDirectory = cloudBlobDirectory;
         this.ioMonitor = ioMonitor;
         this.monitor = fileStoreMonitor;
-        this.diskCache = new DiskCache(new File(PERSISTENT_CACHE_LOCATION));
     }
 
     @Override
@@ -106,10 +91,7 @@ public class AzureArchiveManager implements SegmentArchiveManager {
             if (!archiveDirectory.getBlockBlobReference("closed").exists()) {
                 throw new IOException("The archive " + archiveName + " hasn't been closed correctly.");
             }
-            return new CachingSegmentArchiveReader(
-                    diskCache, new AzureSegmentArchiveReader(archiveDirectory, ioMonitor)
-            );
-            //return new AzureSegmentArchiveReader(archiveDirectory, ioMonitor);
+            return new AzureSegmentArchiveReader(archiveDirectory, ioMonitor);
         } catch (StorageException | URISyntaxException e) {
             throw new IOException(e);
         }
@@ -123,15 +105,7 @@ public class AzureArchiveManager implements SegmentArchiveManager {
 
     @Override
     public SegmentArchiveWriter create(String archiveName) throws IOException {
-        return new CachingSegmentArchiveWriter(
-                diskCache,
-                new AzureSegmentArchiveWriter(
-                        getDirectory(archiveName),
-                        ioMonitor,
-                        monitor
-                )
-        );
-        //return new AzureSegmentArchiveWriter(getDirectory(archiveName), ioMonitor, monitor);
+        return new AzureSegmentArchiveWriter(getDirectory(archiveName), ioMonitor, monitor);
     }
 
     @Override
