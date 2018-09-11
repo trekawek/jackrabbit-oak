@@ -18,7 +18,6 @@
 
 package org.apache.jackrabbit.oak.segment.persistentcache;
 
-import static java.lang.Math.abs;
 import static java.util.Collections.emptySet;
 import static org.apache.jackrabbit.oak.segment.file.tar.GCGeneration.newGCGeneration;
 
@@ -26,7 +25,6 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Random;
 import java.util.UUID;
 
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
@@ -49,27 +47,13 @@ public class DiskCache implements Closeable{
 
     public DiskCache(@NotNull File directory) throws IOException {
         this(TarFiles.builder()
-            .withDirectory(createCacheDir(directory))
+            .withDirectory(directory)
             .withMaxFileSize(FileStoreBuilder.DEFAULT_MAX_FILE_SIZE * 1024 * 1024)
             .withFileStoreMonitor(new FileStoreMonitorAdapter())
             .withIOMonitor(new IOMonitorAdapter())
             .withMemoryMapping(false)
             .withTarRecovery((uuid, data, entryRecovery) -> { })
             .build());
-    }
-
-    @NotNull
-    private static File createCacheDir(@NotNull File directory) throws IOException {
-        long randomLong = abs(new Random(System.currentTimeMillis()).nextLong());
-
-        if (!directory.isDirectory()) {
-            throw new IOException("Not a directory " + directory);
-        }
-        File cacheDir = new File(directory, "segment-cache-" + randomLong);
-        if (!cacheDir.mkdir()) {
-            throw new IOException("Failed to create cache directory");
-        }
-        return cacheDir;
     }
 
     public ByteBuffer readSegment(long msb, long lsb) {
