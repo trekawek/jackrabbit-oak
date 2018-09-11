@@ -51,6 +51,7 @@ public class CachingSegmentArchiveReader implements SegmentArchiveReader {
         ByteBuffer buffer = diskCache.readSegment(msb, lsb);
         if (buffer == null) {
             buffer = delegate.readSegment(msb, lsb);
+            diskCache.writeSegment(msb, lsb, buffer);
         }
         return buffer;
     }

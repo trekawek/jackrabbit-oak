@@ -49,7 +49,7 @@ public class CachingSegmentArchiveWriter implements SegmentArchiveWriter {
             int generation, int fullGeneration, boolean isCompacted)
     throws IOException {
         delegate.writeSegment(msb, lsb, data, offset, size, generation, fullGeneration, isCompacted);
-        diskCache.writeSegment(msb, lsb, data, offset, size, generation, fullGeneration, isCompacted);
+        diskCache.writeSegment(msb, lsb, data, offset, size);
     }
 
     @Override
@@ -58,6 +58,7 @@ public class CachingSegmentArchiveWriter implements SegmentArchiveWriter {
         ByteBuffer buffer = diskCache.readSegment(msb, lsb);
         if (buffer == null) {
             buffer = delegate.readSegment(msb, lsb);
+            diskCache.writeSegment(msb, lsb, buffer);
         }
         return buffer;
     }
