@@ -137,7 +137,7 @@ public class CachingPersistenceTest {
     }
 
     private static SegmentArchiveManager getManager(SegmentNodeStorePersistence persistence) throws IOException {
-        return persistence.createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
+        return persistence.createArchiveManager(true, false, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
     }
 
     private static SegmentArchiveWriter create(SegmentNodeStorePersistence persistence, String name) throws IOException {
