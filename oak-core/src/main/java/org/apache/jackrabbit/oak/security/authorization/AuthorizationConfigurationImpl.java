@@ -53,6 +53,7 @@ import org.apache.jackrabbit.oak.spi.security.authorization.accesscontrol.Access
 import org.apache.jackrabbit.oak.spi.security.authorization.permission.PermissionProvider;
 import org.apache.jackrabbit.oak.spi.security.authorization.restriction.RestrictionProvider;
 import org.apache.jackrabbit.oak.spi.security.privilege.PrivilegeConstants;
+import org.apache.jackrabbit.oak.spi.security.user.UserConfiguration;
 import org.apache.jackrabbit.oak.spi.xml.ImportBehavior;
 import org.apache.jackrabbit.oak.spi.xml.ProtectedItemImporter;
 import org.jetbrains.annotations.NotNull;
@@ -156,9 +157,10 @@ public class AuthorizationConfigurationImpl extends ConfigurationBase implements
     @NotNull
     @Override
     public List<? extends CommitHook> getCommitHooks(@NotNull String workspaceName) {
+        UserConfiguration userConfiguration = getSecurityProvider().getConfiguration(UserConfiguration.class);
         return ImmutableList.of(
                 new VersionablePathHook(workspaceName, this),
-                new PermissionHook(workspaceName, getRestrictionProvider(), mountInfoProvider, getRootProvider(), getTreeProvider()));
+                new PermissionHook(workspaceName, getRestrictionProvider(), mountInfoProvider, getRootProvider(), getTreeProvider(), userConfiguration, NamePathMapper.DEFAULT));
     }
 
     @NotNull

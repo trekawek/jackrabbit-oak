@@ -18,7 +18,10 @@ package org.apache.jackrabbit.oak.security.authorization.permission;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import org.apache.jackrabbit.api.security.user.UserManager;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.namepath.NamePathMapper;
 import org.apache.jackrabbit.oak.plugins.nodetype.TypePredicate;
 import org.apache.jackrabbit.oak.plugins.tree.RootProvider;
 import org.apache.jackrabbit.oak.plugins.tree.TreeProvider;
@@ -29,12 +32,16 @@ import org.apache.jackrabbit.oak.spi.mount.MountInfoProvider;
 import org.apache.jackrabbit.oak.spi.security.authorization.accesscontrol.AccessControlConstants;
 import org.apache.jackrabbit.oak.spi.security.authorization.permission.PermissionConstants;
 import org.apache.jackrabbit.oak.spi.security.authorization.restriction.RestrictionProvider;
+import org.apache.jackrabbit.oak.spi.security.principal.PrincipalProvider;
 import org.apache.jackrabbit.oak.spi.security.privilege.PrivilegeBitsProvider;
+import org.apache.jackrabbit.oak.spi.security.user.UserConfiguration;
 import org.apache.jackrabbit.oak.spi.state.DefaultNodeStateDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateUtils;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.jackrabbit.JcrConstants.JCR_SYSTEM;
 import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE;
@@ -64,14 +71,21 @@ import static org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState.EMPTY_NODE
  */
 public class PermissionHook implements PostValidationHook, AccessControlConstants, PermissionConstants {
 
+    private static final Logger log = LoggerFactory.getLogger(PermissionHook.class);
+
     private final RestrictionProvider restrictionProvider;
     private final String workspaceName;
     private final MountInfoProvider mountInfoProvider;
     private final RootProvider rootProvider;
     private final TreeProvider treeProvider;
+    private final UserConfiguration userConfiguration;
+    private final NamePathMapper namePathMapper;
 
     private NodeBuilder permissionStore;
     private PrivilegeBitsProvider bitsProvider;
+
+    private PrincipalProvider principalProvider;
+    private UserManager userManager;
 
     private TypePredicate isACL;
     private TypePredicate isACE;
@@ -82,12 +96,15 @@ public class PermissionHook implements PostValidationHook, AccessControlConstant
 
     public PermissionHook(@NotNull String workspaceName, @NotNull RestrictionProvider restrictionProvider,
                           @NotNull MountInfoProvider mountInfoProvider, @NotNull RootProvider rootProvider,
-                          @NotNull TreeProvider treeProvider) {
+                          @NotNull TreeProvider treeProvider, @NotNull UserConfiguration userConfiguration,
+                          @NotNull NamePathMapper namePathMapper) {
         this.workspaceName = workspaceName;
         this.restrictionProvider = restrictionProvider;
         this.mountInfoProvider = mountInfoProvider;
         this.rootProvider = rootProvider;
         this.treeProvider = treeProvider;
+        this.userConfiguration = userConfiguration;
+        this.namePathMapper = namePathMapper;
     }
 
     //---------------------------------------------------------< CommitHook >---
@@ -100,6 +117,9 @@ public class PermissionHook implements PostValidationHook, AccessControlConstant
 
         permissionStore = getPermissionStore(rootAfter);
         bitsProvider = new PrivilegeBitsProvider(rootProvider.createReadOnlyRoot(after));
+
+        principalProvider = userConfiguration.getUserPrincipalProvider(rootProvider.createReadOnlyRoot(after), namePathMapper);
+        userManager = userConfiguration.getUserManager(rootProvider.createReadOnlyRoot(after), namePathMapper);
 
         isACL = new TypePredicate(after, NT_REP_ACL);
         isACE = new TypePredicate(after, NT_REP_ACE);
@@ -137,9 +157,13 @@ public class PermissionHook implements PostValidationHook, AccessControlConstant
     }
 
     @NotNull
-    private NodeBuilder getPermissionRoot(String path) {
-        Mount m = mountInfoProvider.getMountByPath(path);
-        return permissionStore.getChildNode(MountPermissionProvider.getPermissionRootName(m, workspaceName));
+    private PermissionRootProvider getPermissionRootProvider(String path) {
+        Mount pathMount = mountInfoProvider.getMountByPath(path);
+        if (pathMount.isDefault()) {
+            return new MountPermissionRootProvider(permissionStore, workspaceName, mountInfoProvider, principalProvider, userManager);
+        } else {
+            return new ConstantPermissionRootProvider(permissionStore, workspaceName, pathMount);
+        }
     }
 
     private final class Diff extends DefaultNodeStateDiff {
@@ -215,7 +239,8 @@ public class PermissionHook implements PostValidationHook, AccessControlConstant
         }
 
         private PermissionStoreEditor createPermissionStoreEditor(@NotNull String nodeName, @NotNull NodeState nodeState) {
-            return new PermissionStoreEditor(parentPath, nodeName, nodeState, getPermissionRoot(parentPath), isACE, isGrantACE, bitsProvider, restrictionProvider, treeProvider);
+
+            return new PermissionStoreEditor(parentPath, nodeName, nodeState, getPermissionRootProvider(parentPath), isACE, isGrantACE, bitsProvider, restrictionProvider, treeProvider);
         }
     }
 }

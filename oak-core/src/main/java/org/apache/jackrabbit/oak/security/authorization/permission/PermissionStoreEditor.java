@@ -55,15 +55,15 @@ final class PermissionStoreEditor implements AccessControlConstants, PermissionC
     private final String accessControlledPath;
     private final String nodeName;
     private final Map<String, List<AcEntry>> entries = Maps.newHashMap();
-    private final NodeBuilder permissionRoot;
+    private final PermissionRootProvider permissionRootProvider;
 
     PermissionStoreEditor(@NotNull String aclPath, @NotNull String name,
-                          @NotNull NodeState node, @NotNull NodeBuilder permissionRoot,
+                          @NotNull NodeState node, @NotNull PermissionRootProvider permissionRootProvider,
                           @NotNull TypePredicate isACE, @NotNull TypePredicate isGrantACE,
                           @NotNull PrivilegeBitsProvider bitsProvider,
                           @NotNull RestrictionProvider restrictionProvider,
                           @NotNull TreeProvider treeProvider) {
-        this.permissionRoot = permissionRoot;
+        this.permissionRootProvider = permissionRootProvider;
         if (name.equals(REP_REPO_POLICY)) {
             accessControlledPath = "";
         } else {
@@ -114,6 +114,7 @@ final class PermissionStoreEditor implements AccessControlConstants, PermissionC
 
     void removePermissionEntries() {
         for (String principalName : entries.keySet()) {
+            NodeBuilder permissionRoot = permissionRootProvider.getPermissionRoot(principalName);
             if (permissionRoot.hasChildNode(principalName)) {
                 NodeBuilder principalRoot = permissionRoot.getChildNode(principalName);
                 boolean removed = false;
@@ -171,6 +172,7 @@ final class PermissionStoreEditor implements AccessControlConstants, PermissionC
     void updatePermissionEntries() {
         for (Map.Entry<String, List<AcEntry>> entry: entries.entrySet()) {
             String principalName = entry.getKey();
+            NodeBuilder permissionRoot = permissionRootProvider.getPermissionRoot(principalName);
             NodeBuilder principalRoot = permissionRoot.child(principalName);
             if (!principalRoot.hasProperty(JCR_PRIMARYTYPE)) {
                 principalRoot.setProperty(JCR_PRIMARYTYPE, NT_REP_PERMISSION_STORE, Type.NAME);
