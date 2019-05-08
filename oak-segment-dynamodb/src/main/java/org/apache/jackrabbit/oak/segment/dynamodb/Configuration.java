@@ -29,7 +29,7 @@ import static org.apache.jackrabbit.oak.segment.dynamodb.Configuration.PID;
         description = "DynamoDB backend for the Oak Segment Node Store")
 @interface Configuration {
 
-    String PID = "DynamoSegmentStoreService";
+    String PID = "org.apache.jackrabbit.oak.segment.dynamodb.DynamoSegmentStoreService";
 
     @AttributeDefinition(
             name = "DynamoDB Region",
