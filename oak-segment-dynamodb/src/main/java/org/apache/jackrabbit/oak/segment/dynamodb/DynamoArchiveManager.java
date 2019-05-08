@@ -33,6 +33,7 @@ import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,6 +98,19 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
             }
             if (!item.hasAttribute("closed") || item.getBoolean("closed")) {
                 throw new IOException("The archive " + archiveName + " hasn't been closed correctly.");
+            }
+            return new DynamoSegmentArchiveReader(item, segmentTable, ioMonitor);
+        } catch (AmazonDynamoDBException e) {
+            throw new IOException(e);
+        }
+    }
+
+    @Override
+    public @Nullable SegmentArchiveReader forceOpen(String archiveName) throws IOException {
+        try {
+            Item item = archiveTable.getItem("archiveName", archiveName);
+            if (item == null) {
+                throw new IOException("Archive not found: " + archiveName);
             }
             return new DynamoSegmentArchiveReader(item, segmentTable, ioMonitor);
         } catch (AmazonDynamoDBException e) {

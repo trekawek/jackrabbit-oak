@@ -42,7 +42,7 @@ public class DynamoArchiveManagerTest {
 
     @Test
     public void testRecovery() throws IOException {
-        SegmentArchiveManager manager = new DynamoPersistence(dynamoDB.getClient(), "").createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
+        SegmentArchiveManager manager = new DynamoPersistence(dynamoDB.getClient(), "").createArchiveManager(true, true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
         SegmentArchiveWriter writer = manager.create("data00000a.tar");
 
         List<UUID> uuids = new ArrayList<>();

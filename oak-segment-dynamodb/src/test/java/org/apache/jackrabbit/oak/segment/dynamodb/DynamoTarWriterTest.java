@@ -33,6 +33,6 @@ public class DynamoTarWriterTest extends TarWriterTest {
     @Override
     public void setUp() throws IOException {
         monitor = new TestFileStoreMonitor();
-        archiveManager = new DynamoPersistence(dynamoDB.getClient(), "").createArchiveManager(true, new IOMonitorAdapter(), monitor);
+        archiveManager = new DynamoPersistence(dynamoDB.getClient(), "").createArchiveManager(true, true, new IOMonitorAdapter(), monitor);
     }
 }

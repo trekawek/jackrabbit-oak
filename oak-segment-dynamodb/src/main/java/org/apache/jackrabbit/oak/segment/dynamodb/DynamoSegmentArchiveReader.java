@@ -23,12 +23,12 @@ import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AmazonDynamoDBException;
 import com.google.common.base.Stopwatch;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -77,13 +77,13 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public ByteBuffer readSegment(long msb, long lsb) throws IOException {
+    public Buffer readSegment(long msb, long lsb) throws IOException {
         SegmentArchiveEntry indexEntry = index.get(new UUID(msb, lsb));
         if (indexEntry == null) {
             return null;
         }
 
-        ByteBuffer buffer = null;
+        Buffer buffer = null;
         ioMonitor.beforeSegmentRead(pathAsFile(), msb, lsb, indexEntry.getLength());
         Stopwatch stopwatch = Stopwatch.createStarted();
 
@@ -97,7 +97,7 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
         try {
             Iterator<Item> it = segmentTable.query(query).iterator();
             if (it.hasNext()) {
-                buffer = ByteBuffer.wrap(it.next().getBinary("data"));
+                buffer = Buffer.wrap(it.next().getBinary("data"));
             }
         } catch (AmazonDynamoDBException e) {
             throw new IOException(e);
@@ -119,11 +119,11 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public ByteBuffer getGraph() throws IOException {
-        ByteBuffer graph = null;
+    public Buffer getGraph() throws IOException {
+        Buffer graph = null;
         try {
             if (archive.hasAttribute("graph")) {
-                graph = ByteBuffer.wrap(archive.getBinary("graph"));
+                graph = Buffer.wrap(archive.getBinary("graph"));
             }
         } catch (AmazonDynamoDBException e) {
             throw new IOException(e);
@@ -143,9 +143,9 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public ByteBuffer getBinaryReferences() throws IOException {
+    public Buffer getBinaryReferences() throws IOException {
         if (archive.hasAttribute("binaryReferences")) {
-            return ByteBuffer.wrap(archive.getBinary("binaryReferences"));
+            return Buffer.wrap(archive.getBinary("binaryReferences"));
         } else {
             return null;
         }

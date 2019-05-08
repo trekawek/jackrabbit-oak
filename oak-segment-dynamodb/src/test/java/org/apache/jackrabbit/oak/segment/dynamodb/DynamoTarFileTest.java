@@ -35,7 +35,7 @@ public class DynamoTarFileTest extends TarFileTest {
     @Before
     @Override
     public void setUp() throws IOException {
-        archiveManager = new DynamoPersistence(dynamoDB.getClient(), "").createArchiveManager(true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
+        archiveManager = new DynamoPersistence(dynamoDB.getClient(), "").createArchiveManager(true, true, new IOMonitorAdapter(), new FileStoreMonitorAdapter());
     }
 
     @Override

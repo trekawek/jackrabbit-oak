@@ -27,6 +27,7 @@ import org.apache.jackrabbit.oak.segment.spi.asyncwrite.SegmentWriteAction;
 import org.apache.jackrabbit.oak.segment.spi.asyncwrite.SegmentWriteQueue;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
 
 import java.io.File;
@@ -124,11 +125,11 @@ public class DynamoSegmentArchiveWriter implements SegmentArchiveWriter {
     }
 
     @Override
-    public ByteBuffer readSegment(long msb, long lsb) throws IOException {
+    public Buffer readSegment(long msb, long lsb) throws IOException {
         UUID uuid = new UUID(msb, lsb);
         Optional<SegmentWriteAction<DynamoArchiveEntry>> segment = queue.map(q -> q.read(uuid));
         if (segment.isPresent()) {
-            return segment.get().toByteBuffer();
+            return segment.get().toBuffer();
         }
 
         QuerySpec query = new QuerySpec()
@@ -141,7 +142,7 @@ public class DynamoSegmentArchiveWriter implements SegmentArchiveWriter {
         try {
             Iterator<Item> it = segmentTable.query(query).iterator();
             if (it.hasNext()) {
-                return ByteBuffer.wrap(it.next().getBinary("data"));
+                return Buffer.wrap(it.next().getBinary("data"));
             } else {
                 return null;
             }
@@ -187,6 +188,11 @@ public class DynamoSegmentArchiveWriter implements SegmentArchiveWriter {
     @Override
     public long getLength() {
         return totalLength;
+    }
+
+    @Override
+    public int getEntryCount() {
+        return index.size();
     }
 
     @Override

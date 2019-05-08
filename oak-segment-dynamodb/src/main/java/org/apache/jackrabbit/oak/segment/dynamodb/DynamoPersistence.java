@@ -41,7 +41,7 @@ public class DynamoPersistence implements SegmentNodeStorePersistence {
     }
 
     @Override
-    public SegmentArchiveManager createArchiveManager(boolean mmap, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor) throws IOException {
+    public SegmentArchiveManager createArchiveManager(boolean mmap, boolean offHeapAccess, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor) throws IOException {
         return new DynamoArchiveManager(new DynamoDB(amazonDynamoDB), tablePrefix + "archives", tablePrefix + "segments", ioMonitor, fileStoreMonitor);
     }
 
