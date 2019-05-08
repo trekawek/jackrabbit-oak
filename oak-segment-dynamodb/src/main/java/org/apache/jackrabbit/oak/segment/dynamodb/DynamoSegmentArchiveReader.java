@@ -19,7 +19,6 @@ package org.apache.jackrabbit.oak.segment.dynamodb;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
-import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AmazonDynamoDBException;
 import com.google.common.base.Stopwatch;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
@@ -61,13 +60,12 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
         long length = 0;
 
         QuerySpec query = new QuerySpec()
-                .withAttributesToGet("msb", "lsb", "length", "generation", "fullGeneration", "isCompacted")
-                .withKeyConditionExpression("archiveName = :a")
-                .withValueMap(new ValueMap().withString(":a", archiveName));
+                .withAttributesToGet("uuid", "length", "generation", "fullGeneration", "isCompacted")
+                .withHashKey("archiveName", archiveName);
         try {
             for (Item i : segmentTable.query(query)) {
-                SegmentArchiveEntry indexEntry = new DynamoArchiveEntry(i);
-                index.put(new UUID(indexEntry.getMsb(), indexEntry.getLsb()), indexEntry);
+                DynamoArchiveEntry indexEntry = new DynamoArchiveEntry(i);
+                index.put(indexEntry.getUUID(), indexEntry);
                 length += indexEntry.getLength();
             }
         } catch (AmazonDynamoDBException e) {
@@ -78,7 +76,7 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
 
     @Override
     public Buffer readSegment(long msb, long lsb) throws IOException {
-        SegmentArchiveEntry indexEntry = index.get(new UUID(msb, lsb));
+        DynamoArchiveEntry indexEntry = (DynamoArchiveEntry) index.get(new UUID(msb, lsb));
         if (indexEntry == null) {
             return null;
         }
@@ -89,13 +87,9 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
 
         QuerySpec query = new QuerySpec()
                 .withAttributesToGet("data")
-                .withKeyConditionExpression("archiveName = :a AND msb = :msb AND lsb = :lsb")
-                .withValueMap(new ValueMap()
-                        .withString(":a", archiveName)
-                        .withLong("msb", msb)
-                        .withList("lsb", lsb));
+                .withHashKey("uuid", indexEntry.getUUID().toString());
         try {
-            Iterator<Item> it = segmentTable.query(query).iterator();
+            Iterator<Item> it = segmentTable.getIndex("uuidIndex").query(query).iterator();
             if (it.hasNext()) {
                 buffer = Buffer.wrap(it.next().getBinary("data"));
             }
@@ -143,7 +137,7 @@ public class DynamoSegmentArchiveReader implements SegmentArchiveReader {
     }
 
     @Override
-    public Buffer getBinaryReferences() throws IOException {
+    public Buffer getBinaryReferences() {
         if (archive.hasAttribute("binaryReferences")) {
             return Buffer.wrap(archive.getBinary("binaryReferences"));
         } else {

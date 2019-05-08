@@ -17,6 +17,7 @@
 package org.apache.jackrabbit.oak.segment.dynamodb;
 
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
+import com.amazonaws.services.dynamodbv2.document.KeyAttribute;
 import com.amazonaws.services.dynamodbv2.document.spec.DeleteItemSpec;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitorAdapter;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;
@@ -55,10 +56,8 @@ public class DynamoArchiveManagerTest {
         writer.flush();
         writer.close();
 
-        UUID uuid = uuids.get(5);
         DeleteItemSpec spec = new DeleteItemSpec()
-                .withPrimaryKey("msb", uuid.getMostSignificantBits())
-                .withPrimaryKey("lsb", uuid.getLeastSignificantBits());
+                .withPrimaryKey(new KeyAttribute("archiveName", "data00000a.tar"), new KeyAttribute("position", 5));
         new DynamoDB(dynamoDB.getClient()).getTable("segments").deleteItem(spec);
 
         LinkedHashMap<UUID, byte[]> recovered = new LinkedHashMap<>();

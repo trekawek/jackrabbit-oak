@@ -34,7 +34,6 @@ import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFileWriter;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class DynamoJournalFile implements JournalFile {
 
@@ -73,8 +72,14 @@ public class DynamoJournalFile implements JournalFile {
     private void createTable() throws IOException {
         try {
             Table table = dynamoDB.createTable(tableName,
-                    Arrays.asList(new KeySchemaElement("i", KeyType.RANGE)),
-                    Arrays.asList(new AttributeDefinition("i", ScalarAttributeType.N)),
+                    Arrays.asList(
+                            new KeySchemaElement("key", KeyType.HASH),
+                            new KeySchemaElement("i", KeyType.RANGE)
+                    ),
+                    Arrays.asList(
+                            new AttributeDefinition("key", ScalarAttributeType.N),
+                            new AttributeDefinition("i", ScalarAttributeType.N)
+                    ),
                     new ProvisionedThroughput(10L, 10L));
             table.waitForActive();
         } catch (InterruptedException | AmazonDynamoDBException e) {
@@ -96,7 +101,7 @@ public class DynamoJournalFile implements JournalFile {
                     if (!exists()) {
                         return null;
                     }
-                    QuerySpec spec = new QuerySpec().withScanIndexForward(false);
+                    QuerySpec spec = new QuerySpec().withHashKey("key", 1).withScanIndexForward(false);
                     queryResult = table.query(spec).iterator();
                 }
                 return queryResult.next().getString("v");
@@ -112,19 +117,19 @@ public class DynamoJournalFile implements JournalFile {
 
     private class AzureJournalWriter implements JournalFileWriter {
 
-        private final AtomicLong id;
+        private long id;
 
         public AzureJournalWriter() throws IOException {
-            try {
-                QuerySpec spec = new QuerySpec().withScanIndexForward(false);
-                IteratorSupport<Item, QueryOutcome> queryResult = table.query(spec).iterator();
-                if (queryResult.hasNext()) {
-                    id = new AtomicLong(queryResult.next().getLong("i"));
-                } else {
-                    id = new AtomicLong();
+            if (exists()) {
+                try {
+                    QuerySpec spec = new QuerySpec().withHashKey("key", 1).withScanIndexForward(false);
+                    IteratorSupport<Item, QueryOutcome> queryResult = table.query(spec).iterator();
+                    if (queryResult.hasNext()) {
+                        id = queryResult.next().getLong("i");
+                    }
+                } catch (AmazonDynamoDBException e) {
+                    throw new IOException(e);
                 }
-            } catch (AmazonDynamoDBException e) {
-                throw new IOException(e);
             }
         }
 
@@ -144,7 +149,8 @@ public class DynamoJournalFile implements JournalFile {
             }
             try {
                 Item item = new Item();
-                item.withLong("i", id.addAndGet(1));
+                item.with("key", 1);
+                item.withLong("i", ++id);
                 item.withString("v", line);
                 table.putItem(item);
             } catch (AmazonDynamoDBException e) {

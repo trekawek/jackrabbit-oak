@@ -88,12 +88,12 @@ public class DynamoSegmentArchiveWriter implements SegmentArchiveWriter {
         created = true;
         Item segment = new Item()
                 .withString("archiveName", archiveName)
-                .withLong("msb", msb)
-                .withLong("lsb", lsb)
+                .withString("uuid", new UUID(msb, lsb).toString())
                 .withInt("generation", generation)
                 .withInt("fullGeneration", fullGeneration)
                 .withBoolean("isCompacted", isCompacted)
-                .withInt("position", entries++);
+                .withInt("position", entries++)
+                .withInt("length", size);
         DynamoArchiveEntry entry = new DynamoArchiveEntry(segment);
         if (queue.isPresent()) {
             queue.get().addToQueue(entry, data, offset, size);
@@ -134,13 +134,9 @@ public class DynamoSegmentArchiveWriter implements SegmentArchiveWriter {
 
         QuerySpec query = new QuerySpec()
                 .withAttributesToGet("data")
-                .withKeyConditionExpression("archiveName = :a AND msb = :msb AND lsb = :lsb")
-                .withValueMap(new ValueMap()
-                        .withString(":a", archiveName)
-                        .withLong("msb", msb)
-                        .withList("lsb", lsb));
+                .withHashKey("uuid", uuid.toString());
         try {
-            Iterator<Item> it = segmentTable.query(query).iterator();
+            Iterator<Item> it = segmentTable.getIndex("uuidIndex").query(query).iterator();
             if (it.hasNext()) {
                 return Buffer.wrap(it.next().getBinary("data"));
             } else {

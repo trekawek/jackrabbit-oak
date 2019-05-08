@@ -40,7 +40,7 @@ public class DynamoTarFileTest extends TarFileTest {
 
     @Override
     protected long getWriteAndReadExpectedSize() {
-        return 45;
+        return 13;
     }
 
     @Test

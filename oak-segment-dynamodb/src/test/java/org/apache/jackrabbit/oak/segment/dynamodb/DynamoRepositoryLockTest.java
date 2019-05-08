@@ -47,21 +47,27 @@ public class DynamoRepositoryLockTest {
         }
     }
 
-    @Test
+    @Test(timeout = 20_000)
     public void testWaitingLock() throws IOException, InterruptedException {
         Semaphore s = new Semaphore(0);
         new Thread(() -> {
             try {
+                log.info("Acquiring lock");
                 DynamoRepositoryLock lock = new DynamoRepositoryLock(dynamoDB.getClient(), "table");
+                log.info("Lock acquired. Releasing semaphore.");
                 s.release();
+                log.info("Semaphore released. Sleeping for 1s.");
                 Thread.sleep(1000);
+                log.info("Unlocking.");
                 lock.unlock();
             } catch (Exception e) {
                 log.error("Can't lock or unlock the repo", e);
             }
         }).start();
 
+        log.info("Acquiring semaphore.");
         s.acquire();
+        log.info("Semaphore acquired. Acquiring lock.");
         new DynamoRepositoryLock(dynamoDB.getClient(), "table");
     }
 

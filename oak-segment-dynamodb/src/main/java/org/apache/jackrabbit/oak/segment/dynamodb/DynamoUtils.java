@@ -27,8 +27,4 @@ public final class DynamoUtils {
             return false;
         }
     }
-
-    public static UUID getUUID(Item segmentItem) {
-        return new UUID(segmentItem.getLong("msb"), segmentItem.getLong("lsb"));
-    }
 }

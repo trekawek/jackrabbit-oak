@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class DynamoGCJournalFile implements GCJournalFile {
 
@@ -45,7 +44,7 @@ public class DynamoGCJournalFile implements GCJournalFile {
 
     private final String tableName;
 
-    private final AtomicLong id;
+    private long id;
 
     public DynamoGCJournalFile(DynamoDB dynamoDB, String tableName) throws IOException {
         this.dynamoDB = dynamoDB;
@@ -54,18 +53,16 @@ public class DynamoGCJournalFile implements GCJournalFile {
 
         if (DynamoUtils.tableExists(dynamoDB, tableName)) {
             try {
-                QuerySpec spec = new QuerySpec().withScanIndexForward(false);
+                QuerySpec spec = new QuerySpec()
+                        .withHashKey("key", 1)
+                        .withScanIndexForward(false);
                 IteratorSupport<Item, QueryOutcome> queryResult = table.query(spec).iterator();
                 if (queryResult.hasNext()) {
-                    id = new AtomicLong(queryResult.next().getLong("i"));
-                } else {
-                    id = new AtomicLong();
+                    id = queryResult.next().getLong("i");
                 }
             } catch (AmazonDynamoDBException e) {
                 throw new IOException(e);
             }
-        } else {
-            id = new AtomicLong();
         }
     }
 
@@ -76,8 +73,10 @@ public class DynamoGCJournalFile implements GCJournalFile {
                 createTable();
             }
             Item item = new Item();
-            item.withLong("i", id.addAndGet(1));
+            item.withLong("key", 1);
+            item.withLong("i", ++id);
             item.withString("v", line);
+            table.putItem(item);
         } catch (AmazonDynamoDBException e) {
             throw new IOException(e);
         }
@@ -90,7 +89,7 @@ public class DynamoGCJournalFile implements GCJournalFile {
                 return Collections.emptyList();
             }
             List<String> lines = new ArrayList<>();
-            for (Item item : table.query(new QuerySpec())) {
+            for (Item item : table.query(new QuerySpec().withHashKey("key", 1))) {
                 lines.add(item.getString("v"));
             }
             return lines;
@@ -102,8 +101,13 @@ public class DynamoGCJournalFile implements GCJournalFile {
     private void createTable() throws IOException {
         try {
             Table table = dynamoDB.createTable(tableName,
-                    Arrays.asList(new KeySchemaElement("i", KeyType.RANGE)),
-                    Arrays.asList(new AttributeDefinition("i", ScalarAttributeType.N)),
+                    Arrays.asList(
+                            new KeySchemaElement("key", KeyType.HASH),
+                            new KeySchemaElement("i", KeyType.RANGE)),
+                    Arrays.asList(
+                            new AttributeDefinition("key", ScalarAttributeType.N),
+                            new AttributeDefinition("i", ScalarAttributeType.N)
+                    ),
                     new ProvisionedThroughput(10L, 10L));
             table.waitForActive();
         } catch (InterruptedException | AmazonDynamoDBException e) {

@@ -24,8 +24,12 @@ import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.AmazonDynamoDBException;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
+import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
+import com.amazonaws.services.dynamodbv2.model.GlobalSecondaryIndex;
 import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
 import com.amazonaws.services.dynamodbv2.model.KeyType;
+import com.amazonaws.services.dynamodbv2.model.Projection;
+import com.amazonaws.services.dynamodbv2.model.ProjectionType;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
 import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
@@ -47,6 +51,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import static java.util.Arrays.asList;
+
 public class DynamoArchiveManager implements SegmentArchiveManager {
 
     private static final Logger log = LoggerFactory.getLogger(DynamoSegmentArchiveReader.class);
@@ -64,14 +70,14 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
     public DynamoArchiveManager(DynamoDB dynamoDB, String archiveTableName, String segmentTableName, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor) throws IOException {
         this.dynamoDB = dynamoDB;
         if (DynamoUtils.tableExists(dynamoDB, archiveTableName)) {
-            archiveTable = createArchiveTable(archiveTableName);
-        } else {
             archiveTable = dynamoDB.getTable(archiveTableName);
+        } else {
+            archiveTable = createArchiveTable(archiveTableName);
         }
         if (DynamoUtils.tableExists(dynamoDB, segmentTableName)) {
-            segmentTable = createSegmentTable(segmentTableName);
-        } else {
             segmentTable = dynamoDB.getTable(segmentTableName);
+        } else {
+            segmentTable = createSegmentTable(segmentTableName);
         }
         this.ioMonitor = ioMonitor;
         this.monitor = fileStoreMonitor;
@@ -80,7 +86,7 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
     @Override
     public List<String> listArchives() throws IOException {
         try {
-            return StreamSupport.stream(archiveTable.query(new QuerySpec()).spliterator(), false)
+            return StreamSupport.stream(archiveTable.scan().spliterator(), false)
                     .map(i -> i.getString("archiveName"))
                     .sorted()
                     .collect(Collectors.toList());
@@ -96,7 +102,7 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
             if (item == null) {
                 throw new IOException("Archive not found: " + archiveName);
             }
-            if (!item.hasAttribute("closed") || item.getBoolean("closed")) {
+            if (!item.hasAttribute("closed") || !item.getBoolean("closed")) {
                 throw new IOException("The archive " + archiveName + " hasn't been closed correctly.");
             }
             return new DynamoSegmentArchiveReader(item, segmentTable, ioMonitor);
@@ -148,13 +154,12 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
                     .withValueMap(new ValueMap().withString(":n", to)));
 
             QuerySpec query = new QuerySpec()
-                    .withAttributesToGet("msb", "lsb")
+                    .withAttributesToGet("uuid")
                     .withKeyConditionExpression("archiveName = :a")
                     .withValueMap(new ValueMap().withString(":a", from));
             for (Item i : segmentTable.query(query)) {
                 segmentTable.updateItem(new UpdateItemSpec()
-                        .withPrimaryKey("msb", i.getLong("msb"))
-                        .withPrimaryKey("lsb", i.getLong("lsb"))
+                        .withPrimaryKey("uuid", i.getString("uuid"))
                         .withUpdateExpression("set archiveName = :n")
                         .withValueMap(new ValueMap().withString(":n", to)));
             }
@@ -203,7 +208,7 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
                 .withValueMap(new ValueMap().withString(":a", archiveName));
         for (Item i : segmentTable.query(query)) {
             int position = i.getInt("position");
-            UUID uuid = DynamoUtils.getUUID(i);
+            UUID uuid = UUID.fromString(i.getString("uuid"));
             entryList.add(new RecoveredEntry(position, uuid, i.getBinary("data")));
         }
         Collections.sort(entryList);
@@ -223,8 +228,8 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
     private Table createArchiveTable(String tableName) throws IOException {
         try {
             Table table = dynamoDB.createTable(tableName,
-                    Arrays.asList(new KeySchemaElement("archiveName", KeyType.HASH)),
-                    Arrays.asList(new AttributeDefinition("archiveName", ScalarAttributeType.S)),
+                    asList(new KeySchemaElement("archiveName", KeyType.HASH)),
+                    asList(new AttributeDefinition("archiveName", ScalarAttributeType.S)),
                     new ProvisionedThroughput(10L, 10L));
             table.waitForActive();
             return table;
@@ -235,18 +240,32 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
 
     private Table createSegmentTable(String tableName) throws IOException {
         try {
-            Table table = dynamoDB.createTable(tableName,
-                    Arrays.asList(
-                            new KeySchemaElement("archiveName", KeyType.HASH),
-                            new KeySchemaElement("msb", KeyType.HASH),
-                            new KeySchemaElement("lsb", KeyType.HASH),
-                            new KeySchemaElement("position", KeyType.RANGE)),
-                    Arrays.asList(
+            CreateTableRequest createTableRequest = new CreateTableRequest()
+                    .withTableName(tableName)
+                    .withProvisionedThroughput(new ProvisionedThroughput()
+                            .withReadCapacityUnits(10L)
+                            .withWriteCapacityUnits(10L))
+                    .withAttributeDefinitions(asList(
                             new AttributeDefinition("archiveName", ScalarAttributeType.S),
-                            new AttributeDefinition("msb", ScalarAttributeType.N),
-                            new AttributeDefinition("lsb", ScalarAttributeType.N),
-                            new AttributeDefinition("position", ScalarAttributeType.N)),
-                    new ProvisionedThroughput(10L, 10L));
+                            new AttributeDefinition("position", ScalarAttributeType.N),
+                            new AttributeDefinition("uuid", ScalarAttributeType.S)))
+                    .withKeySchema(asList(
+                            new KeySchemaElement("archiveName", KeyType.HASH),
+                            new KeySchemaElement("position", KeyType.RANGE)))
+                    .withGlobalSecondaryIndexes(asList(
+                            new GlobalSecondaryIndex()
+                                    .withIndexName("uuidIndex")
+                                    .withProvisionedThroughput(new ProvisionedThroughput()
+                                            .withReadCapacityUnits(10L)
+                                            .withWriteCapacityUnits(10L))
+                                    .withProjection(
+                                            new Projection()
+                                                    .withProjectionType(ProjectionType.ALL))
+                                    .withKeySchema(Arrays.asList(
+                                            new KeySchemaElement("uuid", KeyType.HASH)
+                                    ))
+                    ));
+            Table table = dynamoDB.createTable(createTableRequest);
             table.waitForActive();
             return table;
         } catch (InterruptedException | AmazonDynamoDBException e) {
