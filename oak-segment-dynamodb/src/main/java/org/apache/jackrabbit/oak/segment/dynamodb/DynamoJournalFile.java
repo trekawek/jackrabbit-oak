@@ -80,7 +80,7 @@ public class DynamoJournalFile implements JournalFile {
                             new AttributeDefinition("key", ScalarAttributeType.N),
                             new AttributeDefinition("i", ScalarAttributeType.N)
                     ),
-                    new ProvisionedThroughput(10L, 10L));
+                    new ProvisionedThroughput(1000L, 1000L));
             table.waitForActive();
         } catch (InterruptedException | AmazonDynamoDBException e) {
             throw new IOException(e);

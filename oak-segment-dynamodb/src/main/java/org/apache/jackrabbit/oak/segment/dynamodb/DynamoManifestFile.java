@@ -86,7 +86,7 @@ public class DynamoManifestFile implements ManifestFile {
             Table table = dynamoDB.createTable(tableName,
                     Arrays.asList(new KeySchemaElement("k", KeyType.HASH)),
                     Arrays.asList(new AttributeDefinition("k", ScalarAttributeType.S)),
-                    new ProvisionedThroughput(10L, 10L));
+                    new ProvisionedThroughput(1000L, 1000L));
             table.waitForActive();
         } catch (InterruptedException | AmazonDynamoDBException e) {
             throw new IOException(e);

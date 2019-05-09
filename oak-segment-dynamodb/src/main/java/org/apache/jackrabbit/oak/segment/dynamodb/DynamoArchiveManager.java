@@ -230,7 +230,7 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
             Table table = dynamoDB.createTable(tableName,
                     asList(new KeySchemaElement("archiveName", KeyType.HASH)),
                     asList(new AttributeDefinition("archiveName", ScalarAttributeType.S)),
-                    new ProvisionedThroughput(10L, 10L));
+                    new ProvisionedThroughput(1000L, 1000L));
             table.waitForActive();
             return table;
         } catch (InterruptedException | AmazonDynamoDBException e) {
@@ -242,9 +242,7 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
         try {
             CreateTableRequest createTableRequest = new CreateTableRequest()
                     .withTableName(tableName)
-                    .withProvisionedThroughput(new ProvisionedThroughput()
-                            .withReadCapacityUnits(10L)
-                            .withWriteCapacityUnits(10L))
+                    .withProvisionedThroughput(new ProvisionedThroughput(1000L, 1000L))
                     .withAttributeDefinitions(asList(
                             new AttributeDefinition("archiveName", ScalarAttributeType.S),
                             new AttributeDefinition("position", ScalarAttributeType.N),
@@ -255,9 +253,7 @@ public class DynamoArchiveManager implements SegmentArchiveManager {
                     .withGlobalSecondaryIndexes(asList(
                             new GlobalSecondaryIndex()
                                     .withIndexName("uuidIndex")
-                                    .withProvisionedThroughput(new ProvisionedThroughput()
-                                            .withReadCapacityUnits(10L)
-                                            .withWriteCapacityUnits(10L))
+                                    .withProvisionedThroughput(new ProvisionedThroughput(1000L, 1000L))
                                     .withProjection(
                                             new Projection()
                                                     .withProjectionType(ProjectionType.ALL))
