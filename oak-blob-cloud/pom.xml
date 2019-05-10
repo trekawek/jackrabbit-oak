@@ -30,11 +30,6 @@
     <name>Oak Cloud Blob Store</name>
     <packaging>bundle</packaging>
 
-    <properties>
-        <netty.version>4.1.17.Final</netty.version>
-        <aws.version>1.11.330</aws.version>
-    </properties>
-
     <build>
         <plugins>
             <plugin>

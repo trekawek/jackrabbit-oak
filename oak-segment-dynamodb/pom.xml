@@ -126,14 +126,14 @@
         <!-- DynamoDB dependency -->
         <dependency>
             <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-osgi</artifactId>
-            <version>1.11.330</version>
+            <artifactId>aws-java-sdk-dynamodb</artifactId>
+            <version>${aws.version}</version>
         </dependency>
-        <!--dependency>
+        <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>dynamodb-lock-client</artifactId>
             <version>1.1.0</version>
-        </dependency-->
+        </dependency>
 
         <!-- Test dependencies -->
         <dependency>
