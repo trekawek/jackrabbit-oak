@@ -19,7 +19,7 @@ package org.apache.jackrabbit.oak.remote.server;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
+import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -27,6 +27,9 @@ import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplBase {
 
@@ -53,17 +56,20 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
     }
 
     @Override
-    public void merge(NodeBuilderId request, StreamObserver<NodeStateId> responseObserver) {
-        NodeBuilder builder = nodeBuilderRepository.get(request.getValue());
-        if (builder == null) {
-            responseObserver.onError(new RemoteNodeStoreException("Invalid node builder id: " + request.getValue()));
-            return;
-        }
+    public void merge(Commit request, StreamObserver<NodeStateId> responseObserver) {
         try {
-            nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
-        } catch (CommitFailedException e) {
+            NodeBuilder builder = nodeBuilderRepository.getBuilder(request.getNodeBuilderId());
+            CommitInfo commitInfo = createCommitInfo(request);
+            nodeStore.merge(builder, EmptyHook.INSTANCE, commitInfo);
+        } catch (CommitFailedException | RemoteNodeStoreException e) {
             responseObserver.onError(e);
         }
+    }
+
+    private static CommitInfo createCommitInfo(Commit commit) {
+        Map<String, Object> commitInfo = new HashMap<>();
+        commitInfo.putAll(commit.getCommitInfoMap());
+        return new CommitInfo(commit.getSessionId(), commit.getUserId(), commitInfo, commit.getIsExternal());
     }
 
 }
