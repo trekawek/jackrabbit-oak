@@ -8,6 +8,7 @@ option java_outer_classname = "NodeValueProtos";
 message NodeValue {
     repeated Property property = 1;
     repeated string childName = 2;
+    bool exists = 3;
 }
 
 enum PropertyType {

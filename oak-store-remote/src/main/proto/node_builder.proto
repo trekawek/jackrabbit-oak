@@ -5,7 +5,7 @@ package org.apache.jackrabbit.oak.remote;
 option java_package = "org.apache.jackrabbit.oak.remote.proto";
 option java_outer_classname = "NodeBuilderProtos";
 
-import "node_diff.proto";
+import "node_value.proto";
 
 message NodeBuilderId {
     int64 value = 1;
@@ -16,7 +16,9 @@ message NodeBuilderPath {
     string path = 2;
 }
 
-message NodeBuilderChanges {
-    NodeBuilderId nodeBuilderId = 1;
-    repeated NodeDiff change = 2;
+message NodeBuilderValue {
+    NodeValue nodeValue = 1;
+    bool isNew = 2;
+    bool isReplaced = 3;
+    bool isModified = 4;
 }

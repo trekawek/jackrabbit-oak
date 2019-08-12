@@ -34,18 +34,29 @@ import org.apache.jackrabbit.oak.plugins.memory.MultiStringPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.StringPropertyState;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
 import org.apache.jackrabbit.oak.remote.server.RemoteNodeStoreException;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public final class PropertyDeserializer {
+public class PropertyDeserializer {
 
-    private PropertyDeserializer() {
+    private final Function<String, Blob> blobProvider;
+
+    public PropertyDeserializer(Function<String, Blob> blobProvider) {
+        this.blobProvider = blobProvider;
     }
 
-    public static PropertyState toOakProperty(NodeStore nodeStore, NodeValueProtos.Property property) throws RemoteNodeStoreException {
+    public PropertyState unsafeToOakProperty(NodeValueProtos.Property input) {
+        try {
+            return toOakProperty(input);
+        } catch (RemoteNodeStoreException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public PropertyState toOakProperty(NodeValueProtos.Property property) throws RemoteNodeStoreException {
         String name = property.getName();
         boolean isArray = property.getIsArray();
         PropertyState state;
@@ -61,7 +72,7 @@ public final class PropertyDeserializer {
             break;
 
             case BINARY: {
-                List<Blob> blobList = createBlobValues(nodeStore, property);
+                List<Blob> blobList = createBlobValues(property);
                 if (isArray) {
                     state = MultiBinaryPropertyState.binaryPropertyFromBlob(name, blobList);
                 } else {
@@ -200,10 +211,10 @@ public final class PropertyDeserializer {
                 .collect(Collectors.toList());
     }
 
-    private static List<Blob> createBlobValues(NodeStore nodeStore, NodeValueProtos.Property property) {
+    private List<Blob> createBlobValues(NodeValueProtos.Property property) {
         return property.getValueList().stream()
                 .map(NodeValueProtos.PropertyValue::getStringValue)
-                .map(nodeStore::getBlob)
+                .map(blobProvider)
                 .collect(Collectors.toList());
     }
 

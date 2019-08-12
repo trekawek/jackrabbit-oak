@@ -45,6 +45,7 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
         try {
             nodeState = nodeStateRepository.getNodeState(request);
             NodeValue.Builder builder = NodeValue.newBuilder();
+            builder.setExists(nodeState.exists());
             builder.addAllChildName(nodeState.getChildNodeNames());
             for (PropertyState p : nodeState.getProperties()) {
                 builder.addProperty(toProtoProperty(p));
