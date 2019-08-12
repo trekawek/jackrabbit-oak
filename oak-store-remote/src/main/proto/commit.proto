@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "CommitProtos";
+
+import "node_builder.proto";
+
+message Commit {
+    NodeBuilderId nodeBuilderId = 1;
+    string sessionId = 2;
+    string userId = 3;
+    map<string, string> commitInfo = 4;
+    bool isExternal = 5;
+}
