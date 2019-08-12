@@ -16,21 +16,23 @@
  */
 package org.apache.jackrabbit.oak.remote.server;
 
+import com.google.common.collect.Iterables;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
-import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.remote.common.PropertyDeserializer;
 import org.apache.jackrabbit.oak.remote.common.PropertySerializer;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderChanges;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderPath;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderValue;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos;
+import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos.NodeBuilderChanges;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
-import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
+
+import java.util.function.Function;
 
 public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServiceImplBase {
 
@@ -38,24 +40,35 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
 
     private final NodeBuilderRepository nodeBuilderRepository;
 
-    private final NodeStore nodeStore;
+    private final PropertyDeserializer deserializer;
 
-    public NodeBuilderService(NodeStore nodeStore, NodeStateRepository nodeStateRepository, NodeBuilderRepository nodeBuilderRepository) {
-        this.nodeStore = nodeStore;
+    public NodeBuilderService(Function<String, Blob> blobProvider, NodeStateRepository nodeStateRepository, NodeBuilderRepository nodeBuilderRepository) {
         this.nodeStateRepository = nodeStateRepository;
         this.nodeBuilderRepository = nodeBuilderRepository;
+        this.deserializer = new PropertyDeserializer(blobProvider);
     }
 
     @Override
-    public void getNodeValue(NodeBuilderPath request, StreamObserver<NodeValue> responseObserver) {
+    public void getNodeValue(NodeBuilderPath request, StreamObserver<NodeBuilderValue> responseObserver) {
         NodeBuilder nodeBuilder;
         try {
             nodeBuilder = nodeBuilderRepository.getBuilder(request);
-            NodeValue.Builder builder = NodeValue.newBuilder();
-            builder.addAllChildName(nodeBuilder.getChildNodeNames());
-            for (PropertyState propertyState : nodeBuilder.getProperties()) {
-                builder.addProperty(PropertySerializer.toProtoProperty(propertyState));
-            }
+
+            NodeBuilderValue.Builder builder = NodeBuilderValue.newBuilder();
+            builder
+                    .setIsNew(nodeBuilder.isNew())
+                    .setIsModified(nodeBuilder.isModified())
+                    .setIsReplaced(nodeBuilder.isReplaced())
+                    .getNodeValueBuilder()
+                    .setExists(nodeBuilder.exists())
+                    .addAllChildName(nodeBuilder.getChildNodeNames())
+                    .addAllProperty(Iterables.transform(nodeBuilder.getProperties(), propertyState -> {
+                        try {
+                            return PropertySerializer.toProtoProperty(propertyState);
+                        } catch (RemoteNodeStoreException e) {
+                            throw new IllegalArgumentException(e);
+                        }
+                    }));
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
@@ -127,7 +140,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
                 break;
 
             case REMOVENODE:
-                nodeBuilder.getChildNode(change.getRemoveNode().getChildName()).remove();
+                nodeBuilder.remove();
                 break;
 
             case REMOVEPROPERTY:
@@ -141,7 +154,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
                 break;
 
             case SETPROPERTY:
-                nodeBuilder.setProperty(PropertyDeserializer.toOakProperty(nodeStore, change.getSetProperty().getProperty()));
+                nodeBuilder.setProperty(deserializer.toOakProperty(change.getSetProperty().getProperty()));
                 break;
         }
     }

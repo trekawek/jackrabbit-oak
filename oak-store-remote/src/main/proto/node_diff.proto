@@ -5,8 +5,14 @@ package org.apache.jackrabbit.oak.remote;
 option java_package = "org.apache.jackrabbit.oak.remote.proto";
 option java_outer_classname = "NodeDiffProtos";
 
+import "node_builder.proto";
 import "node_state.proto";
 import "node_value.proto";
+
+message NodeBuilderChanges {
+    NodeBuilderId nodeBuilderId = 1;
+    repeated NodeDiff change = 2;
+}
 
 message NodeDiff {
     string nodePath = 1;
@@ -14,8 +20,9 @@ message NodeDiff {
         SetProperty setProperty = 2;
         RemoveProperty removeProperty = 3;
         AddChildNode addNode = 4;
-        RemoveChildNode removeNode = 5;
+        RemoveNode removeNode = 5;
         SetChildNode setChildNode = 6;
+        Move move = 7;
     }
 }
 
@@ -31,11 +38,15 @@ message AddChildNode {
     string childName = 1;
 }
 
-message RemoveChildNode {
-    string childName = 1;
+message RemoveNode {
 }
 
 message SetChildNode {
     string childName = 1;
     NodeStatePath nodeStatePath = 2;
+}
+
+message Move {
+    NodeBuilderPath newParent = 1;
+    string childName = 2;
 }

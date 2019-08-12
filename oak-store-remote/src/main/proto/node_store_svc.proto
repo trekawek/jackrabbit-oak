@@ -11,6 +11,7 @@ import "checkpoint.proto";
 import "commit.proto";
 import "node_value.proto";
 import "node_builder.proto";
+import "node_diff.proto";
 import "node_state.proto";
 
 service NodeStoreService {
@@ -35,7 +36,7 @@ service NodeStateService {
 }
 
 service NodeBuilderService {
-    rpc GetNodeValue (NodeBuilderPath) returns (NodeValue);
+    rpc GetNodeValue (NodeBuilderPath) returns (NodeBuilderValue);
     rpc CreateNodeState (NodeBuilderPath) returns (NodeStateId);
     rpc CreateBaseNodeState (NodeBuilderPath) returns (NodeStateId);
     rpc Apply (NodeBuilderChanges) returns (google.protobuf.Empty);

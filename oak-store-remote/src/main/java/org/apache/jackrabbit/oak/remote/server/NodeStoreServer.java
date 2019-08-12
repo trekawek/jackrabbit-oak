@@ -49,7 +49,7 @@ public class NodeStoreServer {
         this.nodeStateRepository = new NodeStateRepository();
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore, nodeStateRepository))
-                .addService(new NodeBuilderService(nodeStore, nodeStateRepository, nodeBuilderRepository))
+                .addService(new NodeBuilderService(nodeStore::getBlob, nodeStateRepository, nodeBuilderRepository))
                 .addService(new NodeStateService(nodeStateRepository, nodeBuilderRepository))
                 .addService(new NodeStoreService(nodeStore, nodeStateRepository, nodeBuilderRepository))
                 .build();
