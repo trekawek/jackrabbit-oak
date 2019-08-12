@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "NodeStateProtos";
+
+message NodeStateId {
+    int64 value = 1;
+}
+
+message NodeStatePath {
+    NodeStateId nodeStateId = 1;
+    string path = 2;
+}

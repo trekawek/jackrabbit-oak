@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "NodeValueProtos";
+
+message NodeValue {
+    repeated Property property = 1;
+    repeated string childName = 2;
+}
+
+enum PropertyType {
+    STRING = 0;
+    BINARY = 1;
+    LONG = 2;
+    DOUBLE = 3;
+    DATE = 4;
+    BOOLEAN = 5;
+    NAME = 6;
+    PATH = 7;
+    REFERENCE = 8;
+    WEAKREFERENCE = 9;
+    URI = 10;
+    DECIMAL = 11;
+}
+
+message Property {
+    string name = 1;
+    PropertyType type = 2;
+    bool isArray = 3;
+    repeated PropertyValue value = 4;
+}
+
+message PropertyValue {
+    oneof Value {
+        string stringValue = 1;
+        int64 longValue = 2;
+        double doubleValue = 3;
+        bool boolValue = 4;
+    }
+}
