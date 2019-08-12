@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "NodeDiffProtos";
+
+import "node_state.proto";
+import "node_value.proto";
+
+message NodeDiff {
+    string nodePath = 1;
+    oneof Change {
+        SetProperty setProperty = 2;
+        RemoveProperty removeProperty = 3;
+        AddChildNode addNode = 4;
+        RemoveChildNode removeNode = 5;
+        SetChildNode setChildNode = 6;
+    }
+}
+
+message SetProperty {
+    Property property = 1;
+}
+
+message RemoveProperty {
+    string name = 1;
+}
+
+message AddChildNode {
+    string childName = 1;
+}
+
+message RemoveChildNode {
+    string childName = 1;
+}
+
+message SetChildNode {
+    string childName = 1;
+    NodeStatePath nodeStatePath = 2;
+}

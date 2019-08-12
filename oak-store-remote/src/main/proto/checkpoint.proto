@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "CheckpointProtos";
+
+message CheckpointId {
+    string id = 1;
+}
+
+message CreateCheckpointRequest {
+    int64 lifetime = 1;
+    CheckpointInfo info = 2;
+}
+
+message CheckpointInfo {
+    map<string, string> checkpointInfo = 1;
+}
+
+message CheckpointList {
+    repeated CheckpointId checkpointId = 1;
+}

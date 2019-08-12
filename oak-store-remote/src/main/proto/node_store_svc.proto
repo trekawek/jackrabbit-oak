@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "NodeStoreServices";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "checkpoint.proto";
+import "node_value.proto";
+import "node_builder.proto";
+import "node_state.proto";
+
+service NodeStoreService {
+    rpc GetRoot (google.protobuf.Empty) returns (NodeStateId);
+    rpc Merge (NodeBuilderId) returns (NodeStateId);
+}
+
+service CheckpointService {
+    rpc CreateCheckpoint (CreateCheckpointRequest) returns (CheckpointId);
+    rpc GetCheckpointInfo (CheckpointId) returns (CheckpointInfo);
+    rpc GetCheckpointList (google.protobuf.Empty) returns (CheckpointList);
+    rpc RetrieveCheckpoint (CheckpointId) returns (NodeStateId);
+    rpc ReleaseCheckpoint (CheckpointId) returns (google.protobuf.BoolValue);
+}
+
+service NodeStateService {
+    rpc GetNodeValue (NodeStatePath) returns (NodeValue);
+    rpc CreateNodeBuilder (NodeStatePath) returns (NodeBuilderId);
+    rpc Release (NodeStateId) returns (google.protobuf.Empty);
+}
+
+service NodeBuilderService {
+    rpc GetNodeValue (NodeBuilderPath) returns (NodeValue);
+    rpc CreateNodeState (NodeBuilderPath) returns (NodeStateId);
+    rpc CreateBaseNodeState (NodeBuilderPath) returns (NodeStateId);
+    rpc Apply (NodeBuilderChanges) returns (google.protobuf.Empty);
+    rpc Release (NodeBuilderId) returns (google.protobuf.Empty);
+}
