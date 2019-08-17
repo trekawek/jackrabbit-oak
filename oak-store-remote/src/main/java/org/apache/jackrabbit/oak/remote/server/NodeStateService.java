@@ -16,15 +16,21 @@
  */
 package org.apache.jackrabbit.oak.remote.server;
 
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.remote.common.PropertySerializer;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
+import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos;
+import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.CompareNodeStateOp;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStatePath;
+import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStatePathPair;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 
 import static org.apache.jackrabbit.oak.remote.common.PropertySerializer.toProtoProperty;
 
@@ -46,6 +52,7 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
             nodeState = nodeStateRepository.getNodeState(request);
             NodeValue.Builder builder = NodeValue.newBuilder();
             builder.setExists(nodeState.exists());
+            builder.setHashCode(nodeState.hashCode());
             builder.addAllChildName(nodeState.getChildNodeNames());
             for (PropertyState p : nodeState.getProperties()) {
                 builder.addProperty(toProtoProperty(p));
@@ -77,5 +84,86 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
         nodeStateRepository.release(request.getValue());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
+    }
+
+    @Override
+    public void equals(NodeStatePathPair request, StreamObserver<BoolValue> responseObserver) {
+        try {
+            NodeState nodeState1 = nodeStateRepository.getNodeState(request.getNodeStatePath1());
+            NodeState nodeState2 = nodeStateRepository.getNodeState(request.getNodeStatePath2());
+            responseObserver.onNext(BoolValue.newBuilder().setValue(nodeState1.equals(nodeState2)).build());
+            responseObserver.onCompleted();
+        } catch (RemoteNodeStoreException e) {
+            responseObserver.onError(e);
+            return;
+        }
+    }
+
+    @Override
+    public void compare(CompareNodeStateOp request, StreamObserver<NodeStateDiffProtos.NodeStateDiff> responseObserver) {
+        try {
+            NodeState baseNodeState = nodeStateRepository.getNodeState(request.getBaseNodeState());
+            NodeState nodeState = nodeStateRepository.getNodeState(request.getNodeState());
+            NodeStateDiffProtos.NodeStateDiff.Builder diffBuilder = NodeStateDiffProtos.NodeStateDiff.newBuilder();
+            nodeState.compareAgainstBaseState(baseNodeState, new NodeStateDiff() {
+                @Override
+                public boolean propertyAdded(PropertyState after) {
+                    diffBuilder.addEventsBuilder()
+                            .getPropertyAddedBuilder()
+                            .setAfter(PropertySerializer.toProtoProperty(after));
+                    return true;
+                }
+
+                @Override
+                public boolean propertyChanged(PropertyState before, PropertyState after) {
+                    diffBuilder.addEventsBuilder()
+                            .getPropertyChangedBuilder()
+                            .setBefore(PropertySerializer.toProtoProperty(before))
+                            .setAfter(PropertySerializer.toProtoProperty(after));
+                    return true;
+                }
+
+                @Override
+                public boolean propertyDeleted(PropertyState before) {
+                    diffBuilder.addEventsBuilder()
+                            .getPropertyDeletedBuilder()
+                            .setBefore(PropertySerializer.toProtoProperty(before));
+                    return true;
+                }
+
+                @Override
+                public boolean childNodeAdded(String name, NodeState after) {
+                    diffBuilder.addEventsBuilder()
+                            .getNodeAddedBuilder()
+                            .setName(name)
+                            .getAfterBuilder().setValue(nodeStateRepository.addNewNodeState(after));
+                    return true;
+                }
+
+                @Override
+                public boolean childNodeChanged(String name, NodeState before, NodeState after) {
+                    NodeStateDiffProtos.NodeChanged.Builder builder = diffBuilder.addEventsBuilder()
+                            .getNodeChangedBuilder()
+                            .setName(name);
+                    builder.getBeforeBuilder().setValue(nodeStateRepository.addNewNodeState(before));
+                    builder.getAfterBuilder().setValue(nodeStateRepository.addNewNodeState(after));
+                    return true;
+                }
+
+                @Override
+                public boolean childNodeDeleted(String name, NodeState before) {
+                    diffBuilder.addEventsBuilder()
+                            .getNodeDeletedBuilder()
+                            .setName(name)
+                            .getBeforeBuilder().setValue(nodeStateRepository.addNewNodeState(before));
+                    return true;
+                }
+            });
+            responseObserver.onNext(diffBuilder.build());
+            responseObserver.onCompleted();
+        } catch (RemoteNodeStoreException e) {
+            responseObserver.onError(e);
+        }
+
     }
 }

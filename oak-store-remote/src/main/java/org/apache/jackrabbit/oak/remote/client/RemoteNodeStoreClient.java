@@ -22,6 +22,7 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc.CheckpointServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc.NodeBuilderServiceBlockingStub;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc.NodeBuilderServiceStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc.NodeStateServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
@@ -41,6 +42,8 @@ public class RemoteNodeStoreClient {
 
     private final NodeStoreServiceBlockingStub nodeStoreService;
 
+    private final NodeStoreServiceGrpc.NodeStoreServiceStub nodeStoreAsyncService;
+
     public RemoteNodeStoreClient(String host, int port) {
         this(ManagedChannelBuilder.forAddress(host, port).usePlaintext());
     }
@@ -51,6 +54,7 @@ public class RemoteNodeStoreClient {
         nodeBuilderService = NodeBuilderServiceGrpc.newBlockingStub(channel);
         nodeStateService = NodeStateServiceGrpc.newBlockingStub(channel);
         nodeStoreService = NodeStoreServiceGrpc.newBlockingStub(channel);
+        nodeStoreAsyncService = NodeStoreServiceGrpc.newStub(channel);
     }
 
     public CheckpointServiceBlockingStub getCheckpointService() {
@@ -67,6 +71,10 @@ public class RemoteNodeStoreClient {
 
     public NodeStoreServiceBlockingStub getNodeStoreService() {
         return nodeStoreService;
+    }
+
+    public NodeStoreServiceGrpc.NodeStoreServiceStub getNodeStoreAsyncService() {
+        return nodeStoreAsyncService;
     }
 
     public void shutdown() throws InterruptedException {

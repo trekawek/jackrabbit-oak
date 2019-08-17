@@ -29,7 +29,7 @@ public final class PropertySerializer {
     private PropertySerializer() {
     }
 
-    public static NodeValueProtos.Property toProtoProperty(PropertyState propertyState) throws RemoteNodeStoreException {
+    public static NodeValueProtos.Property toProtoProperty(PropertyState propertyState) {
         NodeValueProtos.Property.Builder propertyBuilder = NodeValueProtos.Property.newBuilder();
         propertyBuilder.setName(propertyState.getName());
         propertyBuilder.setIsArray(propertyState.isArray());
@@ -51,7 +51,7 @@ public final class PropertySerializer {
         return NodeValueProtos.PropertyType.valueOf(type.toString());
     }
 
-    private static NodeValueProtos.PropertyValue toProtoPropertyValue(Type<?> type, Object value) throws RemoteNodeStoreException {
+    private static NodeValueProtos.PropertyValue toProtoPropertyValue(Type<?> type, Object value) {
         NodeValueProtos.PropertyValue.Builder builder = NodeValueProtos.PropertyValue.newBuilder();
         if (value instanceof Blob) {
             builder.setStringValue(((Blob) value).getContentIdentity());
@@ -66,7 +66,7 @@ public final class PropertySerializer {
         } else if (value instanceof BigDecimal) {
             builder.setStringValue(value.toString());
         } else {
-            throw new RemoteNodeStoreException("The value " + value + " has invalid type " + type.toString());
+            throw new IllegalArgumentException("The value " + value + " has invalid type " + type.toString());
         }
         return builder.build();
     }

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "ChangeEventProtos";
+
+import "commit.proto";
+import "node_state.proto";
+
+message ChangeEvent {
+    NodeStateId nodeStateId = 1;
+    CommitInfo commitInfo = 2;
+}

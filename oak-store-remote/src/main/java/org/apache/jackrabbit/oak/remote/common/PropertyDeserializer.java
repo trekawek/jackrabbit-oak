@@ -48,15 +48,7 @@ public class PropertyDeserializer {
         this.blobProvider = blobProvider;
     }
 
-    public PropertyState unsafeToOakProperty(NodeValueProtos.Property input) {
-        try {
-            return toOakProperty(input);
-        } catch (RemoteNodeStoreException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    public PropertyState toOakProperty(NodeValueProtos.Property property) throws RemoteNodeStoreException {
+    public PropertyState toOakProperty(NodeValueProtos.Property property) {
         String name = property.getName();
         boolean isArray = property.getIsArray();
         PropertyState state;
@@ -182,7 +174,7 @@ public class PropertyDeserializer {
             break;
 
             default:
-                throw new RemoteNodeStoreException("Invalid type " + property.getType().name());
+                throw new IllegalArgumentException("Invalid type " + property.getType().name());
         }
         return state;
     }

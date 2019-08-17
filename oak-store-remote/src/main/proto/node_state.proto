@@ -13,3 +13,13 @@ message NodeStatePath {
     NodeStateId nodeStateId = 1;
     string path = 2;
 }
+
+message NodeStatePathPair {
+    NodeStatePath nodeStatePath1 = 1;
+    NodeStatePath nodeStatePath2 = 2;
+}
+
+message CompareNodeStateOp {
+    NodeStatePath baseNodeState = 1;
+    NodeStatePath nodeState = 2;
+}

@@ -7,18 +7,21 @@ option java_outer_classname = "NodeStoreServices";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
+import "change_event.proto";
 import "checkpoint.proto";
 import "commit.proto";
 import "node_value.proto";
 import "node_builder.proto";
-import "node_diff.proto";
+import "node_builder_change.proto";
 import "node_state.proto";
+import "node_state_diff.proto";
 
 service NodeStoreService {
     rpc GetRoot (google.protobuf.Empty) returns (NodeStateId);
     rpc Rebase (NodeBuilderId) returns (NodeStateId);
     rpc Reset (NodeBuilderId) returns (NodeStateId);
     rpc Merge (Commit) returns (NodeStateId);
+    rpc Observe (stream google.protobuf.Empty) returns (stream ChangeEvent);
 }
 
 service CheckpointService {
@@ -33,12 +36,15 @@ service NodeStateService {
     rpc GetNodeValue (NodeStatePath) returns (NodeValue);
     rpc CreateNodeBuilder (NodeStatePath) returns (NodeBuilderId);
     rpc Release (NodeStateId) returns (google.protobuf.Empty);
+    rpc Equals (NodeStatePathPair) returns (google.protobuf.BoolValue);
+    rpc Compare (CompareNodeStateOp) returns (NodeStateDiff);
 }
 
 service NodeBuilderService {
     rpc GetNodeValue (NodeBuilderPath) returns (NodeBuilderValue);
     rpc CreateNodeState (NodeBuilderPath) returns (NodeStateId);
     rpc CreateBaseNodeState (NodeBuilderPath) returns (NodeStateId);
-    rpc Apply (NodeBuilderChanges) returns (google.protobuf.Empty);
+    rpc Move (MoveOp) returns (NodeBuilderPath);
+    rpc Apply (NodeBuilderChangeList) returns (google.protobuf.Empty);
     rpc Release (NodeBuilderId) returns (google.protobuf.Empty);
 }
