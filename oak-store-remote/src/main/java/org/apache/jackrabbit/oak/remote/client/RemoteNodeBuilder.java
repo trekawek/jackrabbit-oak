@@ -24,14 +24,13 @@ import org.apache.jackrabbit.oak.commons.PathUtils;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.plugins.memory.PropertyStates;
 import org.apache.jackrabbit.oak.remote.common.PropertySerializer;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos.NodeBuilderChange;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderValue;
-import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos;
-import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos.NodeDiff;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
-import org.apache.jackrabbit.oak.remote.server.RemoteNodeStoreException;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.jetbrains.annotations.NotNull;
@@ -46,9 +45,9 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     private RemoteNodeStoreContext context;
 
-    private final NodeBuilderProtos.NodeBuilderId builderId;
+    private NodeBuilderProtos.NodeBuilderId builderId;
 
-    private final String path;
+    private String path;
 
     private NodeBuilderValue nodeBuilderValue;
 
@@ -175,7 +174,7 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public @NotNull Iterable<? extends PropertyState> getProperties() {
-        return Iterables.transform(getNodeValue().getPropertyList(), context.getPropertyDeserializer()::unsafeToOakProperty);
+        return Iterables.transform(getNodeValue().getPropertyList(), context.getPropertyDeserializer()::toOakProperty);
     }
 
     @Override
@@ -190,7 +189,7 @@ public class RemoteNodeBuilder implements NodeBuilder  {
         return getNodeValue().getPropertyList().stream()
                 .filter(p -> name.equals(p.getName()))
                 .findFirst()
-                .map(context.getPropertyDeserializer()::unsafeToOakProperty)
+                .map(context.getPropertyDeserializer()::toOakProperty)
                 .orElse(null);
     }
 
@@ -236,7 +235,8 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public @NotNull NodeBuilder child(@NotNull String name) throws IllegalArgumentException {
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
+        NodeBuilderChange.Builder diffBuilder = NodeBuilderChange.newBuilder();
+        diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
         diffBuilder.getAddNodeBuilder().setChildName(name);
         getChangeQueue().add(diffBuilder.build());
         return new RemoteNodeBuilder(this, name);
@@ -244,7 +244,8 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public @NotNull NodeBuilder setChildNode(@NotNull String name) throws IllegalArgumentException {
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
+        NodeBuilderChange.Builder diffBuilder = NodeBuilderChange.newBuilder();
+        diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
         diffBuilder.getSetChildNodeBuilder().setChildName(name);
         getChangeQueue().add(diffBuilder.build());
         return new RemoteNodeBuilder(this, name);
@@ -257,7 +258,8 @@ public class RemoteNodeBuilder implements NodeBuilder  {
         }
 
         RemoteNodeState remoteNodeState = (RemoteNodeState) nodeState;
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
+        NodeBuilderChange.Builder diffBuilder = NodeBuilderChange.newBuilder();
+        diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
         diffBuilder.getSetChildNodeBuilder()
                 .setChildName(name)
                 .getNodeStatePathBuilder()
@@ -274,28 +276,29 @@ public class RemoteNodeBuilder implements NodeBuilder  {
             throw new IllegalArgumentException("The node builder " + newParent + " doesn't come from this node store");
         }
         RemoteNodeBuilder remoteNewParent = ((RemoteNodeBuilder) newParent);
-        if (newParent.hasChildNode(newName)) {
+
+        flush();
+        NodeBuilderProtos.MoveOp.Builder opBuilder = NodeBuilderProtos.MoveOp.newBuilder();
+        opBuilder.setNodeBuilderPath(getNodeBuilderPath());
+        opBuilder.setNewParent(remoteNewParent.getNodeBuilderPath());
+        opBuilder.setNewName(newName);
+        NodeBuilderProtos.NodeBuilderPath newPath = context.getClient().getNodeBuilderService().move(opBuilder.build());
+
+        if (newPath.hasNodeBuilderId()) {
+            this.builderId = newPath.getNodeBuilderId();
+            this.path = newPath.getPath();
+            nodeBuilderValue = null;
+            return true;
+        } else {
             return false;
         }
-        if ((remoteNewParent.getNodeBuilderId().equals(this.getNodeBuilderId()) && PathUtils.isAncestor(this.path, remoteNewParent.path))) {
-            return false;
-        }
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
-        diffBuilder.getMoveBuilder()
-                .setChildName(newName)
-                .setNewParent(remoteNewParent.getNodeBuilderPath());
-        getChangeQueue().add(diffBuilder.build());
-        return true;
     }
 
     @Override
     public @NotNull NodeBuilder setProperty(@NotNull PropertyState property) throws IllegalArgumentException {
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
-        try {
-            diffBuilder.getSetPropertyBuilder().setProperty(PropertySerializer.toProtoProperty(property));
-        } catch (RemoteNodeStoreException e) {
-            throw new IllegalArgumentException(e);
-        }
+        NodeBuilderChange.Builder diffBuilder = NodeBuilderChange.newBuilder();
+        diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
+        diffBuilder.getSetPropertyBuilder().setProperty(PropertySerializer.toProtoProperty(property));
         getChangeQueue().add(diffBuilder.build());
         return this;
     }
@@ -312,7 +315,8 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public @NotNull NodeBuilder removeProperty(String name) {
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
+        NodeBuilderChange.Builder diffBuilder = NodeBuilderChange.newBuilder();
+        diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
         diffBuilder.getRemovePropertyBuilder().setName(name);
         getChangeQueue().add(diffBuilder.build());
         return this;
@@ -323,8 +327,9 @@ public class RemoteNodeBuilder implements NodeBuilder  {
         if (!exists()) {
             return false;
         }
-        NodeDiff.Builder diffBuilder = NodeDiff.newBuilder();
-        diffBuilder.setRemoveNode(NodeDiffProtos.RemoveNode.getDefaultInstance());
+        NodeBuilderChange.Builder diffBuilder = NodeBuilderChange.newBuilder();
+        diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
+        diffBuilder.setRemoveNode(NodeBuilderChangeProtos.RemoveNode.getDefaultInstance());
         getChangeQueue().add(diffBuilder.build());
         return true;
     }

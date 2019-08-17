@@ -20,18 +20,23 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
+import org.apache.jackrabbit.oak.commons.PathUtils;
 import org.apache.jackrabbit.oak.remote.common.PropertyDeserializer;
 import org.apache.jackrabbit.oak.remote.common.PropertySerializer;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos.NodeBuilderChange;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos.NodeBuilderChangeList;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.MoveOp;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderPath;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderValue;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
-import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos;
-import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos.NodeBuilderChanges;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServiceImplBase {
@@ -60,20 +65,14 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
                     .setIsModified(nodeBuilder.isModified())
                     .setIsReplaced(nodeBuilder.isReplaced())
                     .getNodeValueBuilder()
+                    .setHashCode(nodeBuilder.hashCode())
                     .setExists(nodeBuilder.exists())
                     .addAllChildName(nodeBuilder.getChildNodeNames())
-                    .addAllProperty(Iterables.transform(nodeBuilder.getProperties(), propertyState -> {
-                        try {
-                            return PropertySerializer.toProtoProperty(propertyState);
-                        } catch (RemoteNodeStoreException e) {
-                            throw new IllegalArgumentException(e);
-                        }
-                    }));
+                    .addAllProperty(Iterables.transform(nodeBuilder.getProperties(), PropertySerializer::toProtoProperty));
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
             responseObserver.onError(e);
-            return;
         }
     }
 
@@ -109,16 +108,20 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
         responseObserver.onCompleted();
     }
 
-
     @Override
-    public void apply(NodeBuilderChanges request, StreamObserver<Empty> responseObserver) {
-        NodeBuilder root;
+    public void move(MoveOp request, StreamObserver<NodeBuilderPath> responseObserver) {
         try {
-            root = nodeBuilderRepository.getBuilder(request.getNodeBuilderId());
-            for (NodeDiffProtos.NodeDiff change : request.getChangeList()) {
-                applyChange(root, change);
+            NodeBuilder src = nodeBuilderRepository.getBuilder(request.getNodeBuilderPath());
+            NodeBuilder newParent = nodeBuilderRepository.getBuilder(request.getNewParent());
+            String newName = request.getNewName();
+            if (src.moveTo(newParent, newName)) {
+                responseObserver.onNext(NodeBuilderPath.newBuilder()
+                        .setNodeBuilderId(request.getNewParent().getNodeBuilderId())
+                        .setPath(PathUtils.concat(request.getNewParent().getPath(), newName))
+                        .build());
+            } else {
+                responseObserver.onNext(NodeBuilderPath.getDefaultInstance());
             }
-            responseObserver.onNext(Empty.getDefaultInstance());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
             responseObserver.onError(e);
@@ -132,8 +135,25 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
         responseObserver.onCompleted();
     }
 
-    private void applyChange(NodeBuilder root, NodeDiffProtos.NodeDiff change) throws RemoteNodeStoreException {
-        NodeBuilder nodeBuilder = nodeBuilderRepository.getNodeBuilder(root, change.getNodePath());
+    public void apply(NodeBuilderChangeList request, StreamObserver<Empty> responseObserver) {
+        Map<NodeBuilderPath, NodeBuilder> builderCache = new HashMap<>();
+        try {
+            for (NodeBuilderChange c : request.getChangeList()) {
+                applyChange(builderCache, c);
+            }
+            responseObserver.onNext(Empty.getDefaultInstance());
+            responseObserver.onCompleted();
+        } catch (RemoteNodeStoreException e) {
+            responseObserver.onError(e);
+        }
+    }
+
+    private void applyChange(Map<NodeBuilderPath, NodeBuilder> builderCache, NodeBuilderChange change) throws RemoteNodeStoreException {
+        NodeBuilderPath path = change.getNodeBuilderPath();
+        if (!builderCache.containsKey(path)) {
+            builderCache.put(path, nodeBuilderRepository.getBuilder(path));
+        }
+        NodeBuilder nodeBuilder = builderCache.get(path);
         switch (change.getChangeCase()) {
             case ADDNODE:
                 nodeBuilder.child(change.getAddNode().getChildName());
@@ -148,7 +168,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
                 break;
 
             case SETCHILDNODE:
-                NodeDiffProtos.SetChildNode setChildNodeRequest = change.getSetChildNode();
+                NodeBuilderChangeProtos.SetChildNode setChildNodeRequest = change.getSetChildNode();
                 NodeState nodeState = nodeStateRepository.getNodeState(setChildNodeRequest.getNodeStatePath());
                 nodeBuilder.setChildNode(setChildNodeRequest.getChildName(), nodeState);
                 break;

@@ -16,17 +16,17 @@
  */
 package org.apache.jackrabbit.oak.remote.client;
 
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderChangeProtos.NodeBuilderChange;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc.NodeBuilderServiceBlockingStub;
-import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos;
-import org.apache.jackrabbit.oak.remote.proto.NodeDiffProtos.NodeDiff;
 
 import java.util.Deque;
 import java.util.LinkedList;
 
 public class NodeBuilderChangeQueue {
 
-    private final Deque<NodeDiff> deque = new LinkedList<>();
+    private final Deque<NodeBuilderChange> deque = new LinkedList<>();
 
     private final NodeBuilderId nodeBuilderId;
 
@@ -37,22 +37,20 @@ public class NodeBuilderChangeQueue {
         this.nodeBuilderId = nodeBuilderId;
     }
 
-    public void add(NodeDiff nodeDiff) {
+    public void add(NodeBuilderChange nodeDiff) {
         deque.add(nodeDiff);
     }
 
     public boolean flush() {
-        NodeDiffProtos.NodeBuilderChanges.Builder builder = NodeDiffProtos.NodeBuilderChanges.newBuilder();
-        NodeDiff diff;
-        boolean dirty = false;
-        while ((diff = deque.poll()) != null) {
-            builder.addChange(diff);
-            dirty = true;
+        if (deque.isEmpty()) {
+            return false;
         }
-        if (dirty) {
-            builder.setNodeBuilderId(nodeBuilderId);
-            nodeBuilderService.apply(builder.build());
+        NodeBuilderChangeProtos.NodeBuilderChangeList.Builder list = NodeBuilderChangeProtos.NodeBuilderChangeList.newBuilder();
+        NodeBuilderChange change;
+        while ((change = deque.poll()) != null) {
+            list.addChange(change);
         }
-        return dirty;
+        nodeBuilderService.apply(list.build());
+        return true;
     }
 }

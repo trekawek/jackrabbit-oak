@@ -17,9 +17,12 @@
 package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.protobuf.Empty;
+import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
+import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
+import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos.CreateCheckpointRequest;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
@@ -28,6 +31,9 @@ import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.commit.CompositeObserver;
+import org.apache.jackrabbit.oak.spi.commit.Observable;
+import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
@@ -37,14 +43,13 @@ import org.jetbrains.annotations.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class RemoteNodeStore implements NodeStore, Closeable {
+public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private final RemoteNodeStoreClient client;
 
@@ -54,16 +59,43 @@ public class RemoteNodeStore implements NodeStore, Closeable {
 
     private final ScheduledExecutorService gcExecutor;
 
+    private final CompositeObserver compositeObserver;
+
+    private final StreamObserver observerStreamEvent;
+
     public RemoteNodeStore(RemoteNodeStoreClient client, BlobStore blobStore) {
         this.client = client;
         this.blobStore = blobStore;
         this.context = new RemoteNodeStoreContext(client, blobStore);
         this.gcExecutor = Executors.newSingleThreadScheduledExecutor();
         this.gcExecutor.scheduleAtFixedRate(context::collectOrphanedReferences, 1, 1, TimeUnit.MINUTES);
+        this.compositeObserver = new CompositeObserver();
+        observerStreamEvent = client.getNodeStoreAsyncService().observe(new StreamObserver<ChangeEventProtos.ChangeEvent>() {
+            @Override
+            public void onNext(ChangeEventProtos.ChangeEvent changeEvent) {
+                NodeState root = createNodeState(changeEvent.getNodeStateId());
+                compositeObserver.contentChanged(root, CommitInfoUtil.deserialize(changeEvent.getCommitInfo()));
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onCompleted() {
+            }
+        });
     }
 
     public void close() {
+        this.observerStreamEvent.onCompleted();
         this.gcExecutor.shutdown();
+    }
+
+    @Override
+    public Closeable addObserver(Observer observer) {
+        compositeObserver.addObserver(observer);
+        return () -> compositeObserver.removeObserver(observer);
     }
 
     @Override
@@ -165,17 +197,7 @@ public class RemoteNodeStore implements NodeStore, Closeable {
     private CommitProtos.Commit.Builder createCommitObject(@NotNull CommitInfo info, RemoteNodeBuilder nodeBuilder) {
         Commit.Builder commitBuilder = Commit.newBuilder();
         commitBuilder.setNodeBuilderId(nodeBuilder.getNodeBuilderId());
-        commitBuilder.setSessionId(info.getSessionId());
-        commitBuilder.setUserId(info.getUserId());
-        commitBuilder.setIsExternal(info.isExternal());
-        Map<String, String> commitInfoMap = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> e : info.getInfo().entrySet()) {
-            if (!(e.getValue() instanceof String)) {
-                throw new IllegalArgumentException("Only string values are allowed in the CommitInfo; " + e.getValue().getClass() + " given for " + e.getKey());
-            }
-            commitInfoMap.put(e.getKey(), (String) e.getValue());
-        }
-        commitBuilder.putAllCommitInfo(commitInfoMap);
+        commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
         return commitBuilder;
     }
 }

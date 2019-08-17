@@ -9,6 +9,7 @@ message NodeValue {
     repeated Property property = 1;
     repeated string childName = 2;
     bool exists = 3;
+    int32 hashCode = 4;
 }
 
 enum PropertyType {

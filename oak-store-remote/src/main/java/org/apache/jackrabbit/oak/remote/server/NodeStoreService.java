@@ -19,19 +19,26 @@ package org.apache.jackrabbit.oak.remote.server;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
+import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos.ChangeEvent;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
+import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.io.Closeable;
+import java.io.IOException;
 
 public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplBase {
+
+    private static final Logger log = LoggerFactory.getLogger(NodeStoreService.class);
 
     private final NodeStateRepository nodeStateRepository;
 
@@ -59,17 +66,46 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
     public void merge(Commit request, StreamObserver<NodeStateId> responseObserver) {
         try {
             NodeBuilder builder = nodeBuilderRepository.getBuilder(request.getNodeBuilderId());
-            CommitInfo commitInfo = createCommitInfo(request);
-            nodeStore.merge(builder, EmptyHook.INSTANCE, commitInfo);
+            CommitInfo commitInfo = CommitInfoUtil.deserialize(request.getCommitInfo());
+            NodeState nodeState = nodeStore.merge(builder, EmptyHook.INSTANCE, commitInfo);
+            NodeStateId nodeStateId = NodeStateId.newBuilder()
+                    .setValue(nodeStateRepository.addNewNodeState(nodeState))
+                    .build();
+            responseObserver.onNext(nodeStateId);
+            responseObserver.onCompleted();
         } catch (CommitFailedException | RemoteNodeStoreException e) {
             responseObserver.onError(e);
         }
     }
 
-    private static CommitInfo createCommitInfo(Commit commit) {
-        Map<String, Object> commitInfo = new HashMap<>();
-        commitInfo.putAll(commit.getCommitInfoMap());
-        return new CommitInfo(commit.getSessionId(), commit.getUserId(), commitInfo, commit.getIsExternal());
+    @Override
+    public StreamObserver<Empty> observe(StreamObserver<ChangeEvent> responseObserver) {
+        Closeable closeable;
+        if (nodeStore instanceof Observable) {
+            closeable = ((Observable) nodeStore).addObserver((root, info) -> {
+                ChangeEvent.Builder builder = ChangeEvent.newBuilder();
+                builder.getNodeStateIdBuilder().setValue(nodeStateRepository.addNewNodeState(root));
+                builder.setCommitInfo(CommitInfoUtil.serialize(info));
+                responseObserver.onNext(builder.build());
+            });
+        } else {
+            closeable = ()->{};
+        }
+        return new StreamObserver<Empty>() {
+            @Override
+            public void onNext(Empty empty) {
+            }
+            @Override
+            public void onError(Throwable throwable) {
+            }
+            @Override
+            public void onCompleted() {
+                try {
+                    closeable.close();
+                } catch (IOException e) {
+                    log.error("Can't close observer", e);
+                }
+            }
+        };
     }
-
 }

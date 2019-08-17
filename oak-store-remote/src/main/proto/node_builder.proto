@@ -22,3 +22,9 @@ message NodeBuilderValue {
     bool isReplaced = 3;
     bool isModified = 4;
 }
+
+message MoveOp {
+    NodeBuilderPath nodeBuilderPath = 1;
+    NodeBuilderPath newParent = 2;
+    string newName = 3;
+}
