@@ -22,7 +22,6 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc.CheckpointServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc.NodeBuilderServiceBlockingStub;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc.NodeBuilderServiceStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc.NodeStateServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;

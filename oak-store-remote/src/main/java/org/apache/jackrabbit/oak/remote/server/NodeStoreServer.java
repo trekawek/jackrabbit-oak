@@ -34,16 +34,13 @@ public class NodeStoreServer {
 
     private final NodeStore nodeStore;
 
-    private final int port;
-
     private final Server server;
 
-    public NodeStoreServer(int port, NodeStore nodeStore) throws IOException {
-        this(ServerBuilder.forPort(port), port, nodeStore);
+    public NodeStoreServer(int port, NodeStore nodeStore) {
+        this(ServerBuilder.forPort(port), nodeStore);
     }
 
-    public NodeStoreServer(ServerBuilder<?> serverBuilder, int port, NodeStore nodeStore) {
-        this.port = port;
+    public NodeStoreServer(ServerBuilder<?> serverBuilder, NodeStore nodeStore) {
         this.nodeStore = nodeStore;
         this.nodeBuilderRepository = new NodeBuilderRepository();
         this.nodeStateRepository = new NodeStateRepository();
@@ -57,7 +54,7 @@ public class NodeStoreServer {
 
     public void start() throws IOException {
         server.start();
-        log.info("Server started, listening on " + port);
+        log.info("Server started");
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             // Use stderr here since the logger may have been reset by its JVM shutdown hook.
             System.err.println("*** shutting down gRPC server since JVM is shutting down");

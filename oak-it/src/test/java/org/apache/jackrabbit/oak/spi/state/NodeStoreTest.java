@@ -55,7 +55,6 @@ import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -81,11 +80,6 @@ public class NodeStoreTest extends OakBaseTest {
         test.child("y");
         test.child("z");
         root = store.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
-    }
-
-    @After
-    public void tearDown() {
-        fixture.dispose(store);
     }
 
     @Test
@@ -457,7 +451,8 @@ public class NodeStoreTest extends OakBaseTest {
         NodeBuilder x = test.getChildNode("x");
         if (fixture == NodeStoreFixtures.SEGMENT_TAR || fixture == NodeStoreFixtures.MEMORY_NS 
                 || fixture == NodeStoreFixtures.COMPOSITE_MEM || fixture == NodeStoreFixtures.COMPOSITE_SEGMENT
-                || fixture == NodeStoreFixtures.COW_DOCUMENT || fixture == NodeStoreFixtures.SEGMENT_AZURE) {
+                || fixture == NodeStoreFixtures.COW_DOCUMENT || fixture == NodeStoreFixtures.SEGMENT_AZURE
+                || fixture == NodeStoreFixtures.REMOTE) {
             assertTrue(x.moveTo(x, "xx"));
             assertFalse(x.exists());
             assertFalse(test.hasChildNode("x"));

@@ -20,6 +20,7 @@ import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.commons.PathUtils;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos;
@@ -34,6 +35,7 @@ import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.CompositeObserver;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.commit.Observer;
+import org.apache.jackrabbit.oak.spi.state.ApplyDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
@@ -68,7 +70,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         this.blobStore = blobStore;
         this.context = new RemoteNodeStoreContext(client, blobStore);
         this.gcExecutor = Executors.newSingleThreadScheduledExecutor();
-        this.gcExecutor.scheduleAtFixedRate(context::collectOrphanedReferences, 1, 1, TimeUnit.MINUTES);
+        this.gcExecutor.scheduleAtFixedRate(context::collectOrphanedReferences, 1, 1, TimeUnit.SECONDS);
         this.compositeObserver = new CompositeObserver();
         observerStreamEvent = client.getNodeStoreAsyncService().observe(new StreamObserver<ChangeEventProtos.ChangeEvent>() {
             @Override
@@ -87,13 +89,18 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         });
     }
 
-    public void close() {
-        this.observerStreamEvent.onCompleted();
+    public void close() throws IOException {
         this.gcExecutor.shutdown();
+        try {
+            this.client.shutdown();
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public Closeable addObserver(Observer observer) {
+        observerStreamEvent.onCompleted();
         compositeObserver.addObserver(observer);
         return () -> compositeObserver.removeObserver(observer);
     }
@@ -106,11 +113,13 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     public @NotNull NodeState merge(@NotNull NodeBuilder builder, @NotNull CommitHook commitHook, @NotNull CommitInfo info) throws CommitFailedException {
-        if (!(builder instanceof RemoteNodeBuilder)) {
-            throw new IllegalArgumentException("Invalid node builder: " + builder);
-        }
-        RemoteNodeBuilder nodeBuilder = (RemoteNodeBuilder) builder;
+        RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
         nodeBuilder.flush();
+
+        NodeState afterHooks = commitHook.processCommit(nodeBuilder.getBaseState(), nodeBuilder.getNodeState(), info);
+        afterHooks.compareAgainstBaseState(nodeBuilder.getNodeState(), new ApplyDiff(nodeBuilder));
+        nodeBuilder.flush();
+
         Commit.Builder commitBuilder = createCommitObject(info, nodeBuilder);
         NodeStateId id = client.getNodeStoreService().merge(commitBuilder.build());
         return createNodeState(id);
@@ -118,22 +127,29 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     public @NotNull NodeState rebase(@NotNull NodeBuilder builder) {
-        if (!(builder instanceof RemoteNodeBuilder)) {
-            throw new IllegalArgumentException("Invalid node builder: " + builder);
-        }
-        RemoteNodeBuilder nodeBuilder = (RemoteNodeBuilder) builder;
+        RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
+        nodeBuilder.flush();
         NodeStateId id = client.getNodeStoreService().rebase(nodeBuilder.getNodeBuilderId());
         return createNodeState(id);
     }
 
     @Override
     public NodeState reset(@NotNull NodeBuilder builder) {
+        RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
+        nodeBuilder.flush();
+        NodeStateId id = client.getNodeStoreService().reset(nodeBuilder.getNodeBuilderId());
+        return createNodeState(id);
+    }
+
+    private RemoteNodeBuilder assertRootBuilder(NodeBuilder builder) {
         if (!(builder instanceof RemoteNodeBuilder)) {
             throw new IllegalArgumentException("Invalid node builder: " + builder);
         }
         RemoteNodeBuilder nodeBuilder = (RemoteNodeBuilder) builder;
-        NodeStateId id = client.getNodeStoreService().reset(nodeBuilder.getNodeBuilderId());
-        return createNodeState(id);
+        if (!PathUtils.denotesRoot(nodeBuilder.getPath())) {
+            throw new IllegalArgumentException("Not a root builder: " + builder);
+        }
+        return nodeBuilder;
     }
 
     @Override

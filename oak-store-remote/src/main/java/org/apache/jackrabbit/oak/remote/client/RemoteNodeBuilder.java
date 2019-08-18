@@ -98,6 +98,7 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public @NotNull NodeState getNodeState() {
+        flush();
         NodeStateProtos.NodeStateId id = context.getClient().getNodeBuilderService().createNodeState(getNodeBuilderPath());
         context.addNodeStateId(id);
         return new RemoteNodeState(context, id);
@@ -285,8 +286,6 @@ public class RemoteNodeBuilder implements NodeBuilder  {
         NodeBuilderProtos.NodeBuilderPath newPath = context.getClient().getNodeBuilderService().move(opBuilder.build());
 
         if (newPath.hasNodeBuilderId()) {
-            this.builderId = newPath.getNodeBuilderId();
-            this.path = newPath.getPath();
             nodeBuilderValue = null;
             return true;
         } else {
@@ -340,5 +339,9 @@ public class RemoteNodeBuilder implements NodeBuilder  {
     public Blob createBlob(InputStream stream) throws IOException {
         String blobId = context.getBlobStore().writeBlob(stream);
         return new BlobStoreBlob(context.getBlobStore(), blobId);
+    }
+
+    public String getPath() {
+        return path;
     }
 }

@@ -20,7 +20,6 @@ import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
-import org.apache.jackrabbit.oak.remote.server.RemoteNodeStoreException;
 
 import java.math.BigDecimal;
 

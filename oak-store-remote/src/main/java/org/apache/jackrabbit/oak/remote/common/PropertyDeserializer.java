@@ -33,7 +33,6 @@ import org.apache.jackrabbit.oak.plugins.memory.MultiLongPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.MultiStringPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.StringPropertyState;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
-import org.apache.jackrabbit.oak.remote.server.RemoteNodeStoreException;
 
 import java.math.BigDecimal;
 import java.util.List;
