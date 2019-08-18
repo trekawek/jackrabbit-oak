@@ -90,6 +90,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     }
 
     public void close() throws IOException {
+        observerStreamEvent.onCompleted();
         this.gcExecutor.shutdown();
         try {
             this.client.shutdown();
@@ -100,7 +101,6 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     public Closeable addObserver(Observer observer) {
-        observerStreamEvent.onCompleted();
         compositeObserver.addObserver(observer);
         return () -> compositeObserver.removeObserver(observer);
     }
@@ -205,7 +205,6 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     }
 
     private RemoteNodeState createNodeState(NodeStateId id) {
-        context.addNodeStateId(id);
         return new RemoteNodeState(context, id);
     }
 

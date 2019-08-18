@@ -19,15 +19,12 @@ package org.apache.jackrabbit.oak.remote.client;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.remote.common.PropertyDeserializer;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
-import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 public class RemoteNodeStoreContext {
-
-    private final IdRepository<NodeStateProtos.NodeStateId> nodeStateIdIdRepository;
 
     private final IdRepository<NodeBuilderId> nodeBuilderIdRepository;
 
@@ -40,7 +37,6 @@ public class RemoteNodeStoreContext {
     private final ConcurrentMap<Long, NodeBuilderChangeQueue> changeQueueMap = new ConcurrentHashMap<>();
 
     public RemoteNodeStoreContext(RemoteNodeStoreClient client, BlobStore blobStore) {
-        this.nodeStateIdIdRepository = new IdRepository<>(NodeStateProtos.NodeStateId::getValue);
         this.nodeBuilderIdRepository = new IdRepository<>(NodeBuilderId::getValue);
         this.client = client;
         this.blobStore = blobStore;
@@ -65,10 +61,6 @@ public class RemoteNodeStoreContext {
         return propertyDeserializer;
     }
 
-    public void addNodeStateId(NodeStateProtos.NodeStateId id) {
-        nodeStateIdIdRepository.addId(id);
-    }
-
     public void addNodeBuilderId(NodeBuilderId id) {
         nodeBuilderIdRepository.addId(id);
     }
@@ -77,9 +69,6 @@ public class RemoteNodeStoreContext {
         for (Long id : nodeBuilderIdRepository.getClearList()) {
             client.getNodeBuilderService().release(NodeBuilderId.newBuilder().setValue(id).build());
             changeQueueMap.remove(id);
-        }
-        for (Long id : nodeStateIdIdRepository.getClearList()) {
-            client.getNodeStateService().release(NodeStateProtos.NodeStateId.newBuilder().setValue(id).build());
         }
     }
 }

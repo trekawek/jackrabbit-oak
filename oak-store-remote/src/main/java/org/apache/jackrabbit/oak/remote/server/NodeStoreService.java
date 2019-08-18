@@ -30,36 +30,32 @@ import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
 
+import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
+
 public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(NodeStoreService.class);
 
-    private final NodeStateRepository nodeStateRepository;
-
     private final NodeBuilderRepository nodeBuilderRepository;
 
-    private final NodeStore nodeStore;
+    private final RevisionableNodeStore nodeStore;
 
-    public NodeStoreService(NodeStore nodeStore, NodeStateRepository nodeStateRepository, NodeBuilderRepository nodeBuilderRepository) {
+    public NodeStoreService(RevisionableNodeStore nodeStore, NodeBuilderRepository nodeBuilderRepository) {
         this.nodeStore = nodeStore;
-        this.nodeStateRepository = nodeStateRepository;
         this.nodeBuilderRepository = nodeBuilderRepository;
     }
 
     @Override
     public void getRoot(Empty request, StreamObserver<NodeStateId> responseObserver) {
         NodeState nodeState = nodeStore.getRoot();
-        NodeStateId nodeStateId = NodeStateId.newBuilder()
-                .setValue(nodeStateRepository.addNewNodeState(nodeState))
-                .build();
-        responseObserver.onNext(nodeStateId);
+        responseObserver.onNext(getNodeStateId(nodeState));
         responseObserver.onCompleted();
     }
 
@@ -69,10 +65,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
             NodeBuilder builder = nodeBuilderRepository.getBuilder(request.getNodeBuilderId());
             CommitInfo commitInfo = CommitInfoUtil.deserialize(request.getCommitInfo());
             NodeState nodeState = nodeStore.merge(builder, EmptyHook.INSTANCE, commitInfo);
-            NodeStateId nodeStateId = NodeStateId.newBuilder()
-                    .setValue(nodeStateRepository.addNewNodeState(nodeState))
-                    .build();
-            responseObserver.onNext(nodeStateId);
+            responseObserver.onNext(getNodeStateId(nodeState));
             responseObserver.onCompleted();
         } catch (CommitFailedException | RemoteNodeStoreException e) {
             log.error("Can't merge", e);
@@ -84,10 +77,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
         try {
             NodeBuilder builder = nodeBuilderRepository.getBuilder(request);
             NodeState nodeState = nodeStore.rebase(builder);
-            NodeStateId nodeStateId = NodeStateId.newBuilder()
-                    .setValue(nodeStateRepository.addNewNodeState(nodeState))
-                    .build();
-            responseObserver.onNext(nodeStateId);
+            responseObserver.onNext(getNodeStateId(nodeState));
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
             log.error("Can't rebase", e);
@@ -99,10 +89,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
         try {
             NodeBuilder builder = nodeBuilderRepository.getBuilder(request);
             NodeState nodeState = nodeStore.reset(builder);
-            NodeStateId nodeStateId = NodeStateId.newBuilder()
-                    .setValue(nodeStateRepository.addNewNodeState(nodeState))
-                    .build();
-            responseObserver.onNext(nodeStateId);
+            responseObserver.onNext(getNodeStateId(nodeState));
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
             log.error("Can't reset", e);
@@ -116,7 +103,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
         if (nodeStore instanceof Observable) {
             closeable = ((Observable) nodeStore).addObserver((root, info) -> {
                 ChangeEvent.Builder builder = ChangeEvent.newBuilder();
-                builder.getNodeStateIdBuilder().setValue(nodeStateRepository.addNewNodeState(root));
+                builder.setNodeStateId(getNodeStateId(root));
                 builder.setCommitInfo(CommitInfoUtil.serialize(info));
                 responseObserver.onNext(builder.build());
             });

@@ -18,14 +18,14 @@ package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.collect.Iterables;
 import org.apache.jackrabbit.oak.api.PropertyState;
-import org.apache.jackrabbit.oak.commons.PathUtils;
+import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos.NodeStateDiffEvent;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
-import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStatePath;
+import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
@@ -34,26 +34,20 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
 public class RemoteNodeState extends AbstractNodeState {
 
     private final RemoteNodeStoreContext context;
 
     private final NodeStateId id;
 
-    private final String path;
-
     private volatile NodeValue nodeValue;
 
     public RemoteNodeState(RemoteNodeStoreContext context, NodeStateId id) {
         this.context = context;
         this.id = id;
-        this.path = "/";
-    }
-
-    private RemoteNodeState(RemoteNodeState parent, String name) {
-        this.context = parent.context;
-        this.id = parent.id;
-        this.path = PathUtils.concat(parent.path, name);
     }
 
     @Override
@@ -68,33 +62,38 @@ public class RemoteNodeState extends AbstractNodeState {
 
     @Override
     public boolean hasChildNode(@NotNull String name) {
-        return getNodeValue().getChildNameList().contains(name);
+        return getNodeValue().getChildList().stream()
+                .map(NodeValueProtos.ChildNode::getName)
+                .anyMatch(Predicate.isEqual(name));
     }
 
     @Override
     public @NotNull NodeState getChildNode(@NotNull String name) throws IllegalArgumentException {
-        return new RemoteNodeState(this, name);
+        return getNodeValue().getChildList().stream()
+                .filter(c -> name.equals(c.getName()))
+                .findFirst()
+                .map(NodeValueProtos.ChildNode::getNodeStateId)
+                .map((id -> (NodeState) new RemoteNodeState(context, id)))
+                .orElse(EmptyNodeState.MISSING_NODE);
     }
 
     @Override
     public @NotNull Iterable<? extends ChildNodeEntry> getChildNodeEntries() {
-        return Iterables.transform(getNodeValue().getChildNameList(), name -> new MemoryChildNodeEntry(name, getChildNode(name)));
+        return getNodeValue().getChildList().stream()
+                .map(c -> new MemoryChildNodeEntry(c.getName(), new RemoteNodeState(context, c.getNodeStateId())))
+                .collect(Collectors.toList());
     }
 
     @Override
     public @NotNull NodeBuilder builder() {
-        NodeStatePath request = NodeStatePath.newBuilder()
-                .setNodeStateId(id)
-                .setPath(path)
-                .build();
-        NodeBuilderProtos.NodeBuilderId builderId = context.getClient().getNodeStateService().createNodeBuilder(request);
+        NodeBuilderProtos.NodeBuilderId builderId = context.getClient().getNodeStateService().createNodeBuilder(id);
         context.addNodeBuilderId(builderId);
         return new RemoteNodeBuilder(context, builderId);
     }
 
     @Override
     public int hashCode() {
-        return 0;
+        return getNodeValue().getHashCode();
     }
 
     @Override
@@ -103,18 +102,17 @@ public class RemoteNodeState extends AbstractNodeState {
             return true;
         } else if (that instanceof RemoteNodeState) {
             RemoteNodeState remoteThat = (RemoteNodeState) that;
-            if (id.equals(remoteThat.id) && path.equals(remoteThat.path)) {
+            if (id.equals(remoteThat.id)) {
                 return true;
-            } else {
+            } else if (context == remoteThat.context) {
                 NodeStateProtos.NodeStatePathPair pair = NodeStateProtos.NodeStatePathPair.newBuilder()
-                        .setNodeStatePath1(getNodeStatePath())
-                        .setNodeStatePath2(remoteThat.getNodeStatePath())
+                        .setNodeState1(id)
+                        .setNodeState2(remoteThat.id)
                         .build();
                 return context.getClient().getNodeStateService().equals(pair).getValue();
             }
-        } else {
-            return super.equals(that);
         }
+        return super.equals(that);
     }
 
     @Override
@@ -122,8 +120,8 @@ public class RemoteNodeState extends AbstractNodeState {
         if (base instanceof RemoteNodeState) {
             RemoteNodeState remoteBase = (RemoteNodeState) base;
             NodeStateProtos.CompareNodeStateOp compareOp = NodeStateProtos.CompareNodeStateOp.newBuilder()
-                    .setNodeState(getNodeStatePath())
-                    .setBaseNodeState(remoteBase.getNodeStatePath())
+                    .setNodeState(id)
+                    .setBaseNodeState(remoteBase.id)
                     .build();
             NodeStateDiffProtos.NodeStateDiff diffResult = context.getClient().getNodeStateService().compare(compareOp);
             boolean cont = true;
@@ -152,22 +150,18 @@ public class RemoteNodeState extends AbstractNodeState {
 
                     case NODEADDED: {
                         NodeStateDiffProtos.NodeAdded ev = e.getNodeAdded();
-                        context.addNodeStateId(ev.getAfter());
                         cont = diff.childNodeAdded(ev.getName(), new RemoteNodeState(context, ev.getAfter()));
                     }
                     break;
 
                     case NODECHANGED: {
                         NodeStateDiffProtos.NodeChanged ev = e.getNodeChanged();
-                        context.addNodeStateId(ev.getBefore());
-                        context.addNodeStateId(ev.getAfter());
                         cont = diff.childNodeChanged(ev.getName(), new RemoteNodeState(context, ev.getBefore()), new RemoteNodeState(context, ev.getAfter()));
                     }
                     break;
 
                     case NODEDELETED: {
                         NodeStateDiffProtos.NodeDeleted ev = e.getNodeDeleted();
-                        context.addNodeStateId(ev.getBefore());
                         cont = diff.childNodeDeleted(ev.getName(), new RemoteNodeState(context, ev.getBefore()));
                     }
                     break;
@@ -183,30 +177,15 @@ public class RemoteNodeState extends AbstractNodeState {
         if (nodeValue == null) {
             synchronized (this) {
                 if (nodeValue == null) {
-                    NodeStatePath request = NodeStatePath.newBuilder()
-                            .setNodeStateId(id)
-                            .setPath(path)
-                            .build();
-                    nodeValue = context.getClient().getNodeStateService().getNodeValue(request);
+                    nodeValue = context.getClient().getNodeStateService().getNodeValue(id);
                 }
             }
         }
         return nodeValue;
     }
 
-    public String getPath() {
-        return path;
-    }
-
     public NodeStateId getNodeStateId() {
         return id;
-    }
-
-    private NodeStatePath getNodeStatePath() {
-        return NodeStatePath.newBuilder()
-                .setNodeStateId(id)
-                .setPath(path)
-                .build();
     }
 
 }

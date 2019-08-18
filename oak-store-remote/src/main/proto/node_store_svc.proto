@@ -33,9 +33,8 @@ service CheckpointService {
 }
 
 service NodeStateService {
-    rpc GetNodeValue (NodeStatePath) returns (NodeValue);
-    rpc CreateNodeBuilder (NodeStatePath) returns (NodeBuilderId);
-    rpc Release (NodeStateId) returns (google.protobuf.Empty);
+    rpc GetNodeValue (NodeStateId) returns (NodeValue);
+    rpc CreateNodeBuilder (NodeStateId) returns (NodeBuilderId);
     rpc Equals (NodeStatePathPair) returns (google.protobuf.BoolValue);
     rpc Compare (CompareNodeStateOp) returns (NodeStateDiff);
 }
