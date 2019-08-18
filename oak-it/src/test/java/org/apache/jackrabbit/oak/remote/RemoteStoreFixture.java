@@ -126,7 +126,7 @@ public class RemoteStoreFixture extends NodeStoreFixture {
             remoteNs = createRemoteNs(name, blobStore);
         }
 
-        public static NodeStoreServer createServer(String name, NodeStore nodeStore) throws IOException {
+        public static NodeStoreServer createServer(String name, SegmentNodeStore nodeStore) throws IOException {
             InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
             NodeStoreServer server = new NodeStoreServer(inProcessServerBuilder, nodeStore);
             server.start();

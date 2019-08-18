@@ -17,10 +17,13 @@ message NodeBuilderPath {
 }
 
 message NodeBuilderValue {
-    NodeValue nodeValue = 1;
-    bool isNew = 2;
-    bool isReplaced = 3;
-    bool isModified = 4;
+    repeated Property property = 1;
+    repeated string childName = 2;
+    bool exists = 3;
+    int32 hashCode = 4;
+    bool isNew = 5;
+    bool isReplaced = 6;
+    bool isModified = 7;
 }
 
 message MoveOp {

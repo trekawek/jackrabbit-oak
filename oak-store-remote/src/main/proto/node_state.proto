@@ -6,20 +6,15 @@ option java_package = "org.apache.jackrabbit.oak.remote.proto";
 option java_outer_classname = "NodeStateProtos";
 
 message NodeStateId {
-    int64 value = 1;
-}
-
-message NodeStatePath {
-    NodeStateId nodeStateId = 1;
-    string path = 2;
+    string revision = 1;
 }
 
 message NodeStatePathPair {
-    NodeStatePath nodeStatePath1 = 1;
-    NodeStatePath nodeStatePath2 = 2;
+    NodeStateId nodeState1 = 1;
+    NodeStateId nodeState2 = 2;
 }
 
 message CompareNodeStateOp {
-    NodeStatePath baseNodeState = 1;
-    NodeStatePath nodeState = 2;
+    NodeStateId baseNodeState = 1;
+    NodeStateId nodeState = 2;
 }

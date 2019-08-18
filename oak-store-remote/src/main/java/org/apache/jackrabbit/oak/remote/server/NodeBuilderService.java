@@ -34,6 +34,7 @@ import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,18 +42,20 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
+
 public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(NodeBuilderService.class);
 
-    private final NodeStateRepository nodeStateRepository;
+    private final RevisionableNodeStore nodeStore;
 
     private final NodeBuilderRepository nodeBuilderRepository;
 
     private final PropertyDeserializer deserializer;
 
-    public NodeBuilderService(Function<String, Blob> blobProvider, NodeStateRepository nodeStateRepository, NodeBuilderRepository nodeBuilderRepository) {
-        this.nodeStateRepository = nodeStateRepository;
+    public NodeBuilderService(Function<String, Blob> blobProvider, RevisionableNodeStore nodeStore, NodeBuilderRepository nodeBuilderRepository) {
+        this.nodeStore = nodeStore;
         this.nodeBuilderRepository = nodeBuilderRepository;
         this.deserializer = new PropertyDeserializer(blobProvider);
     }
@@ -68,7 +71,6 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
                     .setIsNew(nodeBuilder.isNew())
                     .setIsModified(nodeBuilder.isModified())
                     .setIsReplaced(nodeBuilder.isReplaced())
-                    .getNodeValueBuilder()
                     .setHashCode(nodeBuilder.hashCode())
                     .setExists(nodeBuilder.exists())
                     .addAllChildName(nodeBuilder.getChildNodeNames())
@@ -93,8 +95,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
         }
 
         NodeState nodeState = nodeBuilder.getNodeState();
-        long nodeStateId = nodeStateRepository.addNewNodeState(nodeState);
-        responseObserver.onNext(NodeStateId.newBuilder().setValue(nodeStateId).build());
+        responseObserver.onNext(getNodeStateId(nodeState));
         responseObserver.onCompleted();
     }
 
@@ -110,8 +111,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
         }
 
         NodeState nodeState = nodeBuilder.getBaseState();
-        long nodeStateId = nodeStateRepository.addNewNodeState(nodeState);
-        responseObserver.onNext(NodeStateId.newBuilder().setValue(nodeStateId).build());
+        responseObserver.onNext(getNodeStateId(nodeState));
         responseObserver.onCompleted();
     }
 
@@ -178,8 +178,8 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
 
             case SETCHILDNODE:
                 NodeBuilderChangeProtos.SetChildNode setChildNodeRequest = change.getSetChildNode();
-                if (setChildNodeRequest.hasNodeStatePath()) {
-                    NodeState nodeState = nodeStateRepository.getNodeState(setChildNodeRequest.getNodeStatePath());
+                if (setChildNodeRequest.hasNodeStateId()) {
+                    NodeState nodeState = nodeStore.getNodeByRevision(setChildNodeRequest.getNodeStateId().getRevision());
                     nodeBuilder.setChildNode(setChildNodeRequest.getChildName(), nodeState);
                 } else {
                     nodeBuilder.setChildNode(setChildNodeRequest.getChildName());

@@ -30,7 +30,6 @@ import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderValue;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
-import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.jetbrains.annotations.NotNull;
@@ -84,10 +83,6 @@ public class RemoteNodeBuilder implements NodeBuilder  {
         return nodeBuilderValue;
     }
 
-    private NodeValue getNodeValue() {
-        return getNodeBuilderValue().getNodeValue();
-    }
-
     private NodeBuilderChangeQueue getChangeQueue() {
         return context.getNodeBuilderChangeQueue(builderId);
     }
@@ -100,20 +95,18 @@ public class RemoteNodeBuilder implements NodeBuilder  {
     public @NotNull NodeState getNodeState() {
         flush();
         NodeStateProtos.NodeStateId id = context.getClient().getNodeBuilderService().createNodeState(getNodeBuilderPath());
-        context.addNodeStateId(id);
         return new RemoteNodeState(context, id);
     }
 
     @Override
     public @NotNull NodeState getBaseState() {
         NodeStateProtos.NodeStateId id = context.getClient().getNodeBuilderService().createBaseNodeState(getNodeBuilderPath());
-        context.addNodeStateId(id);
         return new RemoteNodeState(context, id);
     }
 
     @Override
     public boolean exists() {
-        return getNodeValue().getExists();
+        return getNodeBuilderValue().getExists();
     }
 
     @Override
@@ -150,17 +143,17 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public long getChildNodeCount(long max) {
-        return Math.min(getNodeValue().getChildNameCount(), max);
+        return Math.min(getNodeBuilderValue().getChildNameCount(), max);
     }
 
     @Override
     public @NotNull Iterable<String> getChildNodeNames() {
-        return getNodeValue().getChildNameList();
+        return getNodeBuilderValue().getChildNameList();
     }
 
     @Override
     public boolean hasChildNode(@NotNull String name) {
-        return getNodeValue().getChildNameList().contains(name);
+        return getNodeBuilderValue().getChildNameList().contains(name);
     }
 
     @Override
@@ -170,24 +163,24 @@ public class RemoteNodeBuilder implements NodeBuilder  {
 
     @Override
     public long getPropertyCount() {
-        return getNodeValue().getPropertyCount();
+        return getNodeBuilderValue().getPropertyCount();
     }
 
     @Override
     public @NotNull Iterable<? extends PropertyState> getProperties() {
-        return Iterables.transform(getNodeValue().getPropertyList(), context.getPropertyDeserializer()::toOakProperty);
+        return Iterables.transform(getNodeBuilderValue().getPropertyList(), context.getPropertyDeserializer()::toOakProperty);
     }
 
     @Override
     public boolean hasProperty(String name) {
-        return getNodeValue().getPropertyList().stream()
+        return getNodeBuilderValue().getPropertyList().stream()
                 .map(NodeValueProtos.Property::getName)
                 .anyMatch(Predicate.isEqual(name));
     }
 
     @Override
     public @Nullable PropertyState getProperty(String name) {
-        return getNodeValue().getPropertyList().stream()
+        return getNodeBuilderValue().getPropertyList().stream()
                 .filter(p -> name.equals(p.getName()))
                 .findFirst()
                 .map(context.getPropertyDeserializer()::toOakProperty)
@@ -263,9 +256,7 @@ public class RemoteNodeBuilder implements NodeBuilder  {
         diffBuilder.setNodeBuilderPath(getNodeBuilderPath());
         diffBuilder.getSetChildNodeBuilder()
                 .setChildName(name)
-                .getNodeStatePathBuilder()
-                    .setPath(remoteNodeState.getPath())
-                    .setNodeStateId(remoteNodeState.getNodeStateId());
+                .setNodeStateId(remoteNodeState.getNodeStateId());
 
         getChangeQueue().add(diffBuilder.build());
         return new RemoteNodeBuilder(this, name);

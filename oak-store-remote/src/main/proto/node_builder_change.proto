@@ -41,5 +41,5 @@ message RemoveNode {
 
 message SetChildNode {
     string childName = 1;
-    NodeStatePath nodeStatePath = 2;
+    NodeStateId nodeStateId = 2;
 }

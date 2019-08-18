@@ -27,18 +27,18 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 
 import java.util.Map;
 
+import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
+
 public class CheckpointService extends CheckpointServiceGrpc.CheckpointServiceImplBase {
 
-    private final NodeStateRepository nodeStateRepository;
+    private final RevisionableNodeStore nodeStore;
 
-    private final NodeStore nodeStore;
-
-    public CheckpointService(NodeStore nodeStore, NodeStateRepository nodeStateRepository) {
+    public CheckpointService(RevisionableNodeStore nodeStore) {
         this.nodeStore = nodeStore;
-        this.nodeStateRepository = nodeStateRepository;
     }
 
     public void createCheckpoint(CreateCheckpointRequest request, StreamObserver<CheckpointId> responseObserver) {
@@ -72,8 +72,7 @@ public class CheckpointService extends CheckpointServiceGrpc.CheckpointServiceIm
         if (nodeState == null) {
             responseObserver.onCompleted();
         } else {
-            long nodeStateId = nodeStateRepository.addNewNodeState(nodeState);
-            responseObserver.onNext(NodeStateId.newBuilder().setValue(nodeStateId).build());
+            responseObserver.onNext(getNodeStateId(nodeState));
             responseObserver.onCompleted();
         }
     }

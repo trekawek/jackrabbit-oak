@@ -18,7 +18,7 @@ package org.apache.jackrabbit.oak.remote.server;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,25 +30,22 @@ public class NodeStoreServer {
 
     private final NodeBuilderRepository nodeBuilderRepository;
 
-    private final NodeStateRepository nodeStateRepository;
-
-    private final NodeStore nodeStore;
+    private final RevisionableNodeStore nodeStore;
 
     private final Server server;
 
-    public NodeStoreServer(int port, NodeStore nodeStore) {
+    public NodeStoreServer(int port, RevisionableNodeStore nodeStore) {
         this(ServerBuilder.forPort(port), nodeStore);
     }
 
-    public NodeStoreServer(ServerBuilder<?> serverBuilder, NodeStore nodeStore) {
+    public NodeStoreServer(ServerBuilder<?> serverBuilder, RevisionableNodeStore nodeStore) {
         this.nodeStore = nodeStore;
         this.nodeBuilderRepository = new NodeBuilderRepository();
-        this.nodeStateRepository = new NodeStateRepository();
         this.server = serverBuilder
-                .addService(new CheckpointService(nodeStore, nodeStateRepository))
-                .addService(new NodeBuilderService(nodeStore::getBlob, nodeStateRepository, nodeBuilderRepository))
-                .addService(new NodeStateService(nodeStateRepository, nodeBuilderRepository))
-                .addService(new NodeStoreService(nodeStore, nodeStateRepository, nodeBuilderRepository))
+                .addService(new CheckpointService(nodeStore))
+                .addService(new NodeBuilderService(nodeStore::getBlob, nodeStore, nodeBuilderRepository))
+                .addService(new NodeStateService(nodeStore, nodeBuilderRepository))
+                .addService(new NodeStoreService(nodeStore, nodeBuilderRepository))
                 .build();
     }
 

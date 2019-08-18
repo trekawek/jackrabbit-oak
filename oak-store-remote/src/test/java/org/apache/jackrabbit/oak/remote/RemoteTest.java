@@ -5,6 +5,11 @@ import org.apache.jackrabbit.oak.plugins.memory.MemoryNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
+import org.apache.jackrabbit.oak.segment.file.FileStore;
+import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
+import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.blob.MemoryBlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -12,7 +17,9 @@ import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.io.IOException;
 import java.rmi.server.RemoteServer;
@@ -21,10 +28,16 @@ import static org.junit.Assert.assertEquals;
 
 public class RemoteTest {
 
+    @Rule
+    public TemporaryFolder folder = new TemporaryFolder();
+
     @Test
-    public void test() throws IOException, CommitFailedException {
-        MemoryNodeStore nodeStore = new MemoryNodeStore();
+    public void test() throws IOException, CommitFailedException, InvalidFileStoreVersionException {
         MemoryBlobStore blobStore = new MemoryBlobStore();
+
+        FileStore fs = FileStoreBuilder.fileStoreBuilder(folder.newFolder()).withBlobStore(blobStore).build();
+        SegmentNodeStore nodeStore = SegmentNodeStoreBuilders.builder(fs).build();
+
         NodeBuilder builder = nodeStore.getRoot().builder();
         builder.setProperty("foo", "bar");
         nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);

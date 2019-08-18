@@ -5,9 +5,11 @@ package org.apache.jackrabbit.oak.remote;
 option java_package = "org.apache.jackrabbit.oak.remote.proto";
 option java_outer_classname = "NodeValueProtos";
 
+import "node_state.proto";
+
 message NodeValue {
     repeated Property property = 1;
-    repeated string childName = 2;
+    repeated ChildNode child = 2;
     bool exists = 3;
     int32 hashCode = 4;
 }
@@ -25,6 +27,11 @@ enum PropertyType {
     WEAKREFERENCE = 9;
     URI = 10;
     DECIMAL = 11;
+}
+
+message ChildNode {
+    NodeStateId nodeStateId = 1;
+    string name = 2;
 }
 
 message Property {
