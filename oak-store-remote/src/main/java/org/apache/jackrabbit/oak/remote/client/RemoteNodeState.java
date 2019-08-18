@@ -126,34 +126,34 @@ public class RemoteNodeState extends AbstractNodeState {
                     .setBaseNodeState(remoteBase.getNodeStatePath())
                     .build();
             NodeStateDiffProtos.NodeStateDiff diffResult = context.getClient().getNodeStateService().compare(compareOp);
-            boolean stop = false;
+            boolean cont = true;
             for (NodeStateDiffEvent e : diffResult.getEventsList()) {
-                if (stop) {
+                if (!cont) {
                     break;
                 }
                 switch (e.getEventValueCase()) {
                     case PROPERTYADDED: {
                         NodeStateDiffProtos.PropertyAdded ev = e.getPropertyAdded();
-                        stop = diff.propertyAdded(context.getPropertyDeserializer().toOakProperty(ev.getAfter()));
+                        cont = diff.propertyAdded(context.getPropertyDeserializer().toOakProperty(ev.getAfter()));
                     }
                     break;
 
                     case PROPERTYCHANGED: {
                         NodeStateDiffProtos.PropertyChanged ev = e.getPropertyChanged();
-                        stop = diff.propertyChanged(context.getPropertyDeserializer().toOakProperty(ev.getBefore()), context.getPropertyDeserializer().toOakProperty(ev.getAfter()));
+                        cont = diff.propertyChanged(context.getPropertyDeserializer().toOakProperty(ev.getBefore()), context.getPropertyDeserializer().toOakProperty(ev.getAfter()));
                     }
                     break;
 
                     case PROPERTYDELETED: {
                         NodeStateDiffProtos.PropertyDeleted ev = e.getPropertyDeleted();
-                        stop = diff.propertyDeleted(context.getPropertyDeserializer().toOakProperty(ev.getBefore()));
+                        cont = diff.propertyDeleted(context.getPropertyDeserializer().toOakProperty(ev.getBefore()));
                     }
                     break;
 
                     case NODEADDED: {
                         NodeStateDiffProtos.NodeAdded ev = e.getNodeAdded();
                         context.addNodeStateId(ev.getAfter());
-                        stop = diff.childNodeAdded(ev.getName(), new RemoteNodeState(context, ev.getAfter()));
+                        cont = diff.childNodeAdded(ev.getName(), new RemoteNodeState(context, ev.getAfter()));
                     }
                     break;
 
@@ -161,19 +161,19 @@ public class RemoteNodeState extends AbstractNodeState {
                         NodeStateDiffProtos.NodeChanged ev = e.getNodeChanged();
                         context.addNodeStateId(ev.getBefore());
                         context.addNodeStateId(ev.getAfter());
-                        stop = diff.childNodeChanged(ev.getName(), new RemoteNodeState(context, ev.getBefore()), new RemoteNodeState(context, ev.getAfter()));
+                        cont = diff.childNodeChanged(ev.getName(), new RemoteNodeState(context, ev.getBefore()), new RemoteNodeState(context, ev.getAfter()));
                     }
                     break;
 
                     case NODEDELETED: {
                         NodeStateDiffProtos.NodeDeleted ev = e.getNodeDeleted();
                         context.addNodeStateId(ev.getBefore());
-                        stop = diff.childNodeDeleted(ev.getName(), new RemoteNodeState(context, ev.getBefore()));
+                        cont = diff.childNodeDeleted(ev.getName(), new RemoteNodeState(context, ev.getBefore()));
                     }
                     break;
                 }
             }
-            return !stop;
+            return cont;
         } else {
             return super.compareAgainstBaseState(base, diff);
         }

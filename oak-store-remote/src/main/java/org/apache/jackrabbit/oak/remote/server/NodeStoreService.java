@@ -22,6 +22,7 @@ import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos.ChangeEvent;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
+import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -74,6 +75,37 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
             responseObserver.onNext(nodeStateId);
             responseObserver.onCompleted();
         } catch (CommitFailedException | RemoteNodeStoreException e) {
+            log.error("Can't merge", e);
+            responseObserver.onError(e);
+        }
+    }
+
+    public void rebase(NodeBuilderId request, StreamObserver<NodeStateId> responseObserver) {
+        try {
+            NodeBuilder builder = nodeBuilderRepository.getBuilder(request);
+            NodeState nodeState = nodeStore.rebase(builder);
+            NodeStateId nodeStateId = NodeStateId.newBuilder()
+                    .setValue(nodeStateRepository.addNewNodeState(nodeState))
+                    .build();
+            responseObserver.onNext(nodeStateId);
+            responseObserver.onCompleted();
+        } catch (RemoteNodeStoreException e) {
+            log.error("Can't rebase", e);
+            responseObserver.onError(e);
+        }
+    }
+
+    public void reset(NodeBuilderId request, StreamObserver<NodeStateId> responseObserver) {
+        try {
+            NodeBuilder builder = nodeBuilderRepository.getBuilder(request);
+            NodeState nodeState = nodeStore.reset(builder);
+            NodeStateId nodeStateId = NodeStateId.newBuilder()
+                    .setValue(nodeStateRepository.addNewNodeState(nodeState))
+                    .build();
+            responseObserver.onNext(nodeStateId);
+            responseObserver.onCompleted();
+        } catch (RemoteNodeStoreException e) {
+            log.error("Can't reset", e);
             responseObserver.onError(e);
         }
     }

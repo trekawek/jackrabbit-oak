@@ -31,10 +31,14 @@ import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.jackrabbit.oak.remote.common.PropertySerializer.toProtoProperty;
 
 public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplBase {
+
+    private static final Logger log = LoggerFactory.getLogger(NodeStateService.class);
 
     private final NodeStateRepository nodeStateRepository;
 
@@ -60,8 +64,8 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't read node", e);
             responseObserver.onError(e);
-            return;
         }
     }
 
@@ -71,6 +75,7 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
         try {
             nodeState = nodeStateRepository.getNodeState(request);
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't create node builder", e);
             responseObserver.onError(e);
             return;
         }
@@ -94,8 +99,8 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
             responseObserver.onNext(BoolValue.newBuilder().setValue(nodeState1.equals(nodeState2)).build());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't check equality", e);
             responseObserver.onError(e);
-            return;
         }
     }
 
@@ -162,6 +167,7 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
             responseObserver.onNext(diffBuilder.build());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't compare nodes", e);
             responseObserver.onError(e);
         }
 

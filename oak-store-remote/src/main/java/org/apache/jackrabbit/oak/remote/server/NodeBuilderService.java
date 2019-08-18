@@ -34,12 +34,16 @@ import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
 public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServiceImplBase {
+
+    private static final Logger log = LoggerFactory.getLogger(NodeBuilderService.class);
 
     private final NodeStateRepository nodeStateRepository;
 
@@ -72,6 +76,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
             responseObserver.onNext(builder.build());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't read node value", e);
             responseObserver.onError(e);
         }
     }
@@ -82,6 +87,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
         try {
             nodeBuilder = nodeBuilderRepository.getBuilder(request);
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't create node state", e);
             responseObserver.onError(e);
             return;
         }
@@ -98,6 +104,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
         try {
             nodeBuilder = nodeBuilderRepository.getBuilder(request);
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't create base node state", e);
             responseObserver.onError(e);
             return;
         }
@@ -124,6 +131,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
             }
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't move node", e);
             responseObserver.onError(e);
         }
     }
@@ -144,6 +152,7 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
             responseObserver.onNext(Empty.getDefaultInstance());
             responseObserver.onCompleted();
         } catch (RemoteNodeStoreException e) {
+            log.error("Can't apply changes", e);
             responseObserver.onError(e);
         }
     }
@@ -169,8 +178,12 @@ public class NodeBuilderService extends NodeBuilderServiceGrpc.NodeBuilderServic
 
             case SETCHILDNODE:
                 NodeBuilderChangeProtos.SetChildNode setChildNodeRequest = change.getSetChildNode();
-                NodeState nodeState = nodeStateRepository.getNodeState(setChildNodeRequest.getNodeStatePath());
-                nodeBuilder.setChildNode(setChildNodeRequest.getChildName(), nodeState);
+                if (setChildNodeRequest.hasNodeStatePath()) {
+                    NodeState nodeState = nodeStateRepository.getNodeState(setChildNodeRequest.getNodeStatePath());
+                    nodeBuilder.setChildNode(setChildNodeRequest.getChildName(), nodeState);
+                } else {
+                    nodeBuilder.setChildNode(setChildNodeRequest.getChildName());
+                }
                 break;
 
             case SETPROPERTY:
