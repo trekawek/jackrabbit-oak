@@ -19,13 +19,14 @@ package org.apache.jackrabbit.oak.remote.server;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.commons.PathUtils;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
+import org.apache.jackrabbit.oak.remote.common.PropertyDeserializer;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos.ChangeEvent;
+import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
-import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
@@ -38,18 +39,19 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
+import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getRevision;
 
 public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(NodeStoreService.class);
 
-    private final NodeBuilderRepository nodeBuilderRepository;
-
     private final RevisionableNodeStore nodeStore;
 
-    public NodeStoreService(RevisionableNodeStore nodeStore, NodeBuilderRepository nodeBuilderRepository) {
+    private final PropertyDeserializer deserializer;
+
+    public NodeStoreService(RevisionableNodeStore nodeStore) {
         this.nodeStore = nodeStore;
-        this.nodeBuilderRepository = nodeBuilderRepository;
+        this.deserializer = new PropertyDeserializer(blobId -> nodeStore.getBlob(blobId));
     }
 
     @Override
@@ -60,41 +62,56 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
     }
 
     @Override
-    public void merge(Commit request, StreamObserver<NodeStateId> responseObserver) {
-        try {
-            NodeBuilder builder = nodeBuilderRepository.getBuilder(request.getNodeBuilderId());
-            CommitInfo commitInfo = CommitInfoUtil.deserialize(request.getCommitInfo());
-            NodeState nodeState = nodeStore.merge(builder, EmptyHook.INSTANCE, commitInfo);
-            responseObserver.onNext(getNodeStateId(nodeState));
+    public synchronized void merge(Commit request, StreamObserver<NodeStateId> responseObserver) {
+        NodeState root = nodeStore.getRoot();
+
+        String currentRootRevision = getRevision(root);
+        if (!currentRootRevision.equals(request.getRootId().getRevision())) {
+            responseObserver.onNext(NodeStateId.getDefaultInstance());
             responseObserver.onCompleted();
-        } catch (CommitFailedException | RemoteNodeStoreException e) {
-            log.error("Can't merge", e);
+            return;
+        }
+
+        NodeBuilder builder = root.builder();
+        for (CommitProtos.NodeBuilderChange c : request.getChanges().getChangeList()) {
+            applyChange(builder, c);
+        }
+        try {
+            NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(request.getCommitInfo()));
+            responseObserver.onNext(getNodeStateId(newRoot));
+            responseObserver.onCompleted();
+        } catch (CommitFailedException e) {
             responseObserver.onError(e);
         }
     }
 
-    public void rebase(NodeBuilderId request, StreamObserver<NodeStateId> responseObserver) {
-        try {
-            NodeBuilder builder = nodeBuilderRepository.getBuilder(request);
-            NodeState nodeState = nodeStore.rebase(builder);
-            responseObserver.onNext(getNodeStateId(nodeState));
-            responseObserver.onCompleted();
-        } catch (RemoteNodeStoreException e) {
-            log.error("Can't rebase", e);
-            responseObserver.onError(e);
+    private void applyChange(NodeBuilder root, CommitProtos.NodeBuilderChange change) {
+        NodeBuilder nodeBuilder = getNodeBuilder(root, change.getNodeBuilderPath());
+        switch (change.getChangeCase()) {
+            case ADDNODE:
+                nodeBuilder.child(change.getAddNode().getChildName());
+                break;
+
+            case REMOVENODE:
+                nodeBuilder.getChildNode(change.getRemoveNode().getChildName()).remove();
+                break;
+
+            case REMOVEPROPERTY:
+                nodeBuilder.removeProperty(change.getRemoveProperty().getName());
+                break;
+
+            case SETPROPERTY:
+                nodeBuilder.setProperty(deserializer.toOakProperty(change.getSetProperty().getProperty()));
+                break;
         }
     }
 
-    public void reset(NodeBuilderId request, StreamObserver<NodeStateId> responseObserver) {
-        try {
-            NodeBuilder builder = nodeBuilderRepository.getBuilder(request);
-            NodeState nodeState = nodeStore.reset(builder);
-            responseObserver.onNext(getNodeStateId(nodeState));
-            responseObserver.onCompleted();
-        } catch (RemoteNodeStoreException e) {
-            log.error("Can't reset", e);
-            responseObserver.onError(e);
+    private NodeBuilder getNodeBuilder(NodeBuilder root, String nodeBuilderPath) {
+        NodeBuilder builder = root;
+        for (String el : PathUtils.elements(nodeBuilderPath)) {
+            builder = builder.getChildNode(el);
         }
+        return builder;
     }
 
     @Override

@@ -20,8 +20,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc.CheckpointServiceBlockingStub;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderServiceGrpc.NodeBuilderServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc.NodeStateServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
@@ -34,8 +32,6 @@ public class RemoteNodeStoreClient {
     private final ManagedChannel channel;
 
     private final CheckpointServiceBlockingStub checkpointService;
-
-    private final NodeBuilderServiceBlockingStub nodeBuilderService;
 
     private final NodeStateServiceBlockingStub nodeStateService;
 
@@ -50,7 +46,6 @@ public class RemoteNodeStoreClient {
     public RemoteNodeStoreClient(ManagedChannelBuilder<?> channelBuilder) {
         channel = channelBuilder.build();
         checkpointService = CheckpointServiceGrpc.newBlockingStub(channel);
-        nodeBuilderService = NodeBuilderServiceGrpc.newBlockingStub(channel);
         nodeStateService = NodeStateServiceGrpc.newBlockingStub(channel);
         nodeStoreService = NodeStoreServiceGrpc.newBlockingStub(channel);
         nodeStoreAsyncService = NodeStoreServiceGrpc.newStub(channel);
@@ -58,10 +53,6 @@ public class RemoteNodeStoreClient {
 
     public CheckpointServiceBlockingStub getCheckpointService() {
         return checkpointService;
-    }
-
-    public NodeBuilderServiceBlockingStub getNodeBuilderService() {
-        return nodeBuilderService;
     }
 
     public NodeStateServiceBlockingStub getNodeStateService() {
