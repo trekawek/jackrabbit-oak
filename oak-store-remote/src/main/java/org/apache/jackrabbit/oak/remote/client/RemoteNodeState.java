@@ -20,7 +20,6 @@ import com.google.common.collect.Iterables;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos.NodeStateDiffEvent;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos;
@@ -86,9 +85,7 @@ public class RemoteNodeState extends AbstractNodeState {
 
     @Override
     public @NotNull NodeBuilder builder() {
-        NodeBuilderProtos.NodeBuilderId builderId = context.getClient().getNodeStateService().createNodeBuilder(id);
-        context.addNodeBuilderId(builderId);
-        return new RemoteNodeBuilder(context, builderId);
+        return new RemoteNodeBuilder(context, this);
     }
 
     @Override
@@ -100,7 +97,14 @@ public class RemoteNodeState extends AbstractNodeState {
     public boolean equals(Object that) {
         if (this == that) {
             return true;
-        } else if (that instanceof RemoteNodeState) {
+        } else if (that instanceof NodeState && fastEquals((NodeState) that)) {
+            return true;
+        }
+        return super.equals(that);
+    }
+
+    boolean fastEquals(NodeState that) {
+        if (that instanceof RemoteNodeState) {
             RemoteNodeState remoteThat = (RemoteNodeState) that;
             if (id.equals(remoteThat.id)) {
                 return true;
@@ -112,7 +116,7 @@ public class RemoteNodeState extends AbstractNodeState {
                 return context.getClient().getNodeStateService().equals(pair).getValue();
             }
         }
-        return super.equals(that);
+        return false;
     }
 
     @Override

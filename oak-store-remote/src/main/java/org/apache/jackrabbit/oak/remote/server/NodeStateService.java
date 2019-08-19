@@ -20,7 +20,6 @@ import com.google.protobuf.BoolValue;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.remote.common.PropertySerializer;
-import org.apache.jackrabbit.oak.remote.proto.NodeBuilderProtos.NodeBuilderId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.CompareNodeStateOp;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
@@ -31,23 +30,16 @@ import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.jackrabbit.oak.remote.common.PropertySerializer.toProtoProperty;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
 
 public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplBase {
 
-    private static final Logger log = LoggerFactory.getLogger(NodeStateService.class);
-
     private final RevisionableNodeStore nodeStore;
 
-    private final NodeBuilderRepository nodeBuilderRepository;
-
-    public NodeStateService(RevisionableNodeStore nodeStore, NodeBuilderRepository nodeBuilderRepository) {
+    public NodeStateService(RevisionableNodeStore nodeStore) {
         this.nodeStore = nodeStore;
-        this.nodeBuilderRepository = nodeBuilderRepository;
     }
 
     @Override
@@ -65,14 +57,6 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
             builder.addProperty(toProtoProperty(p));
         }
         responseObserver.onNext(builder.build());
-        responseObserver.onCompleted();
-    }
-
-    @Override
-    public void createNodeBuilder(NodeStateId request, StreamObserver<NodeBuilderId> responseObserver) {
-        NodeState nodeState = nodeStore.getNodeByRevision(request.getRevision());
-        long nodeBuilderId = nodeBuilderRepository.addNewNodeState(nodeState.builder());
-        responseObserver.onNext(NodeBuilderId.newBuilder().setValue(nodeBuilderId).build());
         responseObserver.onCompleted();
     }
 

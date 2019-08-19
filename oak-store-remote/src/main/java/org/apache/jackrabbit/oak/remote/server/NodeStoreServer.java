@@ -28,8 +28,6 @@ public class NodeStoreServer {
 
     private static final Logger log = LoggerFactory.getLogger(NodeStoreServer.class);
 
-    private final NodeBuilderRepository nodeBuilderRepository;
-
     private final RevisionableNodeStore nodeStore;
 
     private final Server server;
@@ -40,12 +38,10 @@ public class NodeStoreServer {
 
     public NodeStoreServer(ServerBuilder<?> serverBuilder, RevisionableNodeStore nodeStore) {
         this.nodeStore = nodeStore;
-        this.nodeBuilderRepository = new NodeBuilderRepository();
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore))
-                .addService(new NodeBuilderService(nodeStore::getBlob, nodeStore, nodeBuilderRepository))
-                .addService(new NodeStateService(nodeStore, nodeBuilderRepository))
-                .addService(new NodeStoreService(nodeStore, nodeBuilderRepository))
+                .addService(new NodeStateService(nodeStore))
+                .addService(new NodeStoreService(nodeStore))
                 .build();
     }
 

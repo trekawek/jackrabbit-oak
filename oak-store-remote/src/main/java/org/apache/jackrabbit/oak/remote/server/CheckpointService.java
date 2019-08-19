@@ -26,7 +26,6 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos.CreateCheckpointR
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 
 import java.util.Map;
