@@ -31,13 +31,14 @@ import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
+import org.apache.jackrabbit.oak.spi.state.RevisionableNodeState;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public class RemoteNodeState extends AbstractNodeState {
+public class RemoteNodeState extends AbstractNodeState implements RevisionableNodeState {
 
     private final RemoteNodeStoreContext context;
 
@@ -52,7 +53,7 @@ public class RemoteNodeState extends AbstractNodeState {
     public RemoteNodeState(RemoteNodeStoreContext context, NodeStateId id) {
         this.context = context;
         this.parent = null;
-        this.name = "/";
+        this.name = null;
         this.nodeValue = null;
         this.id = id;
     }
@@ -120,6 +121,20 @@ public class RemoteNodeState extends AbstractNodeState {
         } else if (that instanceof NodeState && fastEquals((NodeState) that)) {
             return true;
         }
+        if (that instanceof RemoteNodeState) {
+            RemoteNodeState remoteThat = (RemoteNodeState) that;
+            if (Strings.isNullOrEmpty(getNodeStateId().getRevision()) || Strings.isNullOrEmpty(remoteThat.getNodeStateId().getRevision())) {
+                return false;
+            }
+            if (context == remoteThat.context) {
+                NodeStateProtos.NodeStatePathPair pair = NodeStateProtos.NodeStatePathPair.newBuilder()
+                        .setNodeState1(getNodeStateId())
+                        .setNodeState2(remoteThat.getNodeStateId())
+                        .build();
+                return context.getClient().getNodeStateService().equals(pair).getValue();
+            }
+        }
+
         return super.equals(that);
     }
 
@@ -131,16 +146,6 @@ public class RemoteNodeState extends AbstractNodeState {
             }
             if (getNodeStateId().equals(remoteThat.getNodeStateId())) {
                 return true;
-            }
-            if (Strings.isNullOrEmpty(getNodeStateId().getRevision()) || Strings.isNullOrEmpty(remoteThat.getNodeStateId().getRevision())) {
-                return false;
-            }
-            if (context == remoteThat.context) {
-                NodeStateProtos.NodeStatePathPair pair = NodeStateProtos.NodeStatePathPair.newBuilder()
-                        .setNodeState1(getNodeStateId())
-                        .setNodeState2(remoteThat.getNodeStateId())
-                        .build();
-                return context.getClient().getNodeStateService().equals(pair).getValue();
             }
         }
         return false;
@@ -211,7 +216,7 @@ public class RemoteNodeState extends AbstractNodeState {
                     if (Strings.isNullOrEmpty(getNodeStateId().getRevision())) {
                         nodeValue = NodeValue.newBuilder().setExists(false).build();
                     } else {
-                        nodeValue = context.getClient().getNodeStateService().getNodeValue(getNodeStateId());
+                        nodeValue = context.loadNodeValue(getNodeStateId());
                     }
                 }
             }
@@ -234,4 +239,8 @@ public class RemoteNodeState extends AbstractNodeState {
         return id;
     }
 
+    @Override
+    public String getRevision() {
+        return getNodeStateId().getRevision();
+    }
 }
