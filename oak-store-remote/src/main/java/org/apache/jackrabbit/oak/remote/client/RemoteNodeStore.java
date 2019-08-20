@@ -16,6 +16,7 @@
  */
 package org.apache.jackrabbit.oak.remote.client;
 
+import com.google.common.base.Strings;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
@@ -112,57 +113,93 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     }
 
     @Override
-    public @NotNull NodeState merge(@NotNull NodeBuilder builder, @NotNull CommitHook commitHook, @NotNull CommitInfo info) throws CommitFailedException {
+    public synchronized @NotNull NodeState merge(@NotNull NodeBuilder builder, @NotNull CommitHook commitHook, @NotNull CommitInfo info) throws CommitFailedException {
         RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
-        NodeState newState = rebase(nodeBuilder);
-        NodeState rootState = nodeBuilder.getBaseState();
-        NodeState afterHooks = commitHook.processCommit(rootState, newState, info);
+        NodeState head = nodeBuilder.getNodeState();
+        NodeState base = nodeBuilder.getBaseState();
 
-        AtomicReference<NodeStateId> id = new AtomicReference<>();
-        Object monitor = new Object();
-        StreamObserver<CommitProtos.CommitEvent> observer = client.getNodeStoreAsyncService().merge(new StreamObserver<NodeStateId>() {
-            @Override
-            public void onNext(NodeStateId nodeStateId) {
-                id.set(nodeStateId);
+        CommitFailedException ex = null;
+        for (int i = 0; i < 5; i++) {
+            RemoteNodeState rootState = getRoot();
+
+            if (!rootState.fastEquals(nodeBuilder.getBaseState())) {
+                nodeBuilder.reset(rootState);
+                head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
+            }
+            NodeState afterHooks;
+            try {
+                afterHooks = commitHook.processCommit(nodeBuilder.getBaseState(), nodeBuilder.getNodeState(), info);
+            } catch (CommitFailedException e) {
+                log.warn("Hooks failed", e);
+                ex = e;
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e1) {
+                    log.error("Interrupted", e1);
+                }
+                continue;
             }
 
-            @Override
-            public void onError(Throwable throwable) {
-            }
+            AtomicReference<NodeStateId> id = new AtomicReference<>();
+            Object monitor = new Object();
+            StreamObserver<CommitProtos.CommitEvent> observer = client.getNodeStoreAsyncService().merge(new StreamObserver<NodeStateId>() {
+                @Override
+                public void onNext(NodeStateId nodeStateId) {
+                    id.set(nodeStateId);
+                }
 
-            @Override
-            public void onCompleted() {
-                synchronized (monitor) {
-                    monitor.notify();
+                @Override
+                public void onError(Throwable throwable) {
+                }
+
+                @Override
+                public void onCompleted() {
+                    synchronized (monitor) {
+                        monitor.notify();
+                    }
+                }
+            });
+            observer.onNext(CommitProtos.CommitEvent.newBuilder().setCommit(createCommitObject(info, rootState)).build());
+            afterHooks.compareAgainstBaseState(rootState, new NodeDiffSerializer(observer));
+            observer.onCompleted();
+            synchronized (monitor) {
+                try {
+                    monitor.wait();
+                } catch (InterruptedException e) {
+                    log.error("Interrupted", e);
+                    throw new IllegalStateException(e);
                 }
             }
-        });
+            if (Strings.isNullOrEmpty(id.get().getRevision())) {
+                log.warn("Rebased to outdated root state, retrying");
+                ex = new CommitFailedException(CommitFailedException.MERGE, 1, "Can't merge, revision on remote has been updated");
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    log.error("Interrupted", e);
+                }
 
-        observer.onNext(CommitProtos.CommitEvent.newBuilder().setCommit(createCommitObject(info, (RemoteNodeState) rootState)).build());
-        afterHooks.compareAgainstBaseState(rootState, new NodeDiffSerializer(observer));
-        observer.onCompleted();
-        synchronized (monitor) {
-            try {
-                monitor.wait();
-            } catch (InterruptedException e) {
-                log.error("Interrupted", e);
-                throw new IllegalStateException(e);
+                continue;
             }
+            NodeState mergedRoot = createNodeState(id.get());
+            nodeBuilder.reset(mergedRoot);
+            return mergedRoot;
         }
-        return createNodeState(id.get());
+        throw ex;
     }
 
     @Override
     public @NotNull NodeState rebase(@NotNull NodeBuilder builder) {
         RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
-        RemoteNodeState root = getRoot();
-        NodeState before = nodeBuilder.getBaseState();
-        if (!root.fastEquals(before)) {
-            NodeState after = nodeBuilder.getNodeState();
-            nodeBuilder.reset(root);
-            after.compareAgainstBaseState(before, new ConflictAnnotatingRebaseDiff(nodeBuilder));
+        NodeState head = nodeBuilder.getNodeState();
+        NodeState base = nodeBuilder.getBaseState();
+        RemoteNodeState newBase = getRoot();
+        if (!newBase.fastEquals(base)) {
+            nodeBuilder.reset(newBase);
+            head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
+            head = nodeBuilder.getNodeState();
         }
-        return nodeBuilder.getNodeState();
+        return head;
     }
 
     @Override

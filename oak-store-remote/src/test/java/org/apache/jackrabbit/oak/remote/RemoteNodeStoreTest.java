@@ -1,13 +1,24 @@
 package org.apache.jackrabbit.oak.remote;
 
+import org.apache.jackrabbit.oak.Oak;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.Type;
+import org.apache.jackrabbit.oak.jcr.Jcr;
+import org.apache.jackrabbit.oak.plugins.commit.ConflictHook;
+import org.apache.jackrabbit.oak.plugins.commit.ConflictValidator;
+import org.apache.jackrabbit.oak.plugins.commit.ConflictValidatorProvider;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.commit.EditorHook;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 
+import javax.jcr.Repository;
+import javax.jcr.RepositoryException;
+import javax.jcr.Session;
+import javax.jcr.SimpleCredentials;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 
@@ -39,6 +50,24 @@ public class RemoteNodeStoreTest extends AbstractRemoteNodeStoreTest {
 
         assertEquals(10, remoteNodeStore.getRoot().getProperty("smallBlob").getValue(Type.BINARY).length());
         assertEquals(10240, remoteNodeStore.getRoot().getProperty("largeBlob").getValue(Type.BINARY).length());
+    }
+
+    @Test
+    public void testQuickChange() throws RepositoryException {
+        Repository repo = new Jcr(new Oak(remoteNodeStore)).createRepository();
+
+        for (int i = 0; i < 10; i++) {
+            Session session = repo.login(new SimpleCredentials("admin", "admin".toCharArray()));
+            try {
+                session.getRootNode().setProperty("foo", i);
+                session.save();
+            } finally {
+                session.logout();
+            }
+        }
+
+        Session session = repo.login(new SimpleCredentials("admin", "admin".toCharArray()));
+        assertEquals(9, session.getRootNode().getProperty("foo").getValue().getLong());
     }
 
 }
