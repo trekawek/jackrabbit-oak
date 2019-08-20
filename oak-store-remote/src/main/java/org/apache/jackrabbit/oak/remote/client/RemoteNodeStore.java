@@ -44,16 +44,21 @@ import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.apache.jackrabbit.oak.remote.common.PropertySerializer.toProtoProperty;
 
 public class RemoteNodeStore implements NodeStore, Closeable, Observable {
+
+    private static final Logger log = LoggerFactory.getLogger(RemoteNodeStore.class);
 
     private final RemoteNodeStoreClient client;
 
@@ -76,11 +81,9 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 NodeState root = createNodeState(changeEvent.getNodeStateId());
                 compositeObserver.contentChanged(root, CommitInfoUtil.deserialize(changeEvent.getCommitInfo()));
             }
-
             @Override
             public void onError(Throwable throwable) {
             }
-
             @Override
             public void onCompleted() {
             }
@@ -115,9 +118,38 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         NodeState rootState = nodeBuilder.getBaseState();
         NodeState afterHooks = commitHook.processCommit(rootState, newState, info);
 
-        Commit.Builder commitBuilder = createCommitObject(info, (RemoteNodeState) rootState, afterHooks);
-        NodeStateId id = client.getNodeStoreService().merge(commitBuilder.build());
-        return createNodeState(id);
+        AtomicReference<NodeStateId> id = new AtomicReference<>();
+        Object monitor = new Object();
+        StreamObserver<CommitProtos.CommitEvent> observer = client.getNodeStoreAsyncService().merge(new StreamObserver<NodeStateId>() {
+            @Override
+            public void onNext(NodeStateId nodeStateId) {
+                id.set(nodeStateId);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onCompleted() {
+                synchronized (monitor) {
+                    monitor.notify();
+                }
+            }
+        });
+
+        observer.onNext(CommitProtos.CommitEvent.newBuilder().setCommit(createCommitObject(info, (RemoteNodeState) rootState)).build());
+        afterHooks.compareAgainstBaseState(rootState, new NodeDiffSerializer(observer));
+        observer.onCompleted();
+        synchronized (monitor) {
+            try {
+                monitor.wait();
+            } catch (InterruptedException e) {
+                log.error("Interrupted", e);
+                throw new IllegalStateException(e);
+            }
+        }
+        return createNodeState(id.get());
     }
 
     @Override
@@ -143,7 +175,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private RemoteNodeBuilder assertRootBuilder(NodeBuilder builder) {
         if (!(builder instanceof RemoteNodeBuilder)) {
-            throw new IllegalArgumentException("Invalid node builder: " + builder);
+            throw new IllegalArgumentException("Invalid node builder: " + builder.getClass());
         }
         RemoteNodeBuilder nodeBuilder = (RemoteNodeBuilder) builder;
         if (!PathUtils.denotesRoot(nodeBuilder.getPath())) {
@@ -209,34 +241,38 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     }
 
     @NotNull
-    private CommitProtos.Commit.Builder createCommitObject(@NotNull CommitInfo info, RemoteNodeState root, NodeState newRootState) {
+    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, RemoteNodeState root) {
         Commit.Builder commitBuilder = Commit.newBuilder();
         commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
         commitBuilder.setRootId(root.getNodeStateId());
-        newRootState.compareAgainstBaseState(root, new NodeDiffSerializer(commitBuilder));
-        return commitBuilder;
+        return commitBuilder.build();
     }
 
     private static class NodeDiffSerializer implements NodeStateDiff {
 
-        private final Commit.Builder commitBuilder;
+        private final StreamObserver<CommitProtos.CommitEvent> observer;
 
         private final String path;
 
-        public NodeDiffSerializer(Commit.Builder commitBuilder) {
-            this.commitBuilder = commitBuilder;
+        private CommitProtos.CommitEvent.Builder eventBuilder;
+
+        public NodeDiffSerializer(StreamObserver<CommitProtos.CommitEvent> observer) {
+            this.observer = observer;
             this.path = "/";
         }
 
         public NodeDiffSerializer(NodeDiffSerializer parent, String name) {
-            this.commitBuilder = parent.commitBuilder;
+            this.observer = parent.observer;
             this.path = PathUtils.concat(parent.path, name);
         }
 
         private CommitProtos.NodeBuilderChange.Builder newChange() {
-            return commitBuilder.getChangesBuilder()
-                    .addChangeBuilder()
-                    .setNodeBuilderPath(path);
+            eventBuilder = CommitProtos.CommitEvent.newBuilder();
+            return eventBuilder.getChangeBuilder().setNodeBuilderPath(path);
+        }
+
+        private void apply() {
+            observer.onNext(eventBuilder.build());
         }
 
         @Override
@@ -244,6 +280,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             newChange()
                 .getSetPropertyBuilder()
                 .setProperty(toProtoProperty(after));
+            apply();
             return true;
         }
 
@@ -252,6 +289,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             newChange()
                     .getSetPropertyBuilder()
                     .setProperty(toProtoProperty(after));
+            apply();
             return true;
         }
 
@@ -260,6 +298,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             newChange()
                     .getRemovePropertyBuilder()
                     .setName(before.getName());
+            apply();
             return true;
         }
 
@@ -268,6 +307,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             newChange()
                     .getAddNodeBuilder()
                     .setChildName(name);
+            apply();
             EmptyNodeState.compareAgainstEmptyState(after, new NodeDiffSerializer(this, name));
             return true;
         }
@@ -283,6 +323,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             newChange()
                     .getRemoveNodeBuilder()
                     .setChildName(name);
+            apply();
             return true;
         }
     }

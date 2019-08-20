@@ -47,5 +47,6 @@ message PropertyValue {
         int64 longValue = 2;
         double doubleValue = 3;
         bool boolValue = 4;
+        bytes binaryValue = 5;
     }
 }
