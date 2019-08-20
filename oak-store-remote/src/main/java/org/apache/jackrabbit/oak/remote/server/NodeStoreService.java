@@ -20,13 +20,16 @@ import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.commons.PathUtils;
+import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
 import org.apache.jackrabbit.oak.remote.common.PropertyDeserializer;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos.ChangeEvent;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
+import org.apache.jackrabbit.oak.remote.proto.CommitProtos.CommitEvent;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
+import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
@@ -38,6 +41,8 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.IOException;
 
+import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
+import static org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc.getMergeMethod;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getRevision;
 
@@ -49,9 +54,9 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
 
     private final PropertyDeserializer deserializer;
 
-    public NodeStoreService(RevisionableNodeStore nodeStore) {
+    public NodeStoreService(RevisionableNodeStore nodeStore, BlobStore blobStore) {
         this.nodeStore = nodeStore;
-        this.deserializer = new PropertyDeserializer(blobId -> nodeStore.getBlob(blobId));
+        this.deserializer = new PropertyDeserializer(blobId -> new BlobStoreBlob(blobStore, blobId));
     }
 
     @Override
@@ -61,29 +66,53 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
         responseObserver.onCompleted();
     }
 
-    @Override
-    public synchronized void merge(Commit request, StreamObserver<NodeStateId> responseObserver) {
+    public StreamObserver<CommitEvent> merge(StreamObserver<NodeStateId> responseObserver) {
         NodeState root = nodeStore.getRoot();
-
-        String currentRootRevision = getRevision(root);
-        if (!currentRootRevision.equals(request.getRootId().getRevision())) {
-            responseObserver.onNext(NodeStateId.getDefaultInstance());
-            responseObserver.onCompleted();
-            return;
-        }
-
         NodeBuilder builder = root.builder();
-        for (CommitProtos.NodeBuilderChange c : request.getChanges().getChangeList()) {
-            applyChange(builder, c);
-        }
-        try {
-            NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(request.getCommitInfo()));
-            responseObserver.onNext(getNodeStateId(newRoot));
-            responseObserver.onCompleted();
-        } catch (CommitFailedException e) {
-            responseObserver.onError(e);
-        }
+        String currentRootRevision = getRevision(root);
+
+        return new StreamObserver<CommitEvent>() {
+
+            private Commit commit;
+
+            @Override
+            public void onNext(CommitEvent commitEvent) {
+                switch (commitEvent.getEventCase()) {
+                    case COMMIT:
+                        commit = commitEvent.getCommit();
+                        break;
+
+                    case CHANGE:
+                        applyChange(builder, commitEvent.getChange());
+                        break;
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onCompleted() {
+                synchronized (NodeStoreService.this) {
+                    if (!currentRootRevision.equals(commit.getRootId().getRevision())) {
+                        responseObserver.onNext(NodeStateId.getDefaultInstance());
+                        responseObserver.onCompleted();
+                        return;
+                    }
+
+                    try {
+                        NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(commit.getCommitInfo()));
+                        responseObserver.onNext(getNodeStateId(newRoot));
+                        responseObserver.onCompleted();
+                    } catch (CommitFailedException e) {
+                        responseObserver.onError(e);
+                    }
+                }
+            }
+        };
     }
+
 
     private void applyChange(NodeBuilder root, CommitProtos.NodeBuilderChange change) {
         NodeBuilder nodeBuilder = getNodeBuilder(root, change.getNodeBuilderPath());

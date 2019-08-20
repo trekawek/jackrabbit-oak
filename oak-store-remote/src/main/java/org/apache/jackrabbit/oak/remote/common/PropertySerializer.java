@@ -16,14 +16,20 @@
  */
 package org.apache.jackrabbit.oak.remote.common;
 
+import com.google.protobuf.ByteString;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 
 public final class PropertySerializer {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PropertySerializer.class);
 
     private PropertySerializer() {
     }
@@ -53,7 +59,16 @@ public final class PropertySerializer {
     private static NodeValueProtos.PropertyValue toProtoPropertyValue(Type<?> type, Object value) {
         NodeValueProtos.PropertyValue.Builder builder = NodeValueProtos.PropertyValue.newBuilder();
         if (value instanceof Blob) {
-            builder.setStringValue(((Blob) value).getContentIdentity());
+            String blobId = ((Blob) value).getContentIdentity();
+            if (blobId == null) {
+                try {
+                    builder.setBinaryValue(ByteString.readFrom(((Blob) value).getNewStream()));
+                } catch (IOException e) {
+                    LOG.error("Can't read blob", e);
+                }
+            } else {
+                builder.setStringValue(blobId);
+            }
         } else if (value instanceof String) {
             builder.setStringValue((String) value);
         } else if (value instanceof Double) {

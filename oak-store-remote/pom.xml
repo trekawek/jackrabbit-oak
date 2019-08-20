@@ -47,9 +47,53 @@
         <configuration>
           <instructions>
             <Import-Package>
-              <!-- OAK-7182 -->${guava.osgi.import},
+              !org.apache.jackrabbit.oak.segment*,
+              !com.google.errorprone.annotations,
+              !com.google.errorprone.annotations.concurrent,
+              !com.google.protobuf.nano,
+              !com.google.rpc,
+              !com.jcraft.jzlib,
+              !com.ning.compress,
+              !com.ning.compress.lzf,
+              !com.ning.compress.lzf.util,
+              !javax.annotation,
+              !lzma.sdk,
+              !lzma.sdk.lzma,
+              !net.jpountz.lz4,
+              !net.jpountz.xxhash,
+              !org.apache.logging.log4j,
+              !org.apache.logging.log4j.message,
+              !org.apache.logging.log4j.spi,
+              !org.bouncycastle.asn1.x500,
+              !org.bouncycastle.cert,
+              !org.bouncycastle.cert.jcajce,
+              !org.bouncycastle.jce.provider,
+              !org.bouncycastle.operator,
+              !org.bouncycastle.operator.jcajce,
+              !org.checkerframework.checker.nullness.qual,
+              !org.conscrypt,
+              !org.eclipse.jetty.alpn,
+              !org.eclipse.jetty.npn,
+              !org.jboss.marshalling,
+              !sun.misc,
+              !sun.security.util,
+              !sun.security.x509,
               *
             </Import-Package>
+            <Embed-Dependency>
+              grpc-netty-shaded,
+              grpc-protobuf,
+              grpc-stub,
+              grpc-api,
+              grpc-core,
+              grpc-protobuf-lite,
+              grpc-context,
+              opencensus-api,
+              opencensus-contrib-grpc-metrics,
+              protobuf-java,
+              perfmark-api,
+              guava
+            </Embed-Dependency>
           </instructions>
         </configuration>
       </plugin>
@@ -78,6 +122,27 @@
               <goal>compile</goal>
               <goal>compile-custom</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>server</shadedClassifierName>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>org.apache.jackrabbit.oak.remote.server.Main</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -129,7 +194,23 @@
       <version>${project.version}</version>
     </dependency>
 
+    <!-- Server dependencies -->
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>oak-segment-tar</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-core</artifactId>
+    </dependency>
+
     <!-- General utility libraries -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>26.0-jre</version>
+    </dependency>
     <dependency>
       <groupId>javax.annotation</groupId>
       <artifactId>javax.annotation-api</artifactId>
@@ -153,10 +234,64 @@
       <version>1.22.1</version>
     </dependency>
 
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-api</artifactId>
+      <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-core</artifactId>
+      <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-context</artifactId>
+      <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf-lite</artifactId>
+      <version>1.22.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.protobuf</groupId>
+          <artifactId>protobuf-lite</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>io.opencensus</groupId>
+      <artifactId>opencensus-api</artifactId>
+      <version>0.21.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.opencensus</groupId>
+      <artifactId>opencensus-contrib-grpc-metrics</artifactId>
+      <version>0.21.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>3.7.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.perfmark</groupId>
+      <artifactId>perfmark-api</artifactId>
+      <version>0.16.0</version>
+    </dependency>
+
     <!-- Logging -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <!-- for the server purposes -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
     </dependency>
 
     <!-- Nullability annotations -->
@@ -174,22 +309,6 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>ch.qos.logback</groupId>
-      <artifactId>logback-classic</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.jackrabbit</groupId>
-      <artifactId>oak-segment-tar</artifactId>
-      <version>${project.version}</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>io.dropwizard.metrics</groupId>
-      <artifactId>metrics-core</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

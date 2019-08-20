@@ -112,6 +112,8 @@ public class RemoteStoreFixture extends NodeStoreFixture {
 
         private final RemoteNodeStore remoteNs;
 
+        private final BlobStore blobStore;
+
         public RemoteNodeStoreInstance(String name, BlobStore blobStore, boolean startServer) throws IOException, InvalidFileStoreVersionException {
             if (startServer) {
                 tempDir = Files.createTempDir();
@@ -123,12 +125,13 @@ public class RemoteStoreFixture extends NodeStoreFixture {
                 fs = null;
                 server = null;
             }
+            this.blobStore = blobStore;
             remoteNs = createRemoteNs(name, blobStore);
         }
 
-        public static NodeStoreServer createServer(String name, SegmentNodeStore nodeStore) throws IOException {
+        public NodeStoreServer createServer(String name, SegmentNodeStore nodeStore) throws IOException {
             InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
-            NodeStoreServer server = new NodeStoreServer(inProcessServerBuilder, nodeStore);
+            NodeStoreServer server = new NodeStoreServer(inProcessServerBuilder, nodeStore, blobStore);
             server.start();
             return server;
         }

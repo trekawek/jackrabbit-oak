@@ -16,7 +16,7 @@ import "node_state_diff.proto";
 
 service NodeStoreService {
     rpc GetRoot (google.protobuf.Empty) returns (NodeStateId);
-    rpc Merge (Commit) returns (NodeStateId);
+    rpc Merge (stream CommitEvent) returns (NodeStateId);
     rpc Observe (stream google.protobuf.Empty) returns (stream ChangeEvent);
 }
 

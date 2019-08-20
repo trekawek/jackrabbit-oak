@@ -18,6 +18,8 @@ package org.apache.jackrabbit.oak.remote.common;
 
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.api.PropertyValue;
+import org.apache.jackrabbit.oak.plugins.memory.ArrayBasedBlob;
 import org.apache.jackrabbit.oak.plugins.memory.BinaryPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.BooleanPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.DecimalPropertyState;
@@ -33,13 +35,18 @@ import org.apache.jackrabbit.oak.plugins.memory.MultiLongPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.MultiStringPropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.StringPropertyState;
 import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PropertyDeserializer {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PropertyDeserializer.class);
 
     private final Function<String, Blob> blobProvider;
 
@@ -203,10 +210,24 @@ public class PropertyDeserializer {
     }
 
     private List<Blob> createBlobValues(NodeValueProtos.Property property) {
-        return property.getValueList().stream()
-                .map(NodeValueProtos.PropertyValue::getStringValue)
-                .map(blobProvider)
-                .collect(Collectors.toList());
+        List<Blob> blobs = new ArrayList<>();
+        for (NodeValueProtos.PropertyValue val : property.getValueList()) {
+            switch (val.getValueCase()) {
+                case STRINGVALUE:
+                    blobs.add(blobProvider.apply(val.getStringValue()));
+                    break;
+
+                case BINARYVALUE:
+                    blobs.add(new ArrayBasedBlob(val.getBinaryValue().toByteArray()));
+                    break;
+
+                default:
+                    LOG.error("Can't read blob from property {}", property);
+                    blobs.add(new ArrayBasedBlob(new byte[0]));
+                    break;
+            }
+        }
+        return blobs;
     }
 
     private static List<BigDecimal> createDecimalValues(NodeValueProtos.Property property) {

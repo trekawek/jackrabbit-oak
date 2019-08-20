@@ -35,10 +35,9 @@ public final class CommitInfoUtil {
         ciBuilder.setIsExternal(info.isExternal());
         Map<String, String> commitInfoMap = new LinkedHashMap<>();
         for (Map.Entry<String, Object> e : info.getInfo().entrySet()) {
-            if (!(e.getValue() instanceof String)) {
-                throw new IllegalArgumentException("Only string values are allowed in the CommitInfo; " + e.getValue().getClass() + " given for " + e.getKey());
+            if ((e.getValue() instanceof String)) {
+                commitInfoMap.put(e.getKey(), (String) e.getValue());
             }
-            commitInfoMap.put(e.getKey(), (String) e.getValue());
         }
         ciBuilder.putAllCommitInfo(commitInfoMap);
         return ciBuilder.build();

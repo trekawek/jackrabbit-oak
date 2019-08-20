@@ -8,10 +8,16 @@ option java_outer_classname = "CommitProtos";
 import "node_state.proto";
 import "node_value.proto";
 
+message CommitEvent {
+    oneof event {
+        Commit commit = 1;
+        NodeBuilderChange change = 2;
+    }
+}
+
 message Commit {
-    NodeBuilderChangeList changes = 1;
-    CommitInfo commitInfo = 2;
-    NodeStateId rootId = 3;
+    CommitInfo commitInfo = 1;
+    NodeStateId rootId = 2;
 }
 
 message CommitInfo {
@@ -19,10 +25,6 @@ message CommitInfo {
     string userId = 2;
     map<string, string> commitInfo = 3;
     bool isExternal = 4;
-}
-
-message NodeBuilderChangeList {
-    repeated NodeBuilderChange change = 1;
 }
 
 message NodeBuilderChange {
