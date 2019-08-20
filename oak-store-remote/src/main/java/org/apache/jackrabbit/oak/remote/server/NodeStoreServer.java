@@ -43,6 +43,7 @@ public class NodeStoreServer {
                 .addService(new CheckpointService(nodeStore))
                 .addService(new NodeStateService(nodeStore))
                 .addService(new NodeStoreService(nodeStore, blobStore))
+                .addService(new LeaseService(nodeStore))
                 .build();
     }
 

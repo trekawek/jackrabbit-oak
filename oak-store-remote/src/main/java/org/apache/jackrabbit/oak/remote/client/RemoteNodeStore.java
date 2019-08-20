@@ -31,6 +31,7 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos.CreateCheckpointRequest;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
+import org.apache.jackrabbit.oak.remote.proto.LeaseProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
@@ -52,6 +53,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -71,11 +75,22 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private final StreamObserver observerStreamEvent;
 
+    private LeaseProtos.LeaseInfo leaseInfo;
+
+    private volatile LeaseProtos.ClusterView lastClusterView;
+
+    private ScheduledExecutorService leaseRenewProcess = Executors.newScheduledThreadPool(1);
+
     public RemoteNodeStore(RemoteNodeStoreClient client, BlobStore blobStore) {
         this.client = client;
         this.blobStore = blobStore;
         this.context = new RemoteNodeStoreContext(client, blobStore);
         this.compositeObserver = new CompositeObserver();
+
+        leaseInfo = client.getLeaseService().acquire(Empty.getDefaultInstance());
+        lastClusterView = client.getLeaseService().renew(leaseInfo);
+        leaseRenewProcess.scheduleAtFixedRate(() -> renewLease(), 2, 2, TimeUnit.SECONDS);
+
         observerStreamEvent = client.getNodeStoreAsyncService().observe(new StreamObserver<ChangeEventProtos.ChangeEvent>() {
             @Override
             public void onNext(ChangeEventProtos.ChangeEvent changeEvent) {
@@ -91,9 +106,22 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         });
     }
 
+    private void renewLease() {
+        LeaseProtos.ClusterView response = client.getLeaseService().renew(leaseInfo);
+        if (Strings.isNullOrEmpty(response.getId())) {
+            log.error("Lost the lease, acquiring a new one");
+            leaseInfo = client.getLeaseService().acquire(Empty.getDefaultInstance());
+            return;
+        }
+        lastClusterView = response;
+    }
+
     public void close() throws IOException {
         observerStreamEvent.onCompleted();
+        leaseRenewProcess.shutdown();
         try {
+            leaseRenewProcess.awaitTermination(1, TimeUnit.MINUTES);
+            this.client.getLeaseService().release(leaseInfo);
             this.client.shutdown();
         } catch (InterruptedException e) {
             throw new IOException(e);
@@ -283,6 +311,10 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
         commitBuilder.setRootId(root.getNodeStateId());
         return commitBuilder.build();
+    }
+
+    public LeaseProtos.ClusterView getLastClusterView() {
+        return lastClusterView;
     }
 
     private static class NodeDiffSerializer implements NodeStateDiff {

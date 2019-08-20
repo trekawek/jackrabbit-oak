@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "LeaseProtos";
+
+message LeaseInfo {
+    string token = 1;
+}
+
+message ClusterView {
+    int32 seq = 1;
+    bool final = 2;
+    string id = 3;
+    int32 me = 4;
+    repeated int32 active = 5;
+    repeated int32 deactivating = 6;
+    repeated int32 inactive = 7;
+}
