@@ -16,9 +16,11 @@
  */
 package org.apache.jackrabbit.oak.remote.server;
 
+import com.google.common.base.Strings;
 import com.google.protobuf.BoolValue;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.remote.common.PropertySerializer;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateDiffProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.CompareNodeStateOp;
@@ -44,7 +46,7 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
 
     @Override
     public void getNodeValue(NodeStateId request, StreamObserver<NodeValue> responseObserver) {
-        NodeState nodeState = nodeStore.getNodeByRevision(request.getRevision());
+        NodeState nodeState = getNodeStateById(request);
         NodeValue.Builder builder = NodeValue.newBuilder();
         builder.setExists(nodeState.exists());
         builder.setHashCode(nodeState.hashCode());
@@ -62,16 +64,16 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
 
     @Override
     public void equals(NodeStatePathPair request, StreamObserver<BoolValue> responseObserver) {
-        NodeState nodeState1 = nodeStore.getNodeByRevision(request.getNodeState1().getRevision());
-        NodeState nodeState2 = nodeStore.getNodeByRevision(request.getNodeState2().getRevision());
+        NodeState nodeState1 = getNodeStateById(request.getNodeState1());
+        NodeState nodeState2 = getNodeStateById(request.getNodeState2());
         responseObserver.onNext(BoolValue.newBuilder().setValue(nodeState1.equals(nodeState2)).build());
         responseObserver.onCompleted();
     }
 
     @Override
     public void compare(CompareNodeStateOp request, StreamObserver<NodeStateDiffProtos.NodeStateDiff> responseObserver) {
-        NodeState baseNodeState = nodeStore.getNodeByRevision(request.getBaseNodeState().getRevision());
-        NodeState nodeState = nodeStore.getNodeByRevision(request.getNodeState().getRevision());
+        NodeState baseNodeState = getNodeStateById(request.getBaseNodeState());
+        NodeState nodeState = getNodeStateById(request.getNodeState());
         NodeStateDiffProtos.NodeStateDiff.Builder diffBuilder = NodeStateDiffProtos.NodeStateDiff.newBuilder();
         nodeState.compareAgainstBaseState(baseNodeState, new NodeStateDiff() {
             @Override
@@ -129,5 +131,13 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
         });
         responseObserver.onNext(diffBuilder.build());
         responseObserver.onCompleted();
+    }
+
+    public NodeState getNodeStateById(NodeStateId nodeStateId) {
+        if (Strings.isNullOrEmpty(nodeStateId.getRevision())) {
+            return EmptyNodeState.MISSING_NODE;
+        } else {
+            return nodeStore.getNodeByRevision(nodeStateId.getRevision());
+        }
     }
 }
