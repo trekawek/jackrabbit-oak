@@ -179,7 +179,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         }
         RemoteNodeBuilder nodeBuilder = (RemoteNodeBuilder) builder;
         if (!PathUtils.denotesRoot(nodeBuilder.getPath())) {
-            throw new IllegalArgumentException("Not a root builder: " + builder);
+            throw new IllegalArgumentException("Not a root builder: " + builder.getClass());
         }
         return nodeBuilder;
     }

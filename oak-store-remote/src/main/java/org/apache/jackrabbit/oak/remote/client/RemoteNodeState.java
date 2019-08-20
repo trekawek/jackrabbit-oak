@@ -16,6 +16,7 @@
  */
 package org.apache.jackrabbit.oak.remote.client;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
@@ -127,7 +128,14 @@ public class RemoteNodeState extends AbstractNodeState {
             RemoteNodeState remoteThat = (RemoteNodeState) that;
             if (id != null && remoteThat.id != null && id.equals(remoteThat.id)) {
                 return true;
-            } else if (context == remoteThat.context) {
+            }
+            if (getNodeStateId().equals(remoteThat.getNodeStateId())) {
+                return true;
+            }
+            if (Strings.isNullOrEmpty(getNodeStateId().getRevision()) || Strings.isNullOrEmpty(remoteThat.getNodeStateId().getRevision())) {
+                return false;
+            }
+            if (context == remoteThat.context) {
                 NodeStateProtos.NodeStatePathPair pair = NodeStateProtos.NodeStatePathPair.newBuilder()
                         .setNodeState1(getNodeStateId())
                         .setNodeState2(remoteThat.getNodeStateId())
@@ -143,8 +151,8 @@ public class RemoteNodeState extends AbstractNodeState {
         if (base instanceof RemoteNodeState) {
             RemoteNodeState remoteBase = (RemoteNodeState) base;
             NodeStateProtos.CompareNodeStateOp compareOp = NodeStateProtos.CompareNodeStateOp.newBuilder()
-                    .setNodeState(id)
-                    .setBaseNodeState(remoteBase.id)
+                    .setNodeState(getNodeStateId())
+                    .setBaseNodeState(remoteBase.getNodeStateId())
                     .build();
             NodeStateDiffProtos.NodeStateDiff diffResult = context.getClient().getNodeStateService().compare(compareOp);
             boolean cont = true;
@@ -200,7 +208,7 @@ public class RemoteNodeState extends AbstractNodeState {
         if (nodeValue == null) {
             synchronized (this) {
                 if (nodeValue == null) {
-                    if (getNodeStateId().getRevision() == null) {
+                    if (Strings.isNullOrEmpty(getNodeStateId().getRevision())) {
                         nodeValue = NodeValue.newBuilder().setExists(false).build();
                     } else {
                         nodeValue = context.getClient().getNodeStateService().getNodeValue(getNodeStateId());
