@@ -25,12 +25,16 @@ import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.ReferencePolicy;
+import org.apache.jackrabbit.commons.SimpleValueFactory;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
 import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
+import org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo;
 import org.apache.jackrabbit.oak.spi.commit.ObserverTracker;
+import org.apache.jackrabbit.oak.spi.descriptors.GenericDescriptors;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStoreProvider;
 import org.apache.jackrabbit.oak.spi.whiteboard.Registration;
@@ -45,11 +49,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Dictionary;
+import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
 import java.util.Set;
 
 import static com.google.common.collect.Sets.newIdentityHashSet;
+import static org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo.getOrCreateId;
 
 @Component(policy = ConfigurationPolicy.REQUIRE, metatype = true)
 public class RemoteNodeStoreService {
@@ -79,7 +85,7 @@ public class RemoteNodeStoreService {
 
     private ServiceRegistration nsReg;
 
-    private Closer mbeanRegistrations;
+    private Closer registrations;
 
     private ObserverTracker observerTracker;
 
@@ -117,12 +123,14 @@ public class RemoteNodeStoreService {
 
         Whiteboard whiteboard = new OsgiWhiteboard(context.getBundleContext());
 
-        mbeanRegistrations = Closer.create();
+        registrations = Closer.create();
         registerMBean(whiteboard,
                 CheckpointMBean.class,
                 new RemoteCheckpointMBean(store),
                 CheckpointMBean.TYPE,
                 "Remote node store checkpoint management");
+
+        registerDescriptors(whiteboard, store);
 
         LOG.info("Registering the remote node store");
         nsReg = context.getBundleContext().registerService(
@@ -133,10 +141,26 @@ public class RemoteNodeStoreService {
                 props);
     }
 
-    private <T> void registerMBean(Whiteboard whiteboard,
-                                   Class<T> iface, T bean, String type, String name) {
+    private void registerDescriptors(Whiteboard whiteboard, RemoteNodeStore remoteNodeStore) {
+        GenericDescriptors clusterIdDesc = new GenericDescriptors();
+        clusterIdDesc.put(
+                ClusterRepositoryInfo.OAK_CLUSTERID_REPOSITORY_DESCRIPTOR_KEY,
+                new SimpleValueFactory().createValue(getOrCreateId(remoteNodeStore)),
+                true,
+                false
+        );
+        register(whiteboard, Descriptors.class, clusterIdDesc);
+        register(whiteboard, Descriptors.class, new RemoteNodeStoreDiscoveryLiteDescriptors(remoteNodeStore));
+    }
+
+    private <T> void register(Whiteboard whiteboard, Class<T> iface, T bean) {
+        Registration reg = whiteboard.register(iface, bean, new HashMap<>());
+        registrations.register(() -> reg.unregister());
+    }
+
+   private <T> void registerMBean(Whiteboard whiteboard, Class<T> iface, T bean, String type, String name) {
         Registration reg = WhiteboardUtils.registerMBean(whiteboard, iface, bean, type, name);
-        mbeanRegistrations.register(() -> reg.unregister());
+        registrations.register(() -> reg.unregister());
     }
 
     private void unregisterRemoteNodeStore() throws IOException {
@@ -145,9 +169,9 @@ public class RemoteNodeStoreService {
             nsReg.unregister();
             nsReg = null;
         }
-        if (mbeanRegistrations != null) {
-            mbeanRegistrations.close();
-            mbeanRegistrations = null;
+        if (registrations != null) {
+            registrations.close();
+            registrations = null;
         }
         if (observerTracker != null) {
             observerTracker.stop();
