@@ -41,8 +41,6 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.IOException;
 
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc.getMergeMethod;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getRevision;
 
@@ -106,6 +104,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
                         responseObserver.onNext(getNodeStateId(newRoot));
                         responseObserver.onCompleted();
                     } catch (CommitFailedException e) {
+                        log.error("Can't commit", e);
                         responseObserver.onError(e);
                     }
                 }
