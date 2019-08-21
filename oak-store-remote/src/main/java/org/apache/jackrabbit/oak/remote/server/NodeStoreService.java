@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getRevision;
@@ -145,12 +146,21 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
     @Override
     public StreamObserver<Empty> observe(StreamObserver<ChangeEvent> responseObserver) {
         Closeable closeable;
+        AtomicBoolean enabled = new AtomicBoolean(true);
         if (nodeStore instanceof Observable) {
             closeable = ((Observable) nodeStore).addObserver((root, info) -> {
+                if (!enabled.get()) {
+                    return;
+                }
                 ChangeEvent.Builder builder = ChangeEvent.newBuilder();
                 builder.setNodeStateId(getNodeStateId(root));
                 builder.setCommitInfo(CommitInfoUtil.serialize(info));
-                responseObserver.onNext(builder.build());
+                try {
+                    responseObserver.onNext(builder.build());
+                } catch (Exception e) {
+                    log.error("Can't send state", e);
+                    enabled.set(false);
+                }
             });
         } else {
             closeable = ()->{};
@@ -165,6 +175,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
             @Override
             public void onCompleted() {
                 try {
+                    enabled.set(false);
                     closeable.close();
                 } catch (IOException e) {
                     log.error("Can't close observer", e);
