@@ -20,19 +20,25 @@ import com.google.common.base.Strings;
 import com.google.common.io.Closer;
 import org.apache.jackrabbit.core.data.DataStoreException;
 import org.apache.jackrabbit.core.data.FileDataStore;
+import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.blob.cloud.azure.blobstorage.AzureDataStore;
+import org.apache.jackrabbit.oak.composite.InitialContentMigrator;
 import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
+import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
+import org.apache.jackrabbit.oak.spi.mount.MountInfoProvider;
+import org.apache.jackrabbit.oak.spi.mount.Mounts;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Properties;
 
 import static com.google.common.io.Files.createTempDir;
+import static java.util.Arrays.asList;
 
 public class Main {
 
@@ -60,6 +66,11 @@ public class Main {
 
             SegmentNodeStore delegate = SegmentNodeStoreBuilders.builder(fs).build();
 
+            String seedSegmentStore = getenv("seed_segmentstore");
+            if (!Strings.isNullOrEmpty(seedSegmentStore)) {
+                initialize(seedSegmentStore, delegate);
+            }
+
             System.out.println("Starting server. Press ^C to stop.");
             NodeStoreServer server = new NodeStoreServer(12300, delegate, blobStore);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop()));
@@ -69,6 +80,17 @@ public class Main {
             throw closer.rethrow(t);
         } finally {
             closer.close();
+        }
+    }
+
+    private static void initialize(String seedSegmentStore, SegmentNodeStore delegate) throws IOException, InvalidFileStoreVersionException, CommitFailedException {
+        File seedStore = new File(seedSegmentStore);
+        FileStore fs = FileStoreBuilder.fileStoreBuilder(seedStore).build();
+        try {
+            SegmentNodeStore seed = SegmentNodeStoreBuilders.builder(fs).build();
+            new InitialContentMigrator(delegate, seed, createMountInfoProvider().getMountByName("libs")).migrate();
+        } finally {
+            fs.close();
         }
     }
 
@@ -103,4 +125,16 @@ public class Main {
             return value;
         }
     }
+
+    public static MountInfoProvider createMountInfoProvider() {
+        return Mounts.newBuilder()
+                .mount("libs", true, asList(
+                        "/oak:index/*$" // pathsSupportingFragments
+                ), asList(
+                        "/libs",        // mountedPaths
+                        "/apps",
+                        "/jcr:system/rep:permissionStore/oak:mount-libs-crx.default"))
+                .build();
+    }
+
 }

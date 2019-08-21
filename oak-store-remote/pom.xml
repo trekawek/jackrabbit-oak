@@ -208,6 +208,11 @@
       <artifactId>oak-query-spi</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>oak-store-composite</artifactId>
+      <version>${project.version}</version>
+    </dependency>
 
     <!-- Server dependencies -->
     <dependency>
