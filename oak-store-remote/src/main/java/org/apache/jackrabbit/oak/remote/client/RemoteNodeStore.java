@@ -178,6 +178,10 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
                 @Override
                 public void onError(Throwable throwable) {
+                    log.error("Error occurred", throwable);
+                    synchronized (monitor) {
+                        monitor.notify();
+                    }
                 }
 
                 @Override
