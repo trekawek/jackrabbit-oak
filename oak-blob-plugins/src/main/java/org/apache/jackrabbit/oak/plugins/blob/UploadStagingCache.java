@@ -30,9 +30,13 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import com.google.common.base.Optional;
@@ -40,6 +44,7 @@ import com.google.common.cache.Weigher;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
+import com.google.common.util.concurrent.AbstractListeningExecutorService;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -407,13 +412,137 @@ public class UploadStagingCache implements Closeable {
                     result.setException(t);
                     retryQueue.add(id);
                 }
-            });
+            }, new SameThreadExecutorService());
             LOG.debug("File [{}] scheduled for upload [{}]", upload, result);
         } catch (Exception e) {
             LOG.error("Error staging file for upload [{}]", upload, e);
         }
         return result;
     }
+
+    private static class SameThreadExecutorService
+            extends AbstractListeningExecutorService {
+        /**
+         * Lock used whenever accessing the state variables
+         * (runningTasks, shutdown, terminationCondition) of the executor
+         */
+        private final Lock lock = new ReentrantLock();
+
+        /** Signaled after the executor is shutdown and running tasks are done */
+        private final Condition termination = lock.newCondition();
+
+        /*
+         * Conceptually, these two variables describe the executor being in
+         * one of three states:
+         *   - Active: shutdown == false
+         *   - Shutdown: runningTasks > 0 and shutdown == true
+         *   - Terminated: runningTasks == 0 and shutdown == true
+         */
+        private int runningTasks = 0;
+        private boolean shutdown = false;
+
+        @Override
+        public void execute(Runnable command) {
+            startTask();
+            try {
+                command.run();
+            } finally {
+                endTask();
+            }
+        }
+
+        @Override
+        public boolean isShutdown() {
+            lock.lock();
+            try {
+                return shutdown;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        @Override
+        public void shutdown() {
+            lock.lock();
+            try {
+                shutdown = true;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        // See sameThreadExecutor javadoc for unusual behavior of this method.
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown();
+            return Collections.emptyList();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            lock.lock();
+            try {
+                return shutdown && runningTasks == 0;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit)
+                throws InterruptedException {
+            long nanos = unit.toNanos(timeout);
+            lock.lock();
+            try {
+                for (;;) {
+                    if (isTerminated()) {
+                        return true;
+                    } else if (nanos <= 0) {
+                        return false;
+                    } else {
+                        nanos = termination.awaitNanos(nanos);
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        /**
+         * Checks if the executor has been shut down and increments the running
+         * task count.
+         *
+         * @throws RejectedExecutionException if the executor has been previously
+         *         shutdown
+         */
+        private void startTask() {
+            lock.lock();
+            try {
+                if (isShutdown()) {
+                    throw new RejectedExecutionException("Executor already shutdown");
+                }
+                runningTasks++;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        /**
+         * Decrements the running task count.
+         */
+        private void endTask() {
+            lock.lock();
+            try {
+                runningTasks--;
+                if (isTerminated()) {
+                    termination.signalAll();
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
 
     /**
      * Invalidate called externally.
