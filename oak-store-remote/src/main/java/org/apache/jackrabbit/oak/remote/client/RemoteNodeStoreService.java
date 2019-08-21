@@ -40,7 +40,6 @@ import org.apache.jackrabbit.oak.spi.state.NodeStoreProvider;
 import org.apache.jackrabbit.oak.spi.whiteboard.Registration;
 import org.apache.jackrabbit.oak.spi.whiteboard.Whiteboard;
 import org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils;
-import org.apache.jackrabbit.oak.stats.StatisticsProvider;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.ComponentContext;
@@ -52,9 +51,7 @@ import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
-import java.util.Set;
 
-import static com.google.common.collect.Sets.newIdentityHashSet;
 import static org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo.getOrCreateId;
 
 @Component(policy = ConfigurationPolicy.REQUIRE, metatype = true)
@@ -65,11 +62,9 @@ public class RemoteNodeStoreService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY, policy = ReferencePolicy.STATIC)
     private BlobStore blobStore;
 
-    @Reference
-    private StatisticsProvider statisticsProvider = StatisticsProvider.NOOP;
-
     @Property(label = "Remote server host",
-            description = "The host name of the remote server"
+            description = "The host name of the remote server",
+            value = "localhost"
     )
     private static final String REMOTE_HOST = "remoteHost";
 
@@ -79,25 +74,26 @@ public class RemoteNodeStoreService {
     )
     private static final String REMOTE_PORT = "remotePort";
 
+    @Property(label = "NodeStoreProvider role",
+            description = "Property indicating that this component will not register as a NodeStore but as a NodeStoreProvider with given role")
+    private static final String ROLE = "role";
+
     private ComponentContext context;
 
-    private Set<NodeStoreProvider> nodeStoresInUse = newIdentityHashSet();
-
-    private ServiceRegistration nsReg;
-
     private Closer registrations;
-
-    private ObserverTracker observerTracker;
 
     private String remoteHost;
 
     private int remotePort;
 
+    private String role;
+
     @Activate
     protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, CommitFailedException {
         this.context = context;
-        remoteHost = PropertiesUtil.toString(config.get(REMOTE_HOST), null);
+        remoteHost = PropertiesUtil.toString(config.get(REMOTE_HOST), "localhost");
         remotePort = PropertiesUtil.toInteger(config.get(REMOTE_PORT), 12300);
+        role = PropertiesUtil.toString(config.get(ROLE), null);
         registerRemoteNodeStore();
     }
 
@@ -106,39 +102,49 @@ public class RemoteNodeStoreService {
         unregisterRemoteNodeStore();
     }
 
-    private void registerRemoteNodeStore() throws IOException, CommitFailedException {
-        if (nsReg != null) {
-            return; // already registered
-        }
-
-        Dictionary<String, Object> props = new Hashtable<String, Object>();
-        props.put(Constants.SERVICE_PID, RemoteNodeStore.class.getName());
-        props.put("oak.nodestore.description", new String[] { "nodeStoreType=remote" } );
-
+    private void registerRemoteNodeStore() {
         RemoteNodeStoreClient client = new RemoteNodeStoreClient(remoteHost, remotePort);
         RemoteNodeStore store = new RemoteNodeStore(client, blobStore);
 
-        observerTracker = new ObserverTracker(store);
-        observerTracker.start(context.getBundleContext());
-
         Whiteboard whiteboard = new OsgiWhiteboard(context.getBundleContext());
-
         registrations = Closer.create();
-        registerMBean(whiteboard,
-                CheckpointMBean.class,
-                new RemoteCheckpointMBean(store),
-                CheckpointMBean.TYPE,
-                "Remote node store checkpoint management");
 
-        registerDescriptors(whiteboard, store);
+        if (role == null) {
+            ObserverTracker observerTracker = new ObserverTracker(store);
+            observerTracker.start(context.getBundleContext());
+            registrations.register(() -> observerTracker.stop());
 
-        LOG.info("Registering the remote node store");
-        nsReg = context.getBundleContext().registerService(
-                new String[]{
-                        NodeStore.class.getName()
-                },
-                store,
-                props);
+            registerMBean(whiteboard,
+                    CheckpointMBean.class,
+                    new RemoteCheckpointMBean(store),
+                    CheckpointMBean.TYPE,
+                    "Remote node store checkpoint management");
+
+            registerDescriptors(whiteboard, store);
+
+            Dictionary<String, Object> props = new Hashtable<String, Object>();
+            props.put(Constants.SERVICE_PID, RemoteNodeStore.class.getName());
+            props.put("oak.nodestore.description", new String[] { "nodeStoreType=remote" } );
+
+            LOG.info("Registering the remote node store");
+            ServiceRegistration nsReg = context.getBundleContext().registerService(
+                    NodeStore.class.getName(),
+                    store,
+                    props);
+            registrations.register(() -> nsReg.unregister());
+        } else {
+            registerDescriptors(whiteboard, store);
+
+            Dictionary<String, Object> props = new Hashtable<String, Object>();
+            props.put(NodeStoreProvider.ROLE, role);
+
+            LOG.info("Registering the remote node store provider");
+            ServiceRegistration nsReg = context.getBundleContext().registerService(
+                    NodeStoreProvider.class.getName(),
+                    (NodeStoreProvider) () -> store,
+                    props);
+            registrations.register(() -> nsReg.unregister());
+        }
     }
 
     private void registerDescriptors(Whiteboard whiteboard, RemoteNodeStore remoteNodeStore) {
@@ -164,19 +170,9 @@ public class RemoteNodeStoreService {
     }
 
     private void unregisterRemoteNodeStore() throws IOException {
-        if (nsReg != null) {
-            LOG.info("Unregistering the composite node store");
-            nsReg.unregister();
-            nsReg = null;
-        }
         if (registrations != null) {
             registrations.close();
             registrations = null;
         }
-        if (observerTracker != null) {
-            observerTracker.stop();
-            observerTracker = null;
-        }
-        nodeStoresInUse.clear();
     }
 }
