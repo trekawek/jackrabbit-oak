@@ -93,7 +93,9 @@
               opencensus-contrib-grpc-metrics,
               protobuf-java,
               perfmark-api,
-              guava
+              guava,
+              azure-storage,
+              azure-keyvault-core
             </Embed-Dependency>
           </instructions>
         </configuration>
