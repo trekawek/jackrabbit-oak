@@ -9,6 +9,7 @@ import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
+import org.apache.jackrabbit.oak.remote.server.SegmentWriteListener;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
@@ -60,14 +61,16 @@ public abstract class AbstractRemoteNodeStoreTest {
 
         String name = "oak-test-" + (++index);
 
+        SegmentWriteListener listener = new SegmentWriteListener();
         fs = FileStoreBuilder.fileStoreBuilder(folder.newFolder())
                 .withBlobStore(blobStore)
                 .withCustomPersistence(new AzurePersistence(container.getDirectoryReference(name)))
+                .withIOMonitor(listener)
                 .build();
         delegateNodeStore = SegmentNodeStoreBuilders.builder(fs).build();
 
         InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
-        server = new NodeStoreServer(inProcessServerBuilder, delegateNodeStore, fs, blobStore);
+        server = new NodeStoreServer(inProcessServerBuilder, delegateNodeStore, fs, blobStore, listener);
         server.start();
 
         InProcessChannelBuilder inProcessChannelBuilder = InProcessChannelBuilder.forName(name);

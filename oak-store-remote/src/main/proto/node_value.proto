@@ -7,13 +7,6 @@ option java_outer_classname = "NodeValueProtos";
 
 import "node_state.proto";
 
-message NodeValue {
-    repeated Property property = 1;
-    repeated ChildNode child = 2;
-    bool exists = 3;
-    int32 hashCode = 4;
-}
-
 enum PropertyType {
     STRING = 0;
     BINARY = 1;

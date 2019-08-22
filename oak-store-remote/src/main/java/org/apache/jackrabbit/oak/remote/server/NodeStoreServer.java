@@ -35,17 +35,18 @@ public class NodeStoreServer {
 
     private final Server server;
 
-    public NodeStoreServer(int port, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore) {
-        this(ServerBuilder.forPort(port), nodeStore, fileStore, blobStore);
+    public NodeStoreServer(int port, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore, SegmentWriteListener segmentWriteListener) {
+        this(ServerBuilder.forPort(port), nodeStore, fileStore, blobStore, segmentWriteListener);
     }
 
-    public NodeStoreServer(ServerBuilder<?> serverBuilder, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore) {
+    public NodeStoreServer(ServerBuilder<?> serverBuilder, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore, SegmentWriteListener segmentWriteListener) {
         this.nodeStore = nodeStore;
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore))
                 .addService(new NodeStateService(nodeStore))
                 .addService(new NodeStoreService(nodeStore, fileStore, blobStore))
                 .addService(new LeaseService(nodeStore))
+                .addService(new SegmentService(segmentWriteListener))
                 .build();
     }
 

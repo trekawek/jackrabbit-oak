@@ -26,7 +26,8 @@ import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc.NodeStateServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc.NodeStoreServiceBlockingStub;
-import org.apache.jackrabbit.oak.remote.server.LeaseService;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 
 import java.util.concurrent.TimeUnit;
 
@@ -44,6 +45,8 @@ public class RemoteNodeStoreClient {
 
     private final LeaseServiceBlockingStub leaseService;
 
+    private final SegmentServiceStub segmentService;
+
     public RemoteNodeStoreClient(String host, int port) {
         this(ManagedChannelBuilder.forAddress(host, port).usePlaintext());
     }
@@ -55,6 +58,7 @@ public class RemoteNodeStoreClient {
         nodeStoreService = NodeStoreServiceGrpc.newBlockingStub(channel);
         nodeStoreAsyncService = NodeStoreServiceGrpc.newStub(channel);
         leaseService = LeaseServiceGrpc.newBlockingStub(channel);
+        segmentService = SegmentServiceGrpc.newStub(channel);
     }
 
     public CheckpointServiceBlockingStub getCheckpointService() {
@@ -75,6 +79,10 @@ public class RemoteNodeStoreClient {
 
     public LeaseServiceBlockingStub getLeaseService() {
         return leaseService;
+    }
+
+    public SegmentServiceStub getSegmentService() {
+        return segmentService;
     }
 
     public void shutdown() throws InterruptedException {

@@ -17,6 +17,8 @@
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
@@ -25,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,9 +41,12 @@ public class TailingArchiveManager implements SegmentArchiveManager {
 
     private final String lastArchive;
 
-    public TailingArchiveManager(SegmentArchiveManager delegate, CloudBlobDirectory directory) {
+    private final SegmentServiceStub segmentServiceStub;
+
+    public TailingArchiveManager(SegmentArchiveManager delegate, CloudBlobDirectory directory, SegmentServiceStub segmentServiceStub) {
         this.delegate = delegate;
         this.directory = directory;
+        this.segmentServiceStub = segmentServiceStub;
         try {
             List<String> archives = listArchives();
             if (archives.isEmpty()) {
@@ -55,30 +61,28 @@ public class TailingArchiveManager implements SegmentArchiveManager {
 
     @Override
     public @NotNull List<String> listArchives() throws IOException {
-        return delegate.listArchives();
+        return Arrays.asList("data00000a.tar");
     }
 
     @Override
-    public @Nullable SegmentArchiveReader open(@NotNull String archiveName) throws IOException {
-        if (archiveName.equals(lastArchive)) {
-            return new ArchiveTailingReader(delegate, archiveName, directory);
-        } else {
-            return delegate.open(archiveName);
-        }
+    @Nullable
+    public SegmentArchiveReader open(@NotNull String archiveName) throws IOException {
+        return forceOpen(archiveName);
     }
 
     @Override
-    public @Nullable SegmentArchiveReader forceOpen(String archiveName) throws IOException {
-        if (archiveName.equals(lastArchive)) {
-            return new ArchiveTailingReader(delegate, archiveName, directory);
+    @Nullable
+    public SegmentArchiveReader forceOpen(String archiveName) throws IOException {
+        if ("data00000a.tar".equals(archiveName)) {
+            return new ArchiveTailingReader(delegate, directory, segmentServiceStub);
         } else {
-            return delegate.forceOpen(archiveName);
+            return null;
         }
     }
 
     @Override
     public @NotNull SegmentArchiveWriter create(@NotNull String archiveName) throws IOException {
-        return delegate.create(archiveName);
+        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -27,13 +27,10 @@ import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.CompareNodeStateOp
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStatePathPair;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
-import org.apache.jackrabbit.oak.remote.proto.NodeValueProtos.NodeValue;
-import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 
-import static org.apache.jackrabbit.oak.remote.common.PropertySerializer.toProtoProperty;
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
 
 public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplBase {
@@ -42,24 +39,6 @@ public class NodeStateService extends NodeStateServiceGrpc.NodeStateServiceImplB
 
     public NodeStateService(RevisionableNodeStore nodeStore) {
         this.nodeStore = nodeStore;
-    }
-
-    @Override
-    public void getNodeValue(NodeStateId request, StreamObserver<NodeValue> responseObserver) {
-        NodeState nodeState = getNodeStateById(request);
-        NodeValue.Builder builder = NodeValue.newBuilder();
-        builder.setExists(nodeState.exists());
-        builder.setHashCode(nodeState.hashCode());
-        for (ChildNodeEntry e : nodeState.getChildNodeEntries()) {
-            builder.addChildBuilder()
-                    .setName(e.getName())
-                    .setNodeStateId(getNodeStateId(e.getNodeState()));
-        }
-        for (PropertyState p : nodeState.getProperties()) {
-            builder.addProperty(toProtoProperty(p));
-        }
-        responseObserver.onNext(builder.build());
-        responseObserver.onCompleted();
     }
 
     @Override

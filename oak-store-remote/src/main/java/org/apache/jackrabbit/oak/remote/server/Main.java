@@ -73,7 +73,8 @@ public class Main {
                 blobStore = createAzureBlobStore();
             }
 
-            FileStore fileStore = createAzureFileStore(closer, blobStore);
+            SegmentWriteListener listener = new SegmentWriteListener();
+            FileStore fileStore = createAzureFileStore(closer, blobStore, listener);
             SegmentNodeStore delegate = SegmentNodeStoreBuilders.builder(fileStore).build();
 
             String seedSegmentStore = getenv("seed_segmentstore");
@@ -82,7 +83,7 @@ public class Main {
             }
 
             System.out.println("Starting server. Press ^C to stop.");
-            NodeStoreServer server = new NodeStoreServer(12300, delegate, fileStore, blobStore);
+            NodeStoreServer server = new NodeStoreServer(12300, delegate, fileStore, blobStore, listener);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop()));
             server.start();
             server.blockUntilShutdown();
@@ -104,7 +105,7 @@ public class Main {
         }
     }
 
-    private static FileStore createAzureFileStore(Closer closer, BlobStore blobStore) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
+    private static FileStore createAzureFileStore(Closer closer, BlobStore blobStore, SegmentWriteListener listener) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
         File dir = createTempDir();
         SegmentNodeStorePersistence persistence;
         AzurePersistence azurePersistence = new AzurePersistence(getAzureSegmentStoreDirectory());
@@ -112,7 +113,8 @@ public class Main {
         FileStoreBuilder builder = FileStoreBuilder
                 .fileStoreBuilder(dir)
                 .withCustomPersistence(persistence)
-                .withBlobStore(blobStore);
+                .withBlobStore(blobStore)
+                .withIOMonitor(listener);
         FileStore fileStore = builder.build();
         closer.register(fileStore);
         return fileStore;

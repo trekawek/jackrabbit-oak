@@ -16,7 +16,11 @@
  */
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
+import com.google.protobuf.Empty;
+import com.google.protobuf.StringValue;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
+import io.grpc.stub.StreamObserver;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
 import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
@@ -27,11 +31,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ArchiveTailingReader implements SegmentArchiveReader {
 
@@ -41,31 +46,34 @@ public class ArchiveTailingReader implements SegmentArchiveReader {
 
     private final Map<String, SegmentArchiveReader> closedReaders = new LinkedHashMap<>();
 
-    private final String tailFromArchive;
-
     private final CloudBlobDirectory segmentStoreDirectory;
 
     private SegmentTailingReader currentReader;
 
-    public ArchiveTailingReader(SegmentArchiveManager archiveManager, String archiveName, CloudBlobDirectory segmentStoreDirectory) throws IOException {
+    private StreamObserver<Empty> streamObserver;
+
+    public ArchiveTailingReader(SegmentArchiveManager archiveManager, CloudBlobDirectory segmentStoreDirectory, SegmentServiceGrpc.SegmentServiceStub segmentService) throws IOException {
         this.archiveManager = archiveManager;
-        this.tailFromArchive = archiveName;
         this.segmentStoreDirectory = segmentStoreDirectory;
+        streamObserver = segmentService.observeSegments(new StreamObserver<StringValue>() {
+            @Override
+            public void onNext(StringValue stringValue) {
+                if (currentReader != null) {
+                    currentReader.onNewSegment(stringValue.getValue());
+                }
+            }
+            @Override
+            public void onError(Throwable throwable) {
+            }
+            @Override
+            public void onCompleted() {
+            }
+        });
         updateReaders();
     }
 
-    private List<String> listArchives() throws IOException {
-        List<String> archives = archiveManager.listArchives();
-        Collections.sort(archives);
-        int i = archives.indexOf(tailFromArchive);
-        if (i == -1) {
-            i = 0;
-        }
-        return archives.subList(i, archives.size());
-    }
-
     private synchronized List<SegmentArchiveReader> updateReaders() throws IOException {
-        List<String> archives = listArchives();
+        List<String> archives = archiveManager.listArchives();
         if (archives.isEmpty()) {
             return null;
         }
@@ -78,7 +86,15 @@ public class ArchiveTailingReader implements SegmentArchiveReader {
                 newReaders.add(reader);
             }
         }
-        currentReader = new SegmentTailingReader(archiveManager, archives.get(archives.size() - 1), segmentStoreDirectory);
+        String lastArchive = archives.get(archives.size() - 1);
+        if (currentReader == null || !lastArchive.equals(currentReader.getName())) {
+            try {
+                currentReader = new SegmentTailingReader(archiveManager, lastArchive, segmentStoreDirectory);
+                currentReader.init();
+            } catch (URISyntaxException e) {
+                throw new IOException(e);
+            }
+        }
         return newReaders;
     }
 
@@ -89,36 +105,28 @@ public class ArchiveTailingReader implements SegmentArchiveReader {
                     return r;
                 }
             }
-            if (currentReader.containsSegment(msb, lsb)) {
-                return currentReader;
-            }
         }
 
-        SegmentTailingReader localCurrentReader;
-        while (true) {
-            List<SegmentArchiveReader> newReaders;
-            synchronized (this) {
-                newReaders = updateReaders();
-                localCurrentReader = currentReader;
-            }
-            for (SegmentArchiveReader r : newReaders) {
-                if (r.containsSegment(msb, lsb)) {
-                    return r;
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < TimeUnit.MINUTES.toMillis(1)) {
+            SegmentTailingReader localReader = currentReader;
+            if (localReader.containsSegment(msb, lsb)) {
+                return localReader;
+            } else if (localReader.isClosed()) {
+                List<SegmentArchiveReader> newReaders = updateReaders();
+                for (SegmentArchiveReader r : newReaders) {
+                    if (r.containsSegment(msb, lsb)) {
+                        return r;
+                    }
                 }
             }
-            if (localCurrentReader.containsSegment(msb, lsb)) {
-                return localCurrentReader;
-            }
-            boolean segmentFound = localCurrentReader.waitForSegment(msb, lsb);
-            if (segmentFound) {
-                return localCurrentReader;
-            } else if (localCurrentReader.isClosed()) {
-                continue;
-            } else {
-                break;
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                log.error("Interrupted", e);
             }
         }
-        return localCurrentReader;
+        return currentReader;
     }
 
     @Override
@@ -189,6 +197,8 @@ public class ArchiveTailingReader implements SegmentArchiveReader {
             reader.close();
         }
         currentReader.close();
+        streamObserver.onNext(Empty.getDefaultInstance());
+        streamObserver.onCompleted();
     }
 
     @Override

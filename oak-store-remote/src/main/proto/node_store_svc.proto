@@ -10,7 +10,6 @@ import "google/protobuf/wrappers.proto";
 import "change_event.proto";
 import "checkpoint.proto";
 import "commit.proto";
-import "node_value.proto";
 import "node_state.proto";
 import "node_state_diff.proto";
 import "lease.proto";
@@ -30,7 +29,6 @@ service CheckpointService {
 }
 
 service NodeStateService {
-    rpc GetNodeValue (NodeStateId) returns (NodeValue);
     rpc Equals (NodeStatePathPair) returns (google.protobuf.BoolValue);
     rpc Compare (CompareNodeStateOp) returns (NodeStateDiff);
 }
@@ -39,4 +37,8 @@ service LeaseService {
     rpc Acquire(google.protobuf.Empty) returns (LeaseInfo);
     rpc Renew(LeaseInfo) returns (ClusterView);
     rpc Release(LeaseInfo) returns (google.protobuf.Empty);
+}
+
+service SegmentService {
+    rpc ObserveSegments (stream google.protobuf.Empty) returns (stream google.protobuf.StringValue);
 }

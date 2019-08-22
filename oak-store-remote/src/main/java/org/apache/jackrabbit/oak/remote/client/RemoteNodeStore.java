@@ -19,7 +19,6 @@ package org.apache.jackrabbit.oak.remote.client;
 import com.google.common.base.Strings;
 import com.google.common.io.Files;
 import com.google.protobuf.Empty;
-import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
@@ -134,7 +133,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         this.blobStore = builder.blobStore;
         this.compositeObserver = new CompositeObserver();
 
-        SplitPersistence splitPersistence = new SplitPersistence(new TailingPersistence(builder.sharedPersistence), builder.localPersistence);
+        SplitPersistence splitPersistence = new SplitPersistence(new TailingPersistence(builder.sharedPersistence, client.getSegmentService()), builder.localPersistence);
 
         fileStore = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
                 .withBlobStore(blobStore)
