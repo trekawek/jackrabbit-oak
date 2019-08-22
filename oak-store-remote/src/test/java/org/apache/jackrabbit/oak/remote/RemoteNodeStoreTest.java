@@ -6,6 +6,7 @@ import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -25,6 +26,7 @@ public class RemoteNodeStoreTest extends AbstractRemoteNodeStoreTest {
     }
 
     @Test
+    @Ignore
     public void manyChangesTest() throws CommitFailedException {
         NodeState root = remoteNodeStore.getRoot();
         NodeBuilder builder = root.builder();

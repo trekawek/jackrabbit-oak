@@ -18,6 +18,7 @@ package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.collect.FluentIterable;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
 import org.apache.jackrabbit.oak.segment.SegmentNodeState;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
@@ -35,7 +36,7 @@ public class RemoteNodeState extends AbstractNodeState {
 
     private final String name;
 
-    private volatile SegmentNodeState nodeValue;
+    private volatile NodeState nodeValue;
 
     private volatile String recordId;
 
@@ -60,6 +61,8 @@ public class RemoteNodeState extends AbstractNodeState {
             RemoteNodeState remoteNode1 = (RemoteNodeState) node1;
             RemoteNodeState remoteNode2 = (RemoteNodeState) node2;
             return SegmentNodeState.fastEquals(remoteNode1.getNodeValue(), remoteNode2.getNodeValue());
+        } else if (node1 instanceof EmptyNodeState && node2 instanceof EmptyNodeState) {
+            return node1.equals(node2);
         } else {
             return false;
         }
@@ -124,14 +127,14 @@ public class RemoteNodeState extends AbstractNodeState {
         }
     }
 
-    private SegmentNodeState getNodeValue() {
+    private NodeState getNodeValue() {
         if (nodeValue == null) {
             synchronized (this) {
                 if (nodeValue == null) {
                     if (recordId != null) {
                         nodeValue = context.loadNode(recordId);
                     } else if (parent != null) {
-                        nodeValue = (SegmentNodeState) parent.getNodeValue().getChildNode(name);
+                        nodeValue = parent.getNodeValue().getChildNode(name);
                     } else {
                         throw new IllegalStateException("Either recordId or parent shouldn't be empty");
                     }
@@ -144,8 +147,10 @@ public class RemoteNodeState extends AbstractNodeState {
     public String getRevision() {
         if (recordId != null) {
             return recordId;
+        } else if (getNodeValue() instanceof SegmentNodeState) {
+            return ((SegmentNodeState) getNodeValue()).getRecordId().toString();
         } else {
-            return getNodeValue().getRecordId().toString();
+            throw new IllegalStateException();
         }
     }
 }
