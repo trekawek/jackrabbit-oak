@@ -131,15 +131,16 @@ public class RemoteStoreFixture extends NodeStoreFixture {
 
         public NodeStoreServer createServer(String name, SegmentNodeStore nodeStore) throws IOException {
             InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
-            NodeStoreServer server = new NodeStoreServer(inProcessServerBuilder, nodeStore, blobStore);
-            server.start();
+            NodeStoreServer server = null;//new NodeStoreServer(inProcessServerBuilder, nodeStore, blobStore);
+            //server.start();
             return server;
         }
 
         public RemoteNodeStore createRemoteNs(String name, BlobStore blobStore) {
             InProcessChannelBuilder inProcessChannelBuilder = InProcessChannelBuilder.forName(name);
             RemoteNodeStoreClient client = new RemoteNodeStoreClient(inProcessChannelBuilder);
-            return new RemoteNodeStore(client, blobStore);
+            //return new RemoteNodeStore(client, blobStore);
+            return null;
         }
 
         public NodeStore getNs() {
