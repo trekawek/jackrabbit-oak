@@ -17,7 +17,6 @@
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
@@ -74,14 +73,14 @@ public class TailingArchiveManager implements SegmentArchiveManager {
     @Nullable
     public SegmentArchiveReader forceOpen(String archiveName) throws IOException {
         if ("data00000a.tar".equals(archiveName)) {
-            return new ArchiveTailingReader(delegate, directory, segmentServiceStub);
+            return new SegmentTailingReader(directory, segmentServiceStub);
         } else {
             return null;
         }
     }
 
     @Override
-    public @NotNull SegmentArchiveWriter create(@NotNull String archiveName) throws IOException {
+    public @NotNull SegmentArchiveWriter create(@NotNull String archiveName) {
         throw new UnsupportedOperationException();
     }
 
@@ -96,7 +95,7 @@ public class TailingArchiveManager implements SegmentArchiveManager {
     }
 
     @Override
-    public void copyFile(@NotNull String from, @NotNull String to) throws IOException {
+    public void copyFile(@NotNull String from, @NotNull String to) {
         throw new UnsupportedOperationException();
     }
 
@@ -106,7 +105,7 @@ public class TailingArchiveManager implements SegmentArchiveManager {
     }
 
     @Override
-    public void recoverEntries(@NotNull String archiveName, @NotNull LinkedHashMap<UUID, byte[]> entries) throws IOException {
+    public void recoverEntries(@NotNull String archiveName, @NotNull LinkedHashMap<UUID, byte[]> entries) {
         throw new UnsupportedOperationException();
     }
 }

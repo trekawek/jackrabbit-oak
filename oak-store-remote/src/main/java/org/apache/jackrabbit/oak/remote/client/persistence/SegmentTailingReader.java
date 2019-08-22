@@ -1,15 +1,36 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
+import com.google.protobuf.Empty;
+import com.google.protobuf.StringValue;
 import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.BlobListingDetails;
 import com.microsoft.azure.storage.blob.CloudBlob;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import com.microsoft.azure.storage.blob.ListBlobItem;
+import io.grpc.stub.StreamObserver;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 import org.apache.jackrabbit.oak.segment.azure.AzureBlobMetadata;
 import org.apache.jackrabbit.oak.segment.azure.AzureSegmentArchiveEntry;
-import org.apache.jackrabbit.oak.segment.azure.AzureUtilities;
 import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,48 +39,59 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
-import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.getSegmentFileName;
 import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.readBufferFully;
 
 public class SegmentTailingReader implements SegmentArchiveReader  {
 
     private static final Logger log = LoggerFactory.getLogger(SegmentTailingReader.class);
 
-    private final SegmentArchiveManager archiveManager;
+    private final CloudBlobContainer container;
 
-    private final String archiveName;
-
-    private final CloudBlobDirectory segmentStoreDirectory;
-
-    private final Map<UUID, AzureSegmentArchiveEntry> index = new ConcurrentHashMap<>();
+    private final Map<UUID, AzureSegment> index = new ConcurrentHashMap<>();
 
     private final AtomicLong length = new AtomicLong();
 
-    private boolean closed = false;
+    private final StreamObserver<Empty> streamObserver;
 
-    public SegmentTailingReader(SegmentArchiveManager archiveManager, String archiveName, CloudBlobDirectory segmentStoreDirectory) throws IOException, URISyntaxException {
-        this.archiveManager = archiveManager;
-        this.archiveName = archiveName;
-        this.segmentStoreDirectory = segmentStoreDirectory;
+    public SegmentTailingReader(CloudBlobDirectory segmentStoreDirectory, SegmentServiceStub segmentService) throws IOException {
+        this.streamObserver = segmentService.observeSegments(new StreamObserver<StringValue>() {
+            @Override
+            public void onNext(StringValue stringValue) {
+                onNewSegment(stringValue.getValue());
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onCompleted() {
+            }
+        });
+        try {
+            this.container = segmentStoreDirectory.getContainer();
+            for (ListBlobItem blob : segmentStoreDirectory.listBlobs("data", true, EnumSet.of(BlobListingDetails.METADATA), null, null)) {
+                if (blob instanceof CloudBlob) {
+                    addNewSegment((CloudBlob) blob);
+                }
+            }
+        } catch (StorageException | URISyntaxException e) {
+            throw new IOException(e);
+        }
     }
 
     public void onNewSegment(String blobName) {
-        String relativePath = blobName.substring(segmentStoreDirectory.getPrefix().length());
-        String[] split = relativePath.split("/");
-        String archive = split[0];
-        String segmentName = split[1];
-        if (!archive.equals(this.archiveName)) {
-            closed = false;
-        }
         try {
-            CloudBlob cloudBlob = getBlob(segmentName);
+            CloudBlob cloudBlob = getBlob(blobName);
             for (int i = 0; i < 10; i++) {
                 if (cloudBlob.exists()) {
                     break;
@@ -73,14 +105,8 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
             }
             cloudBlob.downloadAttributes();
             addNewSegment(cloudBlob);
-        } catch (IOException | StorageException e) {
-            log.error("Can't read blob {} (segment name: {})", blobName, segmentName, e);
-        }
-    }
-
-    public void init() throws URISyntaxException, IOException {
-        for (CloudBlob blob : AzureUtilities.getBlobs(segmentStoreDirectory.getDirectoryReference(archiveName))) {
-            addNewSegment(blob);
+        } catch (StorageException | IOException e) {
+            log.error("Can't read blob {} (segment name: {})", blobName, e);
         }
     }
 
@@ -88,35 +114,62 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
         Map<String, String> metadata = blob.getMetadata();
         if (AzureBlobMetadata.isSegment(metadata)) {
             AzureSegmentArchiveEntry indexEntry = AzureBlobMetadata.toIndexEntry(metadata, (int) blob.getProperties().getLength());
-            index.put(new UUID(indexEntry.getMsb(), indexEntry.getLsb()), indexEntry);
+            AzureSegment segment = new AzureSegment(blob.getName(), indexEntry);
+            UUID uuid = new UUID(indexEntry.getMsb(), indexEntry.getLsb());
+            if (index.containsKey(uuid)) {
+                return;
+            }
+            index.put(uuid, segment);
+            length.addAndGet(blob.getProperties().getLength());
         }
-        length.addAndGet(blob.getProperties().getLength());
     }
 
     @Override
-    public @Nullable Buffer readSegment(long msb, long lsb) throws IOException {
-        AzureSegmentArchiveEntry indexEntry = index.get(new UUID(msb, lsb));
-        if (indexEntry == null) {
+    @Nullable
+    public Buffer readSegment(long msb, long lsb) throws IOException {
+        waitForSegment(msb, lsb);
+        AzureSegment segment = index.get(new UUID(msb, lsb));
+        if (segment == null) {
             return null;
         }
-        Buffer buffer = Buffer.allocate(indexEntry.getLength());
-        readBufferFully(getBlob(getSegmentFileName(indexEntry)), buffer);
+        Buffer buffer = Buffer.allocate(segment.segmentArchiveEntry.getLength());
+        readBufferFully(getBlob(segment.blobName), buffer);
         return buffer;
     }
 
     @Override
     public boolean containsSegment(long msb, long lsb) {
+        waitForSegment(msb, lsb);
         return index.containsKey(new UUID(msb, lsb));
+    }
+
+    private void waitForSegment(long msb, long lsb) {
+        UUID uuid = new UUID(msb, lsb);
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < TimeUnit.SECONDS.toMillis(10)) {
+            if (index.containsKey(uuid)) {
+                return;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                log.error("Interrupted", e);
+            }
+        }
     }
 
     @Override
     public List<SegmentArchiveEntry> listSegments() {
-        return new ArrayList<>(index.values());
+        return index
+                .values()
+                .stream()
+                .map(a -> a.segmentArchiveEntry)
+                .collect(Collectors.toList());
     }
 
     @Override
     @Nullable
-    public Buffer getGraph() throws IOException {
+    public Buffer getGraph() {
         return null;
     }
 
@@ -137,12 +190,13 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
 
     @Override
     public @NotNull String getName() {
-        return archiveName;
+        return "data00000a.tar";
     }
 
     @Override
-    public void close() throws IOException {
-
+    public void close() {
+        streamObserver.onNext(Empty.getDefaultInstance());
+        streamObserver.onCompleted();
     }
 
     @Override
@@ -150,30 +204,23 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
         return 0;
     }
 
-    public boolean isClosed() {
-        return closed;
-    }
-
     private CloudBlockBlob getBlob(String name) throws IOException {
         try {
-            return segmentStoreDirectory.getDirectoryReference(archiveName).getBlockBlobReference(name);
+            return container.getBlockBlobReference(name);
         } catch (URISyntaxException | StorageException e) {
             throw new IOException(e);
         }
     }
 
-    private Buffer readBlob(String name) throws IOException {
-        try {
-            CloudBlockBlob blob = getBlob(name);
-            if (!blob.exists()) {
-                return null;
-            }
-            long length = blob.getProperties().getLength();
-            Buffer buffer = Buffer.allocate((int) length);
-            AzureUtilities.readBufferFully(blob, buffer);
-            return buffer;
-        } catch (StorageException e) {
-            throw new IOException(e);
+    private static class AzureSegment {
+
+        private final AzureSegmentArchiveEntry segmentArchiveEntry;
+
+        private final String blobName;
+
+        public AzureSegment(String blobName, AzureSegmentArchiveEntry segmentArchiveEntry) {
+            this.blobName = blobName;
+            this.segmentArchiveEntry = segmentArchiveEntry;
         }
     }
 }
