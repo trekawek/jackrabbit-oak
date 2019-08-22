@@ -47,8 +47,6 @@
         <configuration>
           <instructions>
             <Import-Package>
-              org.apache.jackrabbit.oak.segment.spi*,
-              !org.apache.jackrabbit.oak.segment*,
               !com.google.errorprone.annotations,
               !com.google.errorprone.annotations.concurrent,
               !com.google.protobuf.nano,
