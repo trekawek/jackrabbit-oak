@@ -60,6 +60,7 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
         }
         try {
             CloudBlob cloudBlob = getBlob(segmentName);
+            log.info("Blob name: {} from {}", cloudBlob.getName(), blobName);
             cloudBlob.downloadAttributes();
             addNewSegment(cloudBlob);
         } catch (IOException | StorageException e) {
