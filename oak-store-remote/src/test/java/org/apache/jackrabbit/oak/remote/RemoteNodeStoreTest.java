@@ -25,6 +25,22 @@ public class RemoteNodeStoreTest extends AbstractRemoteNodeStoreTest {
     }
 
     @Test
+    public void manyChangesTest() throws CommitFailedException {
+        NodeState root = remoteNodeStore.getRoot();
+        NodeBuilder builder = root.builder();
+        NodeBuilder test = builder.child("test");
+        for (int i = 0; i < 15_000; i++) {
+            test.setProperty("foo_" + i, i);
+        }
+
+        root = remoteNodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
+        NodeState testState = root.getChildNode("test");
+        for (long i = 0; i < 15_000; i++) {
+            assertEquals(i, (long) test.getProperty("foo_" + i).getValue(Type.LONG));
+        }
+    }
+
+    @Test
     public void testBlob() throws IOException, CommitFailedException {
         NodeBuilder builder = remoteNodeStore.getRoot().builder();
         builder.setProperty("smallBlob", builder.createBlob(new ByteArrayInputStream(new byte[10])));
