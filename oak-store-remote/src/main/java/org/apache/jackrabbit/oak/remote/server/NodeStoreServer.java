@@ -18,6 +18,8 @@ package org.apache.jackrabbit.oak.remote.server;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
+import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.slf4j.Logger;
@@ -33,16 +35,16 @@ public class NodeStoreServer {
 
     private final Server server;
 
-    public NodeStoreServer(int port, RevisionableNodeStore nodeStore, BlobStore blobStore) {
-        this(ServerBuilder.forPort(port), nodeStore, blobStore);
+    public NodeStoreServer(int port, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore) {
+        this(ServerBuilder.forPort(port), nodeStore, fileStore, blobStore);
     }
 
-    public NodeStoreServer(ServerBuilder<?> serverBuilder, RevisionableNodeStore nodeStore, BlobStore blobStore) {
+    public NodeStoreServer(ServerBuilder<?> serverBuilder, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore) {
         this.nodeStore = nodeStore;
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore))
                 .addService(new NodeStateService(nodeStore))
-                .addService(new NodeStoreService(nodeStore, blobStore))
+                .addService(new NodeStoreService(nodeStore, fileStore, blobStore))
                 .addService(new LeaseService(nodeStore))
                 .build();
     }

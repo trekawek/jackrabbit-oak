@@ -18,6 +18,15 @@ package org.apache.jackrabbit.oak.remote.server;
 
 import com.google.common.base.Strings;
 import com.google.common.io.Closer;
+import com.microsoft.azure.storage.CloudStorageAccount;
+import com.microsoft.azure.storage.RetryLinearRetry;
+import com.microsoft.azure.storage.StorageCredentials;
+import com.microsoft.azure.storage.StorageCredentialsAccountAndKey;
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.BlobRequestOptions;
+import com.microsoft.azure.storage.blob.CloudBlobClient;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
+import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import org.apache.jackrabbit.core.data.DataStoreException;
 import org.apache.jackrabbit.core.data.FileDataStore;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
@@ -26,19 +35,24 @@ import org.apache.jackrabbit.oak.composite.InitialContentMigrator;
 import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
+import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.mount.MountInfoProvider;
 import org.apache.jackrabbit.oak.spi.mount.Mounts;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.Properties;
 
 import static com.google.common.io.Files.createTempDir;
 import static java.util.Arrays.asList;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class Main {
 
@@ -59,12 +73,8 @@ public class Main {
                 blobStore = createAzureBlobStore();
             }
 
-            File segmentStore = new File("segmentstore");
-            segmentStore.mkdirs();
-            FileStore fs = FileStoreBuilder.fileStoreBuilder(segmentStore).withBlobStore(blobStore).build();
-            closer.register(fs);
-
-            SegmentNodeStore delegate = SegmentNodeStoreBuilders.builder(fs).build();
+            FileStore fileStore = createAzureFileStore(closer, blobStore);
+            SegmentNodeStore delegate = SegmentNodeStoreBuilders.builder(fileStore).build();
 
             String seedSegmentStore = getenv("seed_segmentstore");
             if (!Strings.isNullOrEmpty(seedSegmentStore)) {
@@ -72,7 +82,7 @@ public class Main {
             }
 
             System.out.println("Starting server. Press ^C to stop.");
-            NodeStoreServer server = new NodeStoreServer(12300, delegate, blobStore);
+            NodeStoreServer server = new NodeStoreServer(12300, delegate, fileStore, blobStore);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop()));
             server.start();
             server.blockUntilShutdown();
@@ -94,6 +104,21 @@ public class Main {
         }
     }
 
+    private static FileStore createAzureFileStore(Closer closer, BlobStore blobStore) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
+        File dir = createTempDir();
+        SegmentNodeStorePersistence persistence;
+        AzurePersistence azurePersistence = new AzurePersistence(getAzureSegmentStoreDirectory());
+        persistence = azurePersistence;
+        FileStoreBuilder builder = FileStoreBuilder
+                .fileStoreBuilder(dir)
+                .withCustomPersistence(persistence)
+                .withBlobStore(blobStore);
+        FileStore fileStore = builder.build();
+        closer.register(fileStore);
+        return fileStore;
+    }
+
+
     private static BlobStore createAzureBlobStore() throws DataStoreException {
         Properties properties = new Properties();
         properties.setProperty("accessKey", getenv("blobAzureAccount"));
@@ -111,6 +136,26 @@ public class Main {
         azureDataStore.setProperties(properties);
         azureDataStore.init(createTempDir().getAbsolutePath());
         return new DataStoreBlobStore(azureDataStore);
+    }
+
+    public static CloudBlobDirectory getAzureSegmentStoreDirectory() throws URISyntaxException, StorageException {
+        StorageCredentials credentials = new StorageCredentialsAccountAndKey(
+                getenv("segmentAzureAccount"),
+                getenv("segmentAzureAccessKey"));
+        CloudStorageAccount cloud = new CloudStorageAccount(credentials, true);
+        CloudBlobClient client = cloud.createCloudBlobClient();
+        CloudBlobContainer container = client.getContainerReference(getenv("segmentAzureContainer"));
+        setTimeouts(container);
+        CloudBlobDirectory directory = container.getDirectoryReference("aem");
+        return directory;
+    }
+
+    public static CloudBlobContainer setTimeouts(CloudBlobContainer container) {
+        BlobRequestOptions defaultRequestOptions = container.getServiceClient().getDefaultRequestOptions();
+        defaultRequestOptions.setRetryPolicyFactory(new RetryLinearRetry((int) SECONDS.toMillis(30), 10));
+        defaultRequestOptions.setMaximumExecutionTimeInMs((int) MINUTES.toMillis(10));
+        defaultRequestOptions.setTimeoutIntervalInMs((int) SECONDS.toMillis(30));
+        return container;
     }
 
     private static String getenv(String envName) {

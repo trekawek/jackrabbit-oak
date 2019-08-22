@@ -29,12 +29,13 @@ import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.CommitEvent;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
+import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,22 +50,25 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
 
     private static final Logger log = LoggerFactory.getLogger(NodeStoreService.class);
 
-    private final RevisionableNodeStore nodeStore;
+    private final SegmentNodeStore nodeStore;
+
+    private final FileStore fileStore;
 
     private final PropertyDeserializer deserializer;
 
-    public NodeStoreService(RevisionableNodeStore nodeStore, BlobStore blobStore) {
+    public NodeStoreService(SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore) {
         this.nodeStore = nodeStore;
+        this.fileStore = fileStore;
         this.deserializer = new PropertyDeserializer(blobId -> new BlobStoreBlob(blobStore, blobId));
     }
 
     @Override
     public void getRoot(Empty request, StreamObserver<NodeStateId> responseObserver) {
-        NodeState nodeState = nodeStore.getRoot();
-        responseObserver.onNext(getNodeStateId(nodeState));
+        responseObserver.onNext(getNodeStateId(nodeStore.getRoot()));
         responseObserver.onCompleted();
     }
 
+    @Override
     public StreamObserver<CommitEvent> merge(StreamObserver<NodeStateId> responseObserver) {
         NodeState root = nodeStore.getRoot();
         NodeBuilder builder = root.builder();
@@ -112,7 +116,6 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
             }
         };
     }
-
 
     private void applyChange(NodeBuilder root, CommitProtos.NodeBuilderChange change) {
         NodeBuilder nodeBuilder = getNodeBuilder(root, change.getNodeBuilderPath());

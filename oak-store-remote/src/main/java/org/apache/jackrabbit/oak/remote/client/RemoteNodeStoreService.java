@@ -17,6 +17,8 @@
 package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.io.Closer;
+import com.google.common.io.Files;
+import org.apache.commons.io.FileUtils;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.ConfigurationPolicy;
@@ -31,6 +33,10 @@ import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
 import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
+import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
+import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
+import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo;
 import org.apache.jackrabbit.oak.spi.commit.ObserverTracker;
@@ -46,6 +52,7 @@ import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Dictionary;
 import java.util.HashMap;
@@ -61,6 +68,9 @@ public class RemoteNodeStoreService {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY, policy = ReferencePolicy.STATIC)
     private BlobStore blobStore;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY, policy = ReferencePolicy.STATIC)
+    private SegmentNodeStorePersistence persistence;
 
     @Property(label = "Remote server host",
             description = "The host name of the remote server",
@@ -89,7 +99,7 @@ public class RemoteNodeStoreService {
     private String role;
 
     @Activate
-    protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, CommitFailedException {
+    protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, CommitFailedException, InvalidFileStoreVersionException {
         this.context = context;
         remoteHost = PropertiesUtil.toString(config.get(REMOTE_HOST), "localhost");
         remotePort = PropertiesUtil.toInteger(config.get(REMOTE_PORT), 12300);
@@ -102,12 +112,25 @@ public class RemoteNodeStoreService {
         unregisterRemoteNodeStore();
     }
 
-    private void registerRemoteNodeStore() {
+    private void registerRemoteNodeStore() throws IOException, InvalidFileStoreVersionException {
+        registrations = Closer.create();
+
         RemoteNodeStoreClient client = new RemoteNodeStoreClient(remoteHost, remotePort);
-        RemoteNodeStore store = new RemoteNodeStore(client, blobStore);
+        RemoteNodeStore.Builder builder = new RemoteNodeStore.Builder();
+        builder.setBlobStore(blobStore);
+        builder.setClient(client);
+        File localPersistence = Files.createTempDir();
+        registrations.register(() -> FileUtils.deleteDirectory(localPersistence));
+        builder.setLocalPersistence(new TarPersistence(localPersistence));
+
+        if (persistence instanceof AzurePersistence) {
+            builder.setSharedPersistence((AzurePersistence) persistence);
+        } else {
+            throw new IllegalArgumentException("Invalid persistence, only AzurePersistence is supported");
+        }
+        RemoteNodeStore store = builder.build();
 
         Whiteboard whiteboard = new OsgiWhiteboard(context.getBundleContext());
-        registrations = Closer.create();
 
         if (role == null) {
             ObserverTracker observerTracker = new ObserverTracker(store);
