@@ -8,5 +8,4 @@ WORKDIR /app
 VOLUME /app/segmentstore
 VOLUME /app/datastore
 
-CMD ["java", "-jar", "oak-store-remote-server.jar"]
-
+CMD ["java", "-Xmx4g", "-jar", "oak-store-remote-server.jar"]
