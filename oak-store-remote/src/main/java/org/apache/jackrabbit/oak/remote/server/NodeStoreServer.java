@@ -43,10 +43,9 @@ public class NodeStoreServer {
         this.nodeStore = nodeStore;
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore))
-                .addService(new NodeStateService(nodeStore))
                 .addService(new NodeStoreService(nodeStore, fileStore, blobStore))
                 .addService(new LeaseService(nodeStore))
-                .addService(new SegmentService(segmentWriteListener))
+                .addService(new SegmentService(segmentWriteListener, fileStore))
                 .build();
     }
 
@@ -59,7 +58,6 @@ public class NodeStoreServer {
             NodeStoreServer.this.stop();
             System.err.println("*** server shut down");
         }));
-
     }
 
     public void stop() {

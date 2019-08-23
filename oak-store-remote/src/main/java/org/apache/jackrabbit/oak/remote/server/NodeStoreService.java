@@ -106,9 +106,10 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
 
                     try {
                         NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(commit.getCommitInfo()));
+                        fileStore.flush();
                         responseObserver.onNext(getNodeStateId(newRoot));
                         responseObserver.onCompleted();
-                    } catch (CommitFailedException e) {
+                    } catch (CommitFailedException | IOException e) {
                         log.error("Can't commit", e);
                         responseObserver.onError(e);
                     }

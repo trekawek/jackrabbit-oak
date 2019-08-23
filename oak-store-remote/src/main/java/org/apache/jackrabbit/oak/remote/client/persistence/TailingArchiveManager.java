@@ -17,7 +17,7 @@
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
+import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
@@ -25,9 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
@@ -38,24 +36,12 @@ public class TailingArchiveManager implements SegmentArchiveManager {
 
     private final CloudBlobDirectory directory;
 
-    private final String lastArchive;
+    private final RemoteNodeStoreClient client;
 
-    private final SegmentServiceStub segmentServiceStub;
-
-    public TailingArchiveManager(SegmentArchiveManager delegate, CloudBlobDirectory directory, SegmentServiceStub segmentServiceStub) {
+    public TailingArchiveManager(SegmentArchiveManager delegate, CloudBlobDirectory directory, RemoteNodeStoreClient client) {
         this.delegate = delegate;
         this.directory = directory;
-        this.segmentServiceStub = segmentServiceStub;
-        try {
-            List<String> archives = listArchives();
-            if (archives.isEmpty()) {
-                throw new IllegalStateException("The archive list is empty, can't tail the last one");
-            }
-            Collections.sort(archives);
-            lastArchive = archives.get(archives.size() - 1);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        this.client = client;
     }
 
     @Override
@@ -73,7 +59,7 @@ public class TailingArchiveManager implements SegmentArchiveManager {
     @Nullable
     public SegmentArchiveReader forceOpen(String archiveName) throws IOException {
         if ("data00000a.tar".equals(archiveName)) {
-            return new SegmentTailingReader(directory, segmentServiceStub);
+            return new SegmentTailingReader(directory, client);
         } else {
             return null;
         }

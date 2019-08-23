@@ -1,12 +1,19 @@
 package org.apache.jackrabbit.oak.remote.server;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
-import com.google.protobuf.StringValue;
 import io.grpc.stub.StreamObserver;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos.SegmentBlob;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
+import org.apache.jackrabbit.oak.segment.Segment;
+import org.apache.jackrabbit.oak.segment.SegmentId;
+import org.apache.jackrabbit.oak.segment.SegmentIdProvider;
+import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -15,17 +22,19 @@ public class SegmentService extends SegmentServiceGrpc.SegmentServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(SegmentService.class);
 
-    private final Set<StreamObserver<StringValue>> observers = Collections.synchronizedSet(new HashSet<>());
+    private final Set<StreamObserver<SegmentBlob>> observers = Collections.synchronizedSet(new HashSet<>());
 
-    public SegmentService(SegmentWriteListener segmentWriteListener) {
+    private final FileStore fileStore;
+
+    public SegmentService(SegmentWriteListener segmentWriteListener, FileStore fileStore) {
+        this.fileStore = fileStore;
         segmentWriteListener.setDelegate(this::onNewSegment);
     }
 
-    public void onNewSegment(String segmentBlobName) {
-        StringValue wrapped = StringValue.newBuilder().setValue(segmentBlobName).build();
-        for (StreamObserver<StringValue> o : observers) {
+    public void onNewSegment(SegmentBlob segmentBlob) {
+        for (StreamObserver<SegmentBlob> o : observers) {
             try {
-                o.onNext(wrapped);
+                o.onNext(segmentBlob);
             } catch (Exception e) {
                 log.error("Can't send event", e);
             }
@@ -33,7 +42,7 @@ public class SegmentService extends SegmentServiceGrpc.SegmentServiceImplBase {
     }
 
     @Override
-    public StreamObserver<Empty> observeSegments(StreamObserver<StringValue> responseObserver) {
+    public StreamObserver<Empty> observeSegments(StreamObserver<SegmentBlob> responseObserver) {
         observers.add(responseObserver);
         return new StreamObserver<Empty>() {
             @Override
@@ -52,5 +61,29 @@ public class SegmentService extends SegmentServiceGrpc.SegmentServiceImplBase {
         };
     }
 
+    @Override
+    public void getSegment(SegmentProtos.SegmentId request, StreamObserver<SegmentProtos.Segment> responseObserver) {
+        try {
+            SegmentIdProvider segmentIdProvider = fileStore.getSegmentIdProvider();
+            SegmentId segmentId = segmentIdProvider.newSegmentId(request.getMsb(), request.getLsb());
+            while (!fileStore.containsSegment(segmentId)) {
+                Thread.sleep(100);
+            }
 
+            Segment segment = fileStore.readSegment(segmentId);
+            ByteString.Output output = ByteString.newOutput(segment.size());
+            segment.writeTo(output);
+
+            SegmentProtos.Segment.Builder responseBuilder = SegmentProtos.Segment.newBuilder();
+            responseBuilder
+                    .setSegmentData(output.toByteString())
+                    .getSegmentIdBuilder()
+                        .setMsb(segmentId.getMostSignificantBits())
+                        .setLsb(segmentId.getLeastSignificantBits());
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+        } catch (IOException | InterruptedException e) {
+            responseObserver.onError(e);
+        }
+    }
 }

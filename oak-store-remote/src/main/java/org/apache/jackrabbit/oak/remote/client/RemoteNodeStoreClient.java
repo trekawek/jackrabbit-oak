@@ -22,11 +22,10 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc.CheckpointServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.LeaseServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.LeaseServiceGrpc.LeaseServiceBlockingStub;
-import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc;
-import org.apache.jackrabbit.oak.remote.proto.NodeStateServiceGrpc.NodeStateServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc.NodeStoreServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 
 import java.util.concurrent.TimeUnit;
@@ -37,15 +36,16 @@ public class RemoteNodeStoreClient {
 
     private final CheckpointServiceBlockingStub checkpointService;
 
-    private final NodeStateServiceBlockingStub nodeStateService;
-
     private final NodeStoreServiceBlockingStub nodeStoreService;
 
     private final NodeStoreServiceGrpc.NodeStoreServiceStub nodeStoreAsyncService;
 
     private final LeaseServiceBlockingStub leaseService;
 
-    private final SegmentServiceStub segmentService;
+    private final SegmentServiceBlockingStub segmentService;
+
+    private final SegmentServiceStub segmentAsyncService;
+
 
     public RemoteNodeStoreClient(String host, int port) {
         this(ManagedChannelBuilder.forAddress(host, port).usePlaintext());
@@ -54,19 +54,15 @@ public class RemoteNodeStoreClient {
     public RemoteNodeStoreClient(ManagedChannelBuilder<?> channelBuilder) {
         channel = channelBuilder.build();
         checkpointService = CheckpointServiceGrpc.newBlockingStub(channel);
-        nodeStateService = NodeStateServiceGrpc.newBlockingStub(channel);
         nodeStoreService = NodeStoreServiceGrpc.newBlockingStub(channel);
         nodeStoreAsyncService = NodeStoreServiceGrpc.newStub(channel);
         leaseService = LeaseServiceGrpc.newBlockingStub(channel);
-        segmentService = SegmentServiceGrpc.newStub(channel);
+        segmentAsyncService = SegmentServiceGrpc.newStub(channel);
+        segmentService = SegmentServiceGrpc.newBlockingStub(channel);
     }
 
     public CheckpointServiceBlockingStub getCheckpointService() {
         return checkpointService;
-    }
-
-    public NodeStateServiceBlockingStub getNodeStateService() {
-        return nodeStateService;
     }
 
     public NodeStoreServiceBlockingStub getNodeStoreService() {
@@ -81,7 +77,11 @@ public class RemoteNodeStoreClient {
         return leaseService;
     }
 
-    public SegmentServiceStub getSegmentService() {
+    public SegmentServiceStub getSegmentAsyncService() {
+        return segmentAsyncService;
+    }
+
+    public SegmentServiceBlockingStub getSegmentService() {
         return segmentService;
     }
 

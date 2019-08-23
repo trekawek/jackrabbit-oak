@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package org.apache.jackrabbit.oak.remote;
+
+option java_package = "org.apache.jackrabbit.oak.remote.proto";
+option java_outer_classname = "SegmentProtos";
+
+message SegmentId {
+    int64 msb = 1;
+    int64 lsb = 2;
+}
+
+message Segment {
+    SegmentId segmentId = 1;
+    bytes segmentData = 2;
+}
+
+message SegmentBlob {
+    SegmentId segmentId = 1;
+    string blobName = 2;
+}

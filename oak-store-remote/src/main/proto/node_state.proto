@@ -8,13 +8,3 @@ option java_outer_classname = "NodeStateProtos";
 message NodeStateId {
     string revision = 1;
 }
-
-message NodeStatePathPair {
-    NodeStateId nodeState1 = 1;
-    NodeStateId nodeState2 = 2;
-}
-
-message CompareNodeStateOp {
-    NodeStateId baseNodeState = 1;
-    NodeStateId nodeState = 2;
-}

@@ -13,6 +13,7 @@ import "commit.proto";
 import "node_state.proto";
 import "node_state_diff.proto";
 import "lease.proto";
+import "segment.proto";
 
 service NodeStoreService {
     rpc GetRoot (google.protobuf.Empty) returns (NodeStateId);
@@ -28,11 +29,6 @@ service CheckpointService {
     rpc ReleaseCheckpoint (CheckpointId) returns (google.protobuf.BoolValue);
 }
 
-service NodeStateService {
-    rpc Equals (NodeStatePathPair) returns (google.protobuf.BoolValue);
-    rpc Compare (CompareNodeStateOp) returns (NodeStateDiff);
-}
-
 service LeaseService {
     rpc Acquire(google.protobuf.Empty) returns (LeaseInfo);
     rpc Renew(LeaseInfo) returns (ClusterView);
@@ -40,5 +36,6 @@ service LeaseService {
 }
 
 service SegmentService {
-    rpc ObserveSegments (stream google.protobuf.Empty) returns (stream google.protobuf.StringValue);
+    rpc ObserveSegments (stream google.protobuf.Empty) returns (stream SegmentBlob);
+    rpc GetSegment (SegmentId) returns (Segment);
 }

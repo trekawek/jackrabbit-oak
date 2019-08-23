@@ -16,8 +16,9 @@
  */
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.protobuf.Empty;
-import com.google.protobuf.StringValue;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.BlobListingDetails;
 import com.microsoft.azure.storage.blob.CloudBlob;
@@ -26,7 +27,10 @@ import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import com.microsoft.azure.storage.blob.ListBlobItem;
 import io.grpc.stub.StreamObserver;
-import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
+import org.apache.commons.io.HexDump;
+import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
 import org.apache.jackrabbit.oak.segment.azure.AzureBlobMetadata;
 import org.apache.jackrabbit.oak.segment.azure.AzureSegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
@@ -38,12 +42,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -62,11 +69,19 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
 
     private final StreamObserver<Empty> streamObserver;
 
-    public SegmentTailingReader(CloudBlobDirectory segmentStoreDirectory, SegmentServiceStub segmentService) throws IOException {
-        this.streamObserver = segmentService.observeSegments(new StreamObserver<StringValue>() {
+    private final SegmentServiceGrpc.SegmentServiceBlockingStub segmentService;
+
+    private final Cache<UUID, Buffer> freshSegments;
+
+    public SegmentTailingReader(CloudBlobDirectory segmentStoreDirectory, RemoteNodeStoreClient client) throws IOException {
+        this.freshSegments = CacheBuilder.newBuilder()
+                .maximumSize(128)
+                .build();
+        this.segmentService = client.getSegmentService();
+        this.streamObserver = client.getSegmentAsyncService().observeSegments(new StreamObserver<SegmentProtos.SegmentBlob>() {
             @Override
-            public void onNext(StringValue stringValue) {
-                onNewSegment(stringValue.getValue());
+            public void onNext(SegmentProtos.SegmentBlob segmentBlob) {
+                onNewSegment(segmentBlob);
             }
 
             @Override
@@ -89,9 +104,9 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
         }
     }
 
-    public void onNewSegment(String blobName) {
+    public void onNewSegment(SegmentProtos.SegmentBlob segmentBlob) {
         try {
-            CloudBlob cloudBlob = getBlob(blobName);
+            CloudBlob cloudBlob = getBlob(segmentBlob.getBlobName());
             for (int i = 0; i < 10; i++) {
                 if (cloudBlob.exists()) {
                     break;
@@ -106,7 +121,7 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
             cloudBlob.downloadAttributes();
             addNewSegment(cloudBlob);
         } catch (StorageException | IOException e) {
-            log.error("Can't read blob {} (segment name: {})", blobName, e);
+            log.error("Can't read blob {} (segment name: {})", segmentBlob.getBlobName(), e);
         }
     }
 
@@ -127,10 +142,9 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
     @Override
     @Nullable
     public Buffer readSegment(long msb, long lsb) throws IOException {
-        waitForSegment(msb, lsb);
         AzureSegment segment = index.get(new UUID(msb, lsb));
         if (segment == null) {
-            return null;
+            return getRecentSegment(msb, lsb);
         }
         Buffer buffer = Buffer.allocate(segment.segmentArchiveEntry.getLength());
         readBufferFully(getBlob(segment.blobName), buffer);
@@ -139,23 +153,29 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
 
     @Override
     public boolean containsSegment(long msb, long lsb) {
-        waitForSegment(msb, lsb);
-        return index.containsKey(new UUID(msb, lsb));
+        if (index.containsKey(new UUID(msb, lsb))) {
+            return true;
+        } else {
+            return getRecentSegment(msb, lsb) != null;
+        }
     }
 
-    private void waitForSegment(long msb, long lsb) {
+    private Buffer getRecentSegment(long msb, long lsb) {
         UUID uuid = new UUID(msb, lsb);
-        long start = System.currentTimeMillis();
-        while (System.currentTimeMillis() - start < TimeUnit.SECONDS.toMillis(10)) {
-            if (index.containsKey(uuid)) {
-                return;
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                log.error("Interrupted", e);
-            }
+        try {
+            return freshSegments.get(uuid, () -> loadSegmentFromServer(msb, lsb));
+        } catch (ExecutionException e) {
+            log.error("Can't load segment {}", new UUID(msb, lsb), e);
+            return null;
         }
+    }
+
+    private Buffer loadSegmentFromServer(long msb, long lsb) {
+        SegmentProtos.Segment segment = segmentService.getSegment(SegmentProtos.SegmentId.newBuilder()
+                .setMsb(msb)
+                .setLsb(lsb)
+                .build());
+        return Buffer.wrap(segment.getSegmentData().toByteArray());
     }
 
     @Override

@@ -17,7 +17,7 @@
 package org.apache.jackrabbit.oak.remote.client.persistence;
 
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
+import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
@@ -37,17 +37,17 @@ public class TailingPersistence implements SegmentNodeStorePersistence {
 
     private final CloudBlobDirectory directory;
 
-    private final SegmentServiceGrpc.SegmentServiceStub segmentServiceStub;
+    private final RemoteNodeStoreClient client;
 
-    public TailingPersistence(AzurePersistence persistence, SegmentServiceGrpc.SegmentServiceStub segmentServiceStub) {
+    public TailingPersistence(AzurePersistence persistence, RemoteNodeStoreClient client) {
         this.delegate = persistence;
         this.directory = persistence.getSegmentstoreDirectory();
-        this.segmentServiceStub = segmentServiceStub;
+        this.client = client;
     }
 
     @Override
     public SegmentArchiveManager createArchiveManager(boolean memoryMapping, boolean offHeapAccess, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor, RemoteStoreMonitor remoteStoreMonitor) throws IOException {
-        return new TailingArchiveManager(delegate.createArchiveManager(memoryMapping, offHeapAccess, ioMonitor, fileStoreMonitor, remoteStoreMonitor), directory, segmentServiceStub);
+        return new TailingArchiveManager(delegate.createArchiveManager(memoryMapping, offHeapAccess, ioMonitor, fileStoreMonitor, remoteStoreMonitor), directory, client);
     }
 
     @Override

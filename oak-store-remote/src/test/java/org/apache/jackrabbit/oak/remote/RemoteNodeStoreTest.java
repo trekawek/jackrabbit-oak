@@ -38,7 +38,7 @@ public class RemoteNodeStoreTest extends AbstractRemoteNodeStoreTest {
         root = remoteNodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
         NodeState testState = root.getChildNode("test");
         for (long i = 0; i < 15_000; i++) {
-            assertEquals(i, (long) test.getProperty("foo_" + i).getValue(Type.LONG));
+            assertEquals(i, (long) testState.getProperty("foo_" + i).getValue(Type.LONG));
         }
     }
 

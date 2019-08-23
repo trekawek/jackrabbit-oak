@@ -131,7 +131,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         this.blobStore = builder.blobStore;
         this.compositeObserver = new CompositeObserver();
 
-        SplitPersistence splitPersistence = new SplitPersistence(new TailingPersistence(builder.sharedPersistence, client.getSegmentService()), builder.localPersistence);
+        SplitPersistence splitPersistence = new SplitPersistence(new TailingPersistence(builder.sharedPersistence, client), builder.localPersistence);
 
         fileStore = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
                 .withBlobStore(blobStore)
