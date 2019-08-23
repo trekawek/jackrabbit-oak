@@ -32,56 +32,16 @@ public class RemoteNodeBuilder extends MemoryNodeBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(RemoteNodeStore.class);
 
-    private static final int UPDATE_LIMIT = Integer.getInteger("update.limit", 10000);
-
     private final RemoteNodeStoreContext context;
-
-    private long updateCount;
 
     public RemoteNodeBuilder(RemoteNodeStoreContext context, RemoteNodeState base) {
         super(base);
         this.context = context;
-        this.updateCount = 0;
     }
 
     protected RemoteNodeBuilder(RemoteNodeBuilder parent, String name) {
         super(parent, name);
         this.context = parent.context;
-        this.updateCount = -1;
-    }
-
-    @Override
-    protected void updated() {
-        if (isChildBuilder()) {
-            super.updated();
-        } else {
-            updateCount++;
-            if (updateCount > UPDATE_LIMIT) {
-                getNodeState();
-            }
-        }
-    }
-
-    private boolean isChildBuilder() {
-        return updateCount < 0;
-    }
-
-    @NotNull
-    @Override
-    public NodeState getNodeState() {
-        try {
-            NodeState state = super.getNodeState();
-            RecordId recordId = context.getSegmentWriter().writeNode(state);
-            RemoteNodeState newNodeState = new RemoteNodeState(context, recordId.toString());
-            set(newNodeState);
-            if(!isChildBuilder()) {
-                updateCount = 0;
-            }
-            return newNodeState;
-        } catch (IOException e) {
-            log.error("Error flushing changes", e);
-            throw new IllegalStateException("Unexpected IOException", e);
-        }
     }
 
     @Override
