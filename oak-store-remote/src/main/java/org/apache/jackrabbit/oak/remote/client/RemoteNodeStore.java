@@ -35,6 +35,9 @@ import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.LeaseProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
+import org.apache.jackrabbit.oak.segment.RecordId;
+import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
+import org.apache.jackrabbit.oak.segment.SegmentNodeState;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
@@ -189,22 +192,22 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     @NotNull
-    public RemoteNodeState getRoot() {
+    public SegmentNodeState getRoot() {
         NodeStateId id = client.getNodeStoreService().getRoot(Empty.getDefaultInstance());
         return createNodeState(id);
     }
 
     @Override
     public synchronized @NotNull NodeState merge(@NotNull NodeBuilder builder, @NotNull CommitHook commitHook, @NotNull CommitInfo info) throws CommitFailedException {
-        RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
+        SegmentNodeBuilder nodeBuilder = assertRootBuilder(builder);
         NodeState head = nodeBuilder.getNodeState();
         NodeState base = nodeBuilder.getBaseState();
 
         CommitFailedException ex = null;
         for (int i = 0; i < 5; i++) {
-            RemoteNodeState rootState = getRoot();
+            SegmentNodeState rootState = getRoot();
 
-            if (!RemoteNodeState.fastEquals(rootState, nodeBuilder.getBaseState())) {
+            if (!SegmentNodeState.fastEquals(rootState, nodeBuilder.getBaseState())) {
                 nodeBuilder.reset(rootState);
                 head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
             }
@@ -276,11 +279,11 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     public @NotNull NodeState rebase(@NotNull NodeBuilder builder) {
-        RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
+        SegmentNodeBuilder nodeBuilder = assertRootBuilder(builder);
         NodeState head = nodeBuilder.getNodeState();
         NodeState base = nodeBuilder.getBaseState();
-        RemoteNodeState newBase = getRoot();
-        if (!RemoteNodeState.fastEquals(base, newBase)) {
+        SegmentNodeState newBase = getRoot();
+        if (!SegmentNodeState.fastEquals(base, newBase)) {
             nodeBuilder.reset(newBase);
             head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
             head = nodeBuilder.getNodeState();
@@ -290,17 +293,17 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     public NodeState reset(@NotNull NodeBuilder builder) {
-        RemoteNodeBuilder nodeBuilder = assertRootBuilder(builder);
+        SegmentNodeBuilder nodeBuilder = assertRootBuilder(builder);
         NodeState root = getRoot();
         nodeBuilder.reset(root);
         return root;
     }
 
-    private RemoteNodeBuilder assertRootBuilder(NodeBuilder builder) {
-        if (!(builder instanceof RemoteNodeBuilder)) {
+    private SegmentNodeBuilder assertRootBuilder(NodeBuilder builder) {
+        if (!(builder instanceof SegmentNodeBuilder)) {
             throw new IllegalArgumentException("Invalid node builder: " + builder.getClass());
         }
-        RemoteNodeBuilder nodeBuilder = (RemoteNodeBuilder) builder;
+        SegmentNodeBuilder nodeBuilder = (SegmentNodeBuilder) builder;
         if (!nodeBuilder.isRootBuilder()) {
             throw new IllegalArgumentException("Not a root builder: " + builder.getClass());
         }
@@ -359,13 +362,14 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         return client.getCheckpointService().releaseCheckpoint(checkpointId).getValue();
     }
 
-    private RemoteNodeState createNodeState(NodeStateId id) {
+    private SegmentNodeState createNodeState(NodeStateId id) {
         String revision = id.getRevision();
-        return new RemoteNodeState(context, revision);
+        RecordId recordId = RecordId.fromString(fileStore.getSegmentIdProvider(), revision);
+        return fileStore.getReader().readNode(recordId);
     }
 
     @NotNull
-    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, RemoteNodeState root) {
+    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, SegmentNodeState root) {
         Commit.Builder commitBuilder = Commit.newBuilder();
         commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
         commitBuilder.getRootIdBuilder().setRevision(root.getRevision());
