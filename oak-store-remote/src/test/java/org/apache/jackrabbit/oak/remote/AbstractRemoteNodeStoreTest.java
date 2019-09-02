@@ -18,8 +18,6 @@ import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
-import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.spi.monitor.RemoteStoreMonitorAdapter;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.junit.After;
 import org.junit.Before;
