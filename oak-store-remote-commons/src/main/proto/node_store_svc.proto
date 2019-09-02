@@ -11,7 +11,6 @@ import "change_event.proto";
 import "checkpoint.proto";
 import "commit.proto";
 import "node_state.proto";
-import "node_state_diff.proto";
 import "lease.proto";
 import "segment.proto";
 

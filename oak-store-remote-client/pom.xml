@@ -27,7 +27,7 @@
     <relativePath>../oak-parent/pom.xml</relativePath>
   </parent>
 
-  <artifactId>oak-store-remote</artifactId>
+  <artifactId>oak-store-remote-client</artifactId>
   <name>Oak Remote Store</name>
   <packaging>bundle</packaging>
 
@@ -96,65 +96,6 @@
           </instructions>
         </configuration>
       </plugin>
-      <plugin>
-        <artifactId>maven-failsafe-plugin</artifactId>
-        <configuration>
-          <systemPropertyVariables>
-            <java.util.logging.config.file>
-              src/test/resources/logging.properties
-            </java.util.logging.config.file>
-          </systemPropertyVariables>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
-        <version>0.5.1</version>
-        <configuration>
-          <protocArtifact>com.google.protobuf:protoc:3.7.1:exe:${os.detected.classifier}</protocArtifact>
-          <pluginId>grpc-java</pluginId>
-          <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.22.1:exe:${os.detected.classifier}</pluginArtifact>
-        </configuration>
-        <executions>
-          <execution>
-            <goals>
-              <goal>compile</goal>
-              <goal>compile-custom</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                  </excludes>
-                </filter>
-              </filters>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>server</shadedClassifierName>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>org.apache.jackrabbit.oak.remote.server.Main</mainClass>
-                </transformer>
-              </transformers>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
     </plugins>
   </build>
 
@@ -189,7 +130,17 @@
     </dependency>
     <dependency>
       <groupId>org.apache.jackrabbit</groupId>
-      <artifactId>oak-blob-cloud-azure</artifactId>
+      <artifactId>oak-blob</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>oak-blob-plugins</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>oak-commons</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -199,21 +150,36 @@
     </dependency>
     <dependency>
       <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>oak-core-spi</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
       <artifactId>oak-store-spi</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.jackrabbit</groupId>
-      <artifactId>oak-query-spi</artifactId>
+      <artifactId>oak-store-remote-commons</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.jackrabbit</groupId>
-      <artifactId>oak-store-composite</artifactId>
-      <version>${project.version}</version>
+      <artifactId>jackrabbit-data</artifactId>
+      <version>${jackrabbit.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>jackrabbit-jcr-commons</artifactId>
+      <version>${jackrabbit.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>javax.jcr</groupId>
+      <artifactId>jcr</artifactId>
+      <version>2.0</version>
+      <scope>provided</scope>
     </dependency>
 
-    <!-- Server dependencies -->
     <dependency>
       <groupId>org.apache.jackrabbit</groupId>
       <artifactId>oak-segment-tar</artifactId>
@@ -236,9 +202,14 @@
       <version>26.0-jre</version>
     </dependency>
     <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
       <groupId>javax.annotation</groupId>
       <artifactId>javax.annotation-api</artifactId>
       <version>1.3.2</version>
+      <scope>provided</scope>
     </dependency>
 
     <!-- GRPC -->
@@ -312,11 +283,6 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
-    <!-- for the server purposes -->
-    <dependency>
-      <groupId>ch.qos.logback</groupId>
-      <artifactId>logback-classic</artifactId>
-    </dependency>
 
     <!-- Nullability annotations -->
     <dependency>
@@ -330,11 +296,6 @@
       <artifactId>azure-storage</artifactId>
       <version>5.0.0</version>
     </dependency>
-    <dependency>
-      <groupId>com.microsoft.azure</groupId>
-      <artifactId>azure-keyvault-core</artifactId>
-      <version>0.9.7</version>
-    </dependency>
 
     <!-- Test Dependencies -->
     <dependency>
@@ -343,13 +304,18 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.arakelian</groupId>
+      <artifactId>docker-junit-rule</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.arakelian</groupId>
-      <artifactId>docker-junit-rule</artifactId>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -359,39 +325,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.jackrabbit</groupId>
+      <artifactId>oak-store-remote-server</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
-
-  <profiles>
-    <profile>
-      <id>docker-image</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>com.spotify</groupId>
-            <artifactId>dockerfile-maven-plugin</artifactId>
-            <version>1.4.12</version>
-            <executions>
-              <execution>
-                <id>default</id>
-                <goals>
-                  <goal>build</goal>
-                  <goal>push</goal>
-                </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <repository>oak/oak-store-remote-server</repository>
-              <tag>${project.version}</tag>
-              <buildArgs>
-                <JAR_FILE>${project.build.finalName}-server.jar</JAR_FILE>
-              </buildArgs>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

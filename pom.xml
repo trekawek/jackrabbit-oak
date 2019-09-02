@@ -46,7 +46,9 @@
     <module>oak-security-spi</module>
     <module>oak-store-composite</module>
     <module>oak-store-document</module>
-    <module>oak-store-remote</module>
+    <module>oak-store-remote-commons</module>
+    <module>oak-store-remote-server</module>
+    <module>oak-store-remote-client</module>
 
     <module>oak-blob-plugins</module>
     <module>oak-blob</module>
