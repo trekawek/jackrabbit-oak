@@ -28,8 +28,6 @@ import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 
-import java.util.concurrent.TimeUnit;
-
 public class RemoteNodeStoreClient {
 
     private final ManagedChannel channel;
@@ -85,8 +83,8 @@ public class RemoteNodeStoreClient {
         return segmentService;
     }
 
-    public void shutdown() throws InterruptedException {
-        channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+    public void shutdown() {
+        channel.shutdown();
     }
 
 }

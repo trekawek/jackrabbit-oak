@@ -21,7 +21,6 @@ import io.grpc.ServerBuilder;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
-import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,16 +30,16 @@ public class NodeStoreServer {
 
     private static final Logger log = LoggerFactory.getLogger(NodeStoreServer.class);
 
-    private final RevisionableNodeStore nodeStore;
-
     private final Server server;
+
+    private final FileStore fileStore;
 
     public NodeStoreServer(int port, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore, SegmentWriteListener segmentWriteListener) {
         this(ServerBuilder.forPort(port), nodeStore, fileStore, blobStore, segmentWriteListener);
     }
 
     public NodeStoreServer(ServerBuilder<?> serverBuilder, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore, SegmentWriteListener segmentWriteListener) {
-        this.nodeStore = nodeStore;
+        this.fileStore = fileStore;
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore))
                 .addService(new NodeStoreService(nodeStore, fileStore, blobStore))
@@ -50,14 +49,9 @@ public class NodeStoreServer {
     }
 
     public void start() throws IOException {
+        fileStore.flush(); // flush, to make the head segment available immediately
         server.start();
         log.info("Server started");
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            // Use stderr here since the logger may have been reset by its JVM shutdown hook.
-            System.err.println("*** shutting down gRPC server since JVM is shutting down");
-            NodeStoreServer.this.stop();
-            System.err.println("*** server shut down");
-        }));
     }
 
     public void stop() {
