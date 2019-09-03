@@ -19,15 +19,15 @@ package org.apache.jackrabbit.oak.remote.client;
 import com.google.common.base.Strings;
 import com.google.common.io.Files;
 import com.google.protobuf.Empty;
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
-import org.apache.jackrabbit.oak.api.PropertyState;
-import org.apache.jackrabbit.oak.commons.PathUtils;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
-import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
-import org.apache.jackrabbit.oak.remote.client.persistence.TailingPersistence;
+import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
+import org.apache.jackrabbit.oak.remote.common.SegmentWriteListener;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos.CreateCheckpointRequest;
@@ -35,6 +35,7 @@ import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.LeaseProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
 import org.apache.jackrabbit.oak.segment.RecordId;
 import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
 import org.apache.jackrabbit.oak.segment.SegmentNodeState;
@@ -42,7 +43,6 @@ import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.split.SplitPersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
@@ -53,7 +53,6 @@ import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.apache.jackrabbit.oak.spi.state.ConflictAnnotatingRebaseDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.apache.jackrabbit.oak.spi.state.NodeStateDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -63,14 +62,12 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-
-import static org.apache.jackrabbit.oak.remote.common.PropertySerializer.toProtoProperty;
 
 public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
@@ -84,7 +81,9 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private final StreamObserver observerStreamEvent;
 
-    private final RemoteNodeStoreContext context;
+    private final String privateDirName;
+
+    private final StreamObserver segmentStreamObserver;
 
     private LeaseProtos.LeaseInfo leaseInfo;
 
@@ -100,9 +99,11 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
         private BlobStore blobStore;
 
-        private AzurePersistence sharedPersistence;
+        private CloudBlobContainer cloudBlobContainer;
 
-        private SegmentNodeStorePersistence localPersistence;
+        private String sharedDirName;
+
+        private String privateDirName;
 
         public Builder setClient(RemoteNodeStoreClient client) {
             this.client = client;
@@ -114,37 +115,76 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             return this;
         }
 
-        public Builder setSharedPersistence(AzurePersistence sharedPersistence) {
-            this.sharedPersistence = sharedPersistence;
+        public Builder setCloudContainer(CloudBlobContainer cloudBlobContainer) {
+            this.cloudBlobContainer = cloudBlobContainer;
             return this;
         }
 
-        public Builder setLocalPersistence(SegmentNodeStorePersistence localPersistence) {
-            this.localPersistence = localPersistence;
+        public Builder setSharedDirName(String sharedDirName) {
+            this.sharedDirName = sharedDirName;
             return this;
         }
 
-        public RemoteNodeStore build() throws IOException, InvalidFileStoreVersionException {
+        public Builder setPrivateDirName(String privateDirName) {
+            this.privateDirName = privateDirName;
+            return this;
+        }
+
+        public RemoteNodeStore build() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
             return new RemoteNodeStore(this);
         }
     }
 
-    private RemoteNodeStore(Builder builder) throws IOException, InvalidFileStoreVersionException {
+    private RemoteNodeStore(Builder builder) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
         this.client = builder.client;
         this.blobStore = builder.blobStore;
+        this.privateDirName = builder.privateDirName;
         this.compositeObserver = new CompositeObserver();
 
-        SplitPersistence splitPersistence = new SplitPersistence(new TailingPersistence(builder.sharedPersistence, client), builder.localPersistence);
+        AzurePersistence sharedPersistence;
+        AzurePersistence privatePersistence;
+        try {
+            sharedPersistence = new AzurePersistence(builder.cloudBlobContainer.getDirectoryReference(builder.sharedDirName));
+            privatePersistence = new AzurePersistence(builder.cloudBlobContainer.getDirectoryReference(builder.privateDirName));
+        } catch (URISyntaxException e) {
+            throw new IOException(e);
+        }
+
+        TailingPersistence tailingPersistence = new TailingPersistence(sharedPersistence, client.getSegmentService());
+        segmentStreamObserver = client.getSegmentAsyncService().observeSegments(new StreamObserver<SegmentProtos.SegmentBlob>() {
+            @Override
+            public void onNext(SegmentProtos.SegmentBlob segmentBlob) {
+                tailingPersistence.onNewSegment(segmentBlob);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onCompleted() {
+            }
+        });
+        SplitPersistence splitPersistence = new SplitPersistence(tailingPersistence, privatePersistence);
+
+        SegmentWriteListener listener = new SegmentWriteListener();
+        listener.setDelegate(segmentBlob -> {
+                    client.getSegmentService().newPrivateSegment(SegmentProtos.PrivateSegment.newBuilder()
+                            .setSegmentStoreDir(privateDirName)
+                            .setSegmentBlob(segmentBlob)
+                            .build());
+                }
+        );
 
         fileStore = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
                 .withBlobStore(blobStore)
                 .withCustomPersistence(splitPersistence)
+                .withIOMonitor(listener)
                 .build();
 
         leaseInfo = client.getLeaseService().acquire(Empty.getDefaultInstance());
         lastClusterView = client.getLeaseService().renew(leaseInfo);
         leaseRenewProcess.scheduleAtFixedRate(() -> renewLease(), 2, 2, TimeUnit.SECONDS);
-        context = new RemoteNodeStoreContext(fileStore);
 
         observerStreamEvent = client.getNodeStoreAsyncService().observe(new StreamObserver<ChangeEventProtos.ChangeEvent>() {
             @Override
@@ -152,9 +192,11 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 NodeState root = createNodeState(changeEvent.getNodeStateId());
                 compositeObserver.contentChanged(root, CommitInfoUtil.deserialize(changeEvent.getCommitInfo()));
             }
+
             @Override
             public void onError(Throwable throwable) {
             }
+
             @Override
             public void onCompleted() {
             }
@@ -173,6 +215,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     public void close() throws IOException {
         observerStreamEvent.onCompleted();
+        segmentStreamObserver.onCompleted();
         leaseRenewProcess.shutdown();
         try {
             leaseRenewProcess.awaitTermination(1, TimeUnit.MINUTES);
@@ -211,9 +254,11 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 nodeBuilder.reset(rootState);
                 head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
             }
-            NodeState afterHooks;
+
+            SegmentNodeState baseNodeState = (SegmentNodeState) nodeBuilder.getBaseState();
+            SegmentNodeState headNodeState;
             try {
-                afterHooks = commitHook.processCommit(nodeBuilder.getBaseState(), nodeBuilder.getNodeState(), info);
+                headNodeState = (SegmentNodeState) commitHook.processCommit(baseNodeState, nodeBuilder.getNodeState(), info);
             } catch (CommitFailedException e) {
                 log.warn("Hooks failed", e);
                 ex = e;
@@ -225,41 +270,16 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 continue;
             }
 
-            AtomicReference<NodeStateId> id = new AtomicReference<>();
-            Object monitor = new Object();
-            StreamObserver<CommitProtos.CommitEvent> observer = client.getNodeStoreAsyncService().merge(new StreamObserver<NodeStateId>() {
-                @Override
-                public void onNext(NodeStateId nodeStateId) {
-                    id.set(nodeStateId);
-                }
-
-                @Override
-                public void onError(Throwable throwable) {
-                    log.error("Error occurred", throwable);
-                    synchronized (monitor) {
-                        monitor.notify();
-                    }
-                }
-
-                @Override
-                public void onCompleted() {
-                    synchronized (monitor) {
-                        monitor.notify();
-                    }
-                }
-            });
-            observer.onNext(CommitProtos.CommitEvent.newBuilder().setCommit(createCommitObject(info, rootState)).build());
-            afterHooks.compareAgainstBaseState(rootState, new NodeDiffSerializer(observer));
-            observer.onCompleted();
-            synchronized (monitor) {
-                try {
-                    monitor.wait();
-                } catch (InterruptedException e) {
-                    log.error("Interrupted", e);
-                    throw new IllegalStateException(e);
-                }
+            try {
+                fileStore.getWriter().flush();
+            } catch (IOException e) {
+                log.error("Can't flush", e);
+                continue;
             }
-            if (Strings.isNullOrEmpty(id.get().getRevision())) {
+
+            NodeStateId id = client.getNodeStoreService().merge(createCommitObject(info, baseNodeState, headNodeState));
+
+            if (Strings.isNullOrEmpty(id.getRevision())) {
                 log.warn("Rebased to outdated root state, retrying");
                 ex = new CommitFailedException(CommitFailedException.MERGE, 1, "Can't merge, revision on remote has been updated");
                 try {
@@ -267,10 +287,10 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 } catch (InterruptedException e) {
                     log.error("Interrupted", e);
                 }
-
                 continue;
             }
-            NodeState mergedRoot = createNodeState(id.get());
+
+            NodeState mergedRoot = createNodeState(id);
             nodeBuilder.reset(mergedRoot);
             return mergedRoot;
         }
@@ -369,94 +389,16 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     }
 
     @NotNull
-    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, SegmentNodeState root) {
+    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, SegmentNodeState baseNodeState, SegmentNodeState headNodeState) {
         Commit.Builder commitBuilder = Commit.newBuilder();
         commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
-        commitBuilder.getRootIdBuilder().setRevision(root.getRevision());
+        commitBuilder.getBaseNodeStateBuilder().setRevision(baseNodeState.getRevision());
+        commitBuilder.getHeadNodeStateBuilder().setRevision(headNodeState.getRevision());
+        commitBuilder.setSegmentStoreDir(privateDirName);
         return commitBuilder.build();
     }
 
     public LeaseProtos.ClusterView getLastClusterView() {
         return lastClusterView;
-    }
-
-    private static class NodeDiffSerializer implements NodeStateDiff {
-
-        private final StreamObserver<CommitProtos.CommitEvent> observer;
-
-        private final String path;
-
-        private CommitProtos.CommitEvent.Builder eventBuilder;
-
-        public NodeDiffSerializer(StreamObserver<CommitProtos.CommitEvent> observer) {
-            this.observer = observer;
-            this.path = "/";
-        }
-
-        public NodeDiffSerializer(NodeDiffSerializer parent, String name) {
-            this.observer = parent.observer;
-            this.path = PathUtils.concat(parent.path, name);
-        }
-
-        private CommitProtos.NodeBuilderChange.Builder newChange() {
-            eventBuilder = CommitProtos.CommitEvent.newBuilder();
-            return eventBuilder.getChangeBuilder().setNodeBuilderPath(path);
-        }
-
-        private void apply() {
-            observer.onNext(eventBuilder.build());
-        }
-
-        @Override
-        public boolean propertyAdded(PropertyState after) {
-            newChange()
-                .getSetPropertyBuilder()
-                .setProperty(toProtoProperty(after));
-            apply();
-            return true;
-        }
-
-        @Override
-        public boolean propertyChanged(PropertyState before, PropertyState after) {
-            newChange()
-                    .getSetPropertyBuilder()
-                    .setProperty(toProtoProperty(after));
-            apply();
-            return true;
-        }
-
-        @Override
-        public boolean propertyDeleted(PropertyState before) {
-            newChange()
-                    .getRemovePropertyBuilder()
-                    .setName(before.getName());
-            apply();
-            return true;
-        }
-
-        @Override
-        public boolean childNodeAdded(String name, NodeState after) {
-            newChange()
-                    .getAddNodeBuilder()
-                    .setChildName(name);
-            apply();
-            EmptyNodeState.compareAgainstEmptyState(after, new NodeDiffSerializer(this, name));
-            return true;
-        }
-
-        @Override
-        public boolean childNodeChanged(String name, NodeState before, NodeState after) {
-            after.compareAgainstBaseState(before, new NodeDiffSerializer(this, name));
-            return true;
-        }
-
-        @Override
-        public boolean childNodeDeleted(String name, NodeState before) {
-            newChange()
-                    .getRemoveNodeBuilder()
-                    .setChildName(name);
-            apply();
-            return true;
-        }
     }
 }

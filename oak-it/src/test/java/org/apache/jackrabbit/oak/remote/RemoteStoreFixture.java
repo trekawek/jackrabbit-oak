@@ -41,13 +41,6 @@ import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
-import org.apache.jackrabbit.oak.remote.server.SegmentWriteListener;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
-import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
-import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
-import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.slf4j.Logger;
@@ -64,6 +57,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.spotify.docker.client.DockerClient.LogsParam.follow;
 import static com.spotify.docker.client.DockerClient.LogsParam.stderr;
@@ -146,19 +140,12 @@ public class RemoteStoreFixture extends NodeStoreFixture {
 
         private final String name;
 
-        private SegmentNodeStore segmentNodeStore;
-
-        private FileStore fileStore;
-
-        private SegmentWriteListener listener;
-
         private BlobStore blobStore;
 
         public RemoteNSServer(String name) {
             this.name = name;
 
             createDataStore();
-            createAzureSegmentStore();
             createServer();
         }
 
@@ -172,38 +159,18 @@ public class RemoteStoreFixture extends NodeStoreFixture {
             blobStore = new DataStoreBlobStore(fds);
         }
 
-        private void createAzureSegmentStore() {
+        private void createServer() {
             try {
                 CloudBlobContainer container = dockerContainer.getContainer(name);
                 container.deleteIfExists();
                 container.create();
 
-                AzurePersistence persistence = new AzurePersistence(container.getDirectoryReference("oak"));
-                File segmentStore = Files.createTempDir();
-                closer.register(() -> FileUtils.deleteDirectory(segmentStore));
+                InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
+                NodeStoreServer server = new NodeStoreServer(inProcessServerBuilder, container.getDirectoryReference("oak"), blobStore);
 
-                listener = new SegmentWriteListener();
-                fileStore = FileStoreBuilder.fileStoreBuilder(segmentStore)
-                        .withBlobStore(blobStore)
-                        .withCustomPersistence(persistence)
-                        .withIOMonitor(listener)
-                        .build();
-                closer.register(fileStore);
-                segmentNodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-        }
-
-        private void createServer() {
-            InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
-            NodeStoreServer server = new NodeStoreServer(inProcessServerBuilder, segmentNodeStore, fileStore, blobStore, listener);
-            try {
                 server.start();
-                closer.register(() -> {
-                    server.stop();
-                });
-            } catch (IOException e) {
+                closer.register(server);
+            } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
         }
@@ -239,8 +206,9 @@ public class RemoteStoreFixture extends NodeStoreFixture {
                 remoteNodeStore = new RemoteNodeStore.Builder()
                         .setBlobStore(blobStore)
                         .setClient(client)
-                        .setLocalPersistence(new TarPersistence(segmentStore))
-                        .setSharedPersistence(new AzurePersistence(dockerContainer.getContainer(name).getDirectoryReference("oak")))
+                        .setCloudContainer(dockerContainer.getContainer(name))
+                        .setSharedDirName("oak")
+                        .setPrivateDirName("oak-private-" + UUID.randomUUID().toString())
                         .build();
                 closer.register(remoteNodeStore);
             } catch (Exception e) {

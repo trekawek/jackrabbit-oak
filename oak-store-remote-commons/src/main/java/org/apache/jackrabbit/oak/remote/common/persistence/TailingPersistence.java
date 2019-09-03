@@ -1,0 +1,121 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.jackrabbit.oak.remote.common.persistence;
+
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceBlockingStub;
+import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
+import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
+import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
+import org.apache.jackrabbit.oak.segment.spi.monitor.RemoteStoreMonitor;
+import org.apache.jackrabbit.oak.segment.spi.persistence.GCJournalFile;
+import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFile;
+import org.apache.jackrabbit.oak.segment.spi.persistence.ManifestFile;
+import org.apache.jackrabbit.oak.segment.spi.persistence.RepositoryLock;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
+import org.jetbrains.annotations.Nullable;
+
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class TailingPersistence implements SegmentNodeStorePersistence {
+
+    private final AzurePersistence delegate;
+
+    private final SegmentServiceBlockingStub segmentService;
+
+    private final CloudBlobContainer container;
+
+    private final List<String> directoryNames;
+
+    private volatile TailingArchiveManager tailingArchiveManager;
+
+    private List<SegmentProtos.SegmentBlob> waitingSegments = new ArrayList<>();
+
+    public TailingPersistence(AzurePersistence persistence, @Nullable SegmentServiceBlockingStub segmentService) throws URISyntaxException, StorageException {
+        this(persistence, segmentService, null);
+    }
+
+    public TailingPersistence(AzurePersistence persistence, @Nullable SegmentServiceBlockingStub segmentService, @Nullable List<String> directoryNames) throws URISyntaxException, StorageException {
+        this.delegate = persistence;
+        this.segmentService = segmentService;
+        this.container = persistence.getSegmentstoreDirectory().getContainer();
+        if (directoryNames == null) {
+            this.directoryNames = Arrays.asList(persistence.getSegmentstoreDirectory().getPrefix());
+        } else {
+            this.directoryNames = directoryNames;
+        }
+    }
+
+    @Override
+    public synchronized SegmentArchiveManager createArchiveManager(boolean memoryMapping, boolean offHeapAccess, IOMonitor ioMonitor, FileStoreMonitor fileStoreMonitor, RemoteStoreMonitor remoteStoreMonitor) throws IOException {
+        if (tailingArchiveManager != null) {
+            return tailingArchiveManager;
+        }
+
+        tailingArchiveManager = new TailingArchiveManager(delegate.createArchiveManager(memoryMapping, offHeapAccess, ioMonitor, fileStoreMonitor, remoteStoreMonitor), segmentService, container, directoryNames);
+        waitingSegments.forEach(tailingArchiveManager::onNewSegment);
+        waitingSegments.clear();
+
+        return tailingArchiveManager;
+    }
+
+    @Override
+    public boolean segmentFilesExist() {
+        return delegate.segmentFilesExist();
+    }
+
+    @Override
+    public JournalFile getJournalFile() {
+        return delegate.getJournalFile();
+    }
+
+    @Override
+    public GCJournalFile getGCJournalFile() throws IOException {
+        return delegate.getGCJournalFile();
+    }
+
+    @Override
+    public ManifestFile getManifestFile() throws IOException {
+        return delegate.getManifestFile();
+    }
+
+    @Override
+    public RepositoryLock lockRepository() {
+        return () -> {};
+    }
+
+    public void onNewSegment(SegmentProtos.SegmentBlob segmentBlob) {
+        if (tailingArchiveManager == null) {
+            synchronized (this) {
+                if (tailingArchiveManager == null) {
+                    waitingSegments.add(segmentBlob);
+                } else {
+                    tailingArchiveManager.onNewSegment(segmentBlob);
+                }
+            }
+        } else {
+            tailingArchiveManager.onNewSegment(segmentBlob);
+        }
+    }
+}

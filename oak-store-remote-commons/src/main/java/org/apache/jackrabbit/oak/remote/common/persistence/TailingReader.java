@@ -14,23 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.remote.client.persistence;
+package org.apache.jackrabbit.oak.remote.common.persistence;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.protobuf.Empty;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.BlobListingDetails;
 import com.microsoft.azure.storage.blob.CloudBlob;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
-import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import com.microsoft.azure.storage.blob.ListBlobItem;
-import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.commons.Buffer;
-import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
-import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceBlockingStub;
 import org.apache.jackrabbit.oak.segment.azure.AzureBlobMetadata;
 import org.apache.jackrabbit.oak.segment.azure.AzureSegmentArchiveEntry;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
@@ -53,9 +49,9 @@ import java.util.stream.Collectors;
 
 import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.readBufferFully;
 
-public class SegmentTailingReader implements SegmentArchiveReader  {
+public class TailingReader implements SegmentArchiveReader  {
 
-    private static final Logger log = LoggerFactory.getLogger(SegmentTailingReader.class);
+    private static final Logger log = LoggerFactory.getLogger(TailingReader.class);
 
     private final CloudBlobContainer container;
 
@@ -63,36 +59,22 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
 
     private final AtomicLong length = new AtomicLong();
 
-    private final StreamObserver<Empty> streamObserver;
+    private final Cache<UUID, Buffer> segmentCache;
 
-    private final SegmentServiceGrpc.SegmentServiceBlockingStub segmentService;
+    private final SegmentServiceBlockingStub segmentService;
 
-    private final Cache<UUID, Buffer> freshSegments;
-
-    public SegmentTailingReader(CloudBlobDirectory segmentStoreDirectory, RemoteNodeStoreClient client) throws IOException {
-        this.freshSegments = CacheBuilder.newBuilder()
+    public TailingReader(CloudBlobContainer container, List<String> segmentStoreNames, SegmentServiceBlockingStub segmentService) throws IOException {
+        this.segmentService = segmentService;
+        this.segmentCache = CacheBuilder.newBuilder()
                 .maximumSize(128)
                 .build();
-        this.segmentService = client.getSegmentService();
-        this.streamObserver = client.getSegmentAsyncService().observeSegments(new StreamObserver<SegmentProtos.SegmentBlob>() {
-            @Override
-            public void onNext(SegmentProtos.SegmentBlob segmentBlob) {
-                onNewSegment(segmentBlob);
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-            }
-
-            @Override
-            public void onCompleted() {
-            }
-        });
         try {
-            this.container = segmentStoreDirectory.getContainer();
-            for (ListBlobItem blob : segmentStoreDirectory.listBlobs("data", true, EnumSet.of(BlobListingDetails.METADATA), null, null)) {
-                if (blob instanceof CloudBlob) {
-                    addNewSegment((CloudBlob) blob);
+            this.container = container;
+            for (String segmentStore : segmentStoreNames) {
+                for (ListBlobItem blob : container.getDirectoryReference(segmentStore).listBlobs("data", true, EnumSet.of(BlobListingDetails.METADATA), null, null)) {
+                    if (blob instanceof CloudBlob) {
+                        addNewSegment((CloudBlob) blob);
+                    }
                 }
             }
         } catch (StorageException | URISyntaxException e) {
@@ -138,13 +120,20 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
     @Override
     @Nullable
     public Buffer readSegment(long msb, long lsb) throws IOException {
-        AzureSegment segment = index.get(new UUID(msb, lsb));
+        UUID uuid = new UUID(msb, lsb);
+        AzureSegment segment = index.get(uuid);
         if (segment == null) {
             return getRecentSegment(msb, lsb);
         }
-        Buffer buffer = Buffer.allocate(segment.segmentArchiveEntry.getLength());
-        readBufferFully(getBlob(segment.blobName), buffer);
-        return buffer;
+        try {
+            return segmentCache.get(uuid, () -> loadSegmentFromCloud(segment));
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            } else {
+                throw new IOException(e);
+            }
+        }
     }
 
     @Override
@@ -158,20 +147,43 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
 
     private Buffer getRecentSegment(long msb, long lsb) {
         UUID uuid = new UUID(msb, lsb);
-        try {
-            return freshSegments.get(uuid, () -> loadSegmentFromServer(msb, lsb));
-        } catch (ExecutionException e) {
-            log.error("Can't load segment {}", new UUID(msb, lsb), e);
-            return null;
+        if (segmentService == null) {
+            while (!index.containsKey(uuid)) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    log.error("Interrupted", e);
+                    return null;
+                }
+            }
+            try {
+                return segmentCache.get(uuid, () -> loadSegmentFromCloud(index.get(uuid)));
+            } catch (ExecutionException e) {
+                log.error("Can't load segment {}", uuid, e);
+                return null;
+            }
+        } else {
+            try {
+                return segmentCache.get(uuid, () -> loadSegmentFromGrpc(msb, lsb));
+            } catch (ExecutionException e) {
+                log.error("Can't load segment {}", uuid, e);
+                return null;
+            }
         }
     }
 
-    private Buffer loadSegmentFromServer(long msb, long lsb) {
+    private Buffer loadSegmentFromGrpc(long msb, long lsb) {
         SegmentProtos.Segment segment = segmentService.getSegment(SegmentProtos.SegmentId.newBuilder()
                 .setMsb(msb)
                 .setLsb(lsb)
                 .build());
         return Buffer.wrap(segment.getSegmentData().toByteArray());
+    }
+
+    private Buffer loadSegmentFromCloud(AzureSegment segment) throws IOException {
+        Buffer buffer = Buffer.allocate(segment.segmentArchiveEntry.getLength());
+        readBufferFully(getBlob(segment.blobName), buffer);
+        return buffer;
     }
 
     @Override
@@ -210,9 +222,7 @@ public class SegmentTailingReader implements SegmentArchiveReader  {
     }
 
     @Override
-    public void close() {
-        streamObserver.onNext(Empty.getDefaultInstance());
-        streamObserver.onCompleted();
+    public void close() throws IOException {
     }
 
     @Override

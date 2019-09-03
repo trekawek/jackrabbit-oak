@@ -16,7 +16,7 @@ import "segment.proto";
 
 service NodeStoreService {
     rpc GetRoot (google.protobuf.Empty) returns (NodeStateId);
-    rpc Merge (stream CommitEvent) returns (NodeStateId);
+    rpc Merge (Commit) returns (NodeStateId);
     rpc Observe (stream google.protobuf.Empty) returns (stream ChangeEvent);
 }
 
@@ -37,4 +37,5 @@ service LeaseService {
 service SegmentService {
     rpc ObserveSegments (stream google.protobuf.Empty) returns (stream SegmentBlob);
     rpc GetSegment (SegmentId) returns (Segment);
+    rpc NewPrivateSegment (PrivateSegment) returns (google.protobuf.Empty);
 }

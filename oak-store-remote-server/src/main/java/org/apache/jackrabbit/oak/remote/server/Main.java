@@ -35,14 +35,14 @@ import org.apache.jackrabbit.oak.composite.InitialContentMigrator;
 import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
-import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.mount.MountInfoProvider;
 import org.apache.jackrabbit.oak.spi.mount.Mounts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -55,6 +55,8 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class Main {
+
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) throws IOException {
         Closer closer = Closer.create();
@@ -73,19 +75,22 @@ public class Main {
                 blobStore = createAzureBlobStore();
             }
 
-            SegmentWriteListener listener = new SegmentWriteListener();
-            FileStore fileStore = createAzureFileStore(closer, blobStore, listener);
-            SegmentNodeStore delegate = SegmentNodeStoreBuilders.builder(fileStore).build();
-
+            NodeStoreServer server = new NodeStoreServer(12300, getAzureSegmentStoreDirectory(), blobStore);
             String seedSegmentStore = getenv("seed_segmentstore");
             if (!Strings.isNullOrEmpty(seedSegmentStore)) {
-                initialize(seedSegmentStore, delegate);
+                initialize(seedSegmentStore, server.getNodeStore());
             }
 
             System.out.println("Starting server. Press ^C to stop.");
-            NodeStoreServer server = new NodeStoreServer(12300, delegate, fileStore, blobStore, listener);
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop()));
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    closer.close();
+                } catch (IOException e) {
+                    log.error("Can't close server", e);
+                }
+            }));
             server.start();
+            closer.register(server);
             server.blockUntilShutdown();
         } catch(Throwable t) {
             throw closer.rethrow(t);
@@ -104,22 +109,6 @@ public class Main {
             fs.close();
         }
     }
-
-    private static FileStore createAzureFileStore(Closer closer, BlobStore blobStore, SegmentWriteListener listener) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
-        File dir = createTempDir();
-        SegmentNodeStorePersistence persistence;
-        AzurePersistence azurePersistence = new AzurePersistence(getAzureSegmentStoreDirectory());
-        persistence = azurePersistence;
-        FileStoreBuilder builder = FileStoreBuilder
-                .fileStoreBuilder(dir)
-                .withCustomPersistence(persistence)
-                .withBlobStore(blobStore)
-                .withIOMonitor(listener);
-        FileStore fileStore = builder.build();
-        closer.register(fileStore);
-        return fileStore;
-    }
-
 
     private static BlobStore createAzureBlobStore() throws DataStoreException {
         Properties properties = new Properties();

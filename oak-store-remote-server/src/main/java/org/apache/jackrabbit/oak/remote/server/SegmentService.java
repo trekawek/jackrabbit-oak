@@ -3,7 +3,9 @@ package org.apache.jackrabbit.oak.remote.server;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
+import org.apache.jackrabbit.oak.remote.common.SegmentWriteListener;
 import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos.PrivateSegment;
 import org.apache.jackrabbit.oak.remote.proto.SegmentProtos.SegmentBlob;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
 import org.apache.jackrabbit.oak.segment.Segment;
@@ -18,6 +20,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
+
 public class SegmentService extends SegmentServiceGrpc.SegmentServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(SegmentService.class);
@@ -26,14 +30,18 @@ public class SegmentService extends SegmentServiceGrpc.SegmentServiceImplBase {
 
     private final FileStore fileStore;
 
-    public SegmentService(SegmentWriteListener segmentWriteListener, FileStore fileStore) {
+    private final PrivateFileStores privateFileStores;
+
+    public SegmentService(SegmentWriteListener segmentWriteListener, FileStore fileStore, PrivateFileStores privateFileStores) {
         this.fileStore = fileStore;
+        this.privateFileStores = privateFileStores;
         segmentWriteListener.setDelegate(this::onNewSegment);
     }
 
-    public void onNewSegment(SegmentBlob segmentBlob) {
+    private void onNewSegment(SegmentBlob segmentBlob) {
         for (StreamObserver<SegmentBlob> o : observers) {
             try {
+                privateFileStores.onNewSharedSegment(segmentBlob);
                 o.onNext(segmentBlob);
             } catch (Exception e) {
                 log.error("Can't send event", e);
@@ -85,5 +93,12 @@ public class SegmentService extends SegmentServiceGrpc.SegmentServiceImplBase {
         } catch (IOException | InterruptedException e) {
             responseObserver.onError(e);
         }
+    }
+
+    @Override
+    public void newPrivateSegment(PrivateSegment request, StreamObserver<Empty> responseObserver) {
+        privateFileStores.onNewPrivateSegment(request.getSegmentStoreDir(), request.getSegmentBlob());
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
     }
 }

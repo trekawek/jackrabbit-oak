@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.remote.client.persistence;
+package org.apache.jackrabbit.oak.remote.common.persistence;
 
-import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
+import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
+import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceBlockingStub;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
@@ -34,32 +35,29 @@ public class TailingArchiveManager implements SegmentArchiveManager {
 
     private final SegmentArchiveManager delegate;
 
-    private final CloudBlobDirectory directory;
+    private final TailingReader reader;
 
-    private final RemoteNodeStoreClient client;
-
-    public TailingArchiveManager(SegmentArchiveManager delegate, CloudBlobDirectory directory, RemoteNodeStoreClient client) {
+    public TailingArchiveManager(SegmentArchiveManager delegate, SegmentServiceBlockingStub segmentService, CloudBlobContainer container, List<String> directoryNames) throws IOException {
         this.delegate = delegate;
-        this.directory = directory;
-        this.client = client;
+        this.reader = new TailingReader(container, directoryNames, segmentService);
     }
 
     @Override
-    public @NotNull List<String> listArchives() throws IOException {
+    public @NotNull List<String> listArchives() {
         return Arrays.asList("data00000a.tar");
     }
 
     @Override
     @Nullable
-    public SegmentArchiveReader open(@NotNull String archiveName) throws IOException {
+    public SegmentArchiveReader open(@NotNull String archiveName) {
         return forceOpen(archiveName);
     }
 
     @Override
     @Nullable
-    public SegmentArchiveReader forceOpen(String archiveName) throws IOException {
+    public SegmentArchiveReader forceOpen(String archiveName) {
         if ("data00000a.tar".equals(archiveName)) {
-            return new SegmentTailingReader(directory, client);
+            return reader;
         } else {
             return null;
         }
@@ -93,5 +91,9 @@ public class TailingArchiveManager implements SegmentArchiveManager {
     @Override
     public void recoverEntries(@NotNull String archiveName, @NotNull LinkedHashMap<UUID, byte[]> entries) {
         throw new UnsupportedOperationException();
+    }
+
+    public void onNewSegment(SegmentProtos.SegmentBlob segmentBlob) {
+        reader.onNewSegment(segmentBlob);
     }
 }

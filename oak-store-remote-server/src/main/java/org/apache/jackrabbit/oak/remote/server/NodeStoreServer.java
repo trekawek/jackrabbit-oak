@@ -16,17 +16,32 @@
  */
 package org.apache.jackrabbit.oak.remote.server;
 
+import com.google.common.io.Closer;
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import org.apache.commons.io.FileUtils;
+import org.apache.jackrabbit.oak.remote.common.SegmentWriteListener;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
+import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
+import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
+import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 
-public class NodeStoreServer {
+import static com.google.common.io.Files.createTempDir;
+
+public class NodeStoreServer implements Closeable  {
 
     private static final Logger log = LoggerFactory.getLogger(NodeStoreServer.class);
 
@@ -34,30 +49,56 @@ public class NodeStoreServer {
 
     private final FileStore fileStore;
 
-    public NodeStoreServer(int port, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore, SegmentWriteListener segmentWriteListener) {
-        this(ServerBuilder.forPort(port), nodeStore, fileStore, blobStore, segmentWriteListener);
+    private final SegmentNodeStore nodeStore;
+
+    private final Closer closer = Closer.create();
+
+    public NodeStoreServer(int port, CloudBlobDirectory sharedSegmentStoreDir, BlobStore blobStore) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
+        this(ServerBuilder.forPort(port), sharedSegmentStoreDir, blobStore);
     }
 
-    public NodeStoreServer(ServerBuilder<?> serverBuilder, SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore, SegmentWriteListener segmentWriteListener) {
-        this.fileStore = fileStore;
+    public NodeStoreServer(ServerBuilder<?> serverBuilder, CloudBlobDirectory sharedSegmentStoreDir, BlobStore blobStore) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
+        SegmentWriteListener segmentWriteListener = new SegmentWriteListener();
+        this.fileStore = createFileStore(sharedSegmentStoreDir, blobStore, segmentWriteListener);
+        this.nodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
+        PrivateFileStores privateFileStores = new PrivateFileStores(sharedSegmentStoreDir, blobStore);
         this.server = serverBuilder
                 .addService(new CheckpointService(nodeStore))
-                .addService(new NodeStoreService(nodeStore, fileStore, blobStore))
+                .addService(new NodeStoreService(nodeStore, fileStore, privateFileStores))
                 .addService(new LeaseService(nodeStore))
-                .addService(new SegmentService(segmentWriteListener, fileStore))
+                .addService(new SegmentService(segmentWriteListener, fileStore, privateFileStores))
                 .build();
+    }
+
+    private FileStore createFileStore(CloudBlobDirectory sharedSegmentStoreDir, BlobStore blobStore, SegmentWriteListener listener) throws IOException, InvalidFileStoreVersionException {
+        File dir = createTempDir();
+        closer.register(() -> FileUtils.deleteDirectory(dir));
+        SegmentNodeStorePersistence persistence;
+        AzurePersistence azurePersistence = new AzurePersistence(sharedSegmentStoreDir);
+        persistence = azurePersistence;
+        FileStoreBuilder builder = FileStoreBuilder
+                .fileStoreBuilder(dir)
+                .withCustomPersistence(persistence)
+                .withBlobStore(blobStore)
+                .withIOMonitor(listener);
+        FileStore fileStore = builder.build();
+        closer.register(fileStore);
+        return fileStore;
+    }
+
+    public SegmentNodeStore getNodeStore() {
+        return nodeStore;
     }
 
     public void start() throws IOException {
         fileStore.flush(); // flush, to make the head segment available immediately
         server.start();
         log.info("Server started");
+        closer.register(() -> server.shutdown());
     }
 
-    public void stop() {
-        if (server != null) {
-            server.shutdown();
-        }
+    public void close() throws IOException {
+        closer.close();
     }
 
     public void blockUntilShutdown() throws InterruptedException {

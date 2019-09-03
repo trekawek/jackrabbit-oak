@@ -1,4 +1,4 @@
-package org.apache.jackrabbit.oak.remote.server;
+package org.apache.jackrabbit.oak.remote.common;
 
 import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;

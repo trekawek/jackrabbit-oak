@@ -19,3 +19,8 @@ message SegmentBlob {
     SegmentId segmentId = 1;
     string blobName = 2;
 }
+
+message PrivateSegment {
+    SegmentBlob segmentBlob = 1;
+    string segmentStoreDir = 2;
+}

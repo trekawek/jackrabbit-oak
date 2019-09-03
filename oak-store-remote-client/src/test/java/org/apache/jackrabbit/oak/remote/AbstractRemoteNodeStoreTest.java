@@ -9,15 +9,10 @@ import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
-import org.apache.jackrabbit.oak.remote.server.SegmentWriteListener;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
-import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.azure.AzuriteDockerRule;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
-import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.junit.After;
 import org.junit.Before;
@@ -41,8 +36,6 @@ public abstract class AbstractRemoteNodeStoreTest {
 
     private long index;
 
-    protected FileStore fs;
-
     protected SegmentNodeStore delegateNodeStore;
 
     protected NodeStoreServer server;
@@ -59,16 +52,9 @@ public abstract class AbstractRemoteNodeStoreTest {
 
         String name = "oak-test-" + (++index);
 
-        SegmentWriteListener listener = new SegmentWriteListener();
-        fs = FileStoreBuilder.fileStoreBuilder(folder.newFolder())
-                .withBlobStore(blobStore)
-                .withCustomPersistence(new AzurePersistence(container.getDirectoryReference(name)))
-                .withIOMonitor(listener)
-                .build();
-        delegateNodeStore = SegmentNodeStoreBuilders.builder(fs).build();
-
         InProcessServerBuilder inProcessServerBuilder = InProcessServerBuilder.forName(name);
-        server = new NodeStoreServer(inProcessServerBuilder, delegateNodeStore, fs, blobStore, listener);
+        server = new NodeStoreServer(inProcessServerBuilder, container.getDirectoryReference(name), blobStore);
+        delegateNodeStore = server.getNodeStore();
         server.start();
 
         InProcessChannelBuilder inProcessChannelBuilder = InProcessChannelBuilder.forName(name);
@@ -76,15 +62,15 @@ public abstract class AbstractRemoteNodeStoreTest {
         remoteNodeStore = new RemoteNodeStore.Builder()
                 .setBlobStore(blobStore)
                 .setClient(client)
-                .setLocalPersistence(new TarPersistence(folder.newFolder()))
-                .setSharedPersistence(new AzurePersistence(container.getDirectoryReference(name)))
+                .setCloudContainer(container)
+                .setSharedDirName(name)
+                .setPrivateDirName(name + "-private")
                 .build();
     }
 
     @After
     public void teardown() throws IOException {
         remoteNodeStore.close();
-        server.stop();
-        fs.close();
+        server.close();
     }
 }

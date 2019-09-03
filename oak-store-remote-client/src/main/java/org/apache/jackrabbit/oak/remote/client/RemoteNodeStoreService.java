@@ -18,6 +18,9 @@ package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.io.Closer;
 import com.google.common.io.Files;
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
+import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import org.apache.commons.io.FileUtils;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
@@ -54,10 +57,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo.getOrCreateId;
 
@@ -99,7 +104,7 @@ public class RemoteNodeStoreService {
     private String role;
 
     @Activate
-    protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, CommitFailedException, InvalidFileStoreVersionException {
+    protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
         this.context = context;
         remoteHost = PropertiesUtil.toString(config.get(REMOTE_HOST), "localhost");
         remotePort = PropertiesUtil.toInteger(config.get(REMOTE_PORT), 12300);
@@ -112,19 +117,19 @@ public class RemoteNodeStoreService {
         unregisterRemoteNodeStore();
     }
 
-    private void registerRemoteNodeStore() throws IOException, InvalidFileStoreVersionException {
+    private void registerRemoteNodeStore() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
         registrations = Closer.create();
 
         RemoteNodeStoreClient client = new RemoteNodeStoreClient(remoteHost, remotePort);
         RemoteNodeStore.Builder builder = new RemoteNodeStore.Builder();
         builder.setBlobStore(blobStore);
         builder.setClient(client);
-        File localPersistence = Files.createTempDir();
-        registrations.register(() -> FileUtils.deleteDirectory(localPersistence));
-        builder.setLocalPersistence(new TarPersistence(localPersistence));
-
         if (persistence instanceof AzurePersistence) {
-            builder.setSharedPersistence((AzurePersistence) persistence);
+            AzurePersistence azurePersistence = (AzurePersistence) persistence;
+            CloudBlobDirectory sharedDirectory = azurePersistence.getSegmentstoreDirectory();
+            builder.setCloudContainer(sharedDirectory.getContainer())
+                    .setSharedDirName(sharedDirectory.getPrefix())
+                    .setPrivateDirName(sharedDirectory.getPrefix() + UUID.randomUUID().toString());
         } else {
             throw new IllegalArgumentException("Invalid persistence, only AzurePersistence is supported");
         }

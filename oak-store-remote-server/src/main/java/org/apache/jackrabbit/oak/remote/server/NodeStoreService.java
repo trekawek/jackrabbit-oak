@@ -19,21 +19,16 @@ package org.apache.jackrabbit.oak.remote.server;
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
-import org.apache.jackrabbit.oak.commons.PathUtils;
-import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
-import org.apache.jackrabbit.oak.remote.common.PropertyDeserializer;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos.ChangeEvent;
-import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
-import org.apache.jackrabbit.oak.remote.proto.CommitProtos.CommitEvent;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.remote.proto.NodeStoreServiceGrpc;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
+import org.apache.jackrabbit.oak.spi.state.ApplyDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.slf4j.Logger;
@@ -44,7 +39,6 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
-import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getRevision;
 
 public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplBase {
 
@@ -54,12 +48,12 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
 
     private final FileStore fileStore;
 
-    private final PropertyDeserializer deserializer;
+    private final PrivateFileStores privateFileStores;
 
-    public NodeStoreService(SegmentNodeStore nodeStore, FileStore fileStore, BlobStore blobStore) {
+    public NodeStoreService(SegmentNodeStore nodeStore, FileStore fileStore, PrivateFileStores privateFileStores) {
         this.nodeStore = nodeStore;
         this.fileStore = fileStore;
-        this.deserializer = new PropertyDeserializer(blobId -> new BlobStoreBlob(blobStore, blobId));
+        this.privateFileStores = privateFileStores;
     }
 
     @Override
@@ -69,82 +63,28 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
     }
 
     @Override
-    public StreamObserver<CommitEvent> merge(StreamObserver<NodeStateId> responseObserver) {
-        NodeState root = nodeStore.getRoot();
-        NodeBuilder builder = root.builder();
-        String currentRootRevision = getRevision(root);
-
-        return new StreamObserver<CommitEvent>() {
-
-            private Commit commit;
-
-            @Override
-            public void onNext(CommitEvent commitEvent) {
-                switch (commitEvent.getEventCase()) {
-                    case COMMIT:
-                        commit = commitEvent.getCommit();
-                        break;
-
-                    case CHANGE:
-                        applyChange(builder, commitEvent.getChange());
-                        break;
-                }
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-            }
-
-            @Override
-            public void onCompleted() {
-                synchronized (NodeStoreService.this) {
-                    if (!currentRootRevision.equals(commit.getRootId().getRevision())) {
-                        responseObserver.onNext(NodeStateId.getDefaultInstance());
-                        responseObserver.onCompleted();
-                        return;
-                    }
-
-                    try {
-                        NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(commit.getCommitInfo()));
-                        fileStore.flush();
-                        responseObserver.onNext(getNodeStateId(newRoot));
-                        responseObserver.onCompleted();
-                    } catch (CommitFailedException | IOException e) {
-                        log.error("Can't commit", e);
-                        responseObserver.onError(e);
-                    }
-                }
-            }
-        };
-    }
-
-    private void applyChange(NodeBuilder root, CommitProtos.NodeBuilderChange change) {
-        NodeBuilder nodeBuilder = getNodeBuilder(root, change.getNodeBuilderPath());
-        switch (change.getChangeCase()) {
-            case ADDNODE:
-                nodeBuilder.child(change.getAddNode().getChildName());
-                break;
-
-            case REMOVENODE:
-                nodeBuilder.getChildNode(change.getRemoveNode().getChildName()).remove();
-                break;
-
-            case REMOVEPROPERTY:
-                nodeBuilder.removeProperty(change.getRemoveProperty().getName());
-                break;
-
-            case SETPROPERTY:
-                nodeBuilder.setProperty(deserializer.toOakProperty(change.getSetProperty().getProperty()));
-                break;
+    public void merge(Commit commit, StreamObserver<NodeStateId> responseObserver) {
+        NodeState currentRoot = nodeStore.getRoot();
+        String currentRootRevision = RevisionableNodeUtils.getRevision(currentRoot);
+        if (!currentRootRevision.equals(commit.getBaseNodeState().getRevision())) {
+            responseObserver.onNext(NodeStateId.getDefaultInstance());
+            responseObserver.onCompleted();
+            return;
         }
-    }
 
-    private NodeBuilder getNodeBuilder(NodeBuilder root, String nodeBuilderPath) {
-        NodeBuilder builder = root;
-        for (String el : PathUtils.elements(nodeBuilderPath)) {
-            builder = builder.getChildNode(el);
+        try {
+            NodeBuilder builder = currentRoot.builder();
+            NodeState newHead = privateFileStores.getNodeState(commit.getSegmentStoreDir(), commit.getHeadNodeState().getRevision());
+            newHead.compareAgainstBaseState(currentRoot, new ApplyDiff(builder));
+
+            NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(commit.getCommitInfo()));
+            fileStore.flush();
+            responseObserver.onNext(getNodeStateId(newRoot));
+            responseObserver.onCompleted();
+        } catch (CommitFailedException | IOException e) {
+            log.error("Can't commit", e);
+            responseObserver.onError(e);
         }
-        return builder;
     }
 
     @Override

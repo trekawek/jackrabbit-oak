@@ -6,18 +6,12 @@ option java_package = "org.apache.jackrabbit.oak.remote.proto";
 option java_outer_classname = "CommitProtos";
 
 import "node_state.proto";
-import "node_value.proto";
-
-message CommitEvent {
-    oneof event {
-        Commit commit = 1;
-        NodeBuilderChange change = 2;
-    }
-}
 
 message Commit {
     CommitInfo commitInfo = 1;
-    NodeStateId rootId = 2;
+    NodeStateId baseNodeState = 2;
+    NodeStateId headNodeState = 3;
+    string segmentStoreDir = 4;
 }
 
 message CommitInfo {
@@ -25,30 +19,4 @@ message CommitInfo {
     string userId = 2;
     map<string, string> commitInfo = 3;
     bool isExternal = 4;
-}
-
-message NodeBuilderChange {
-    string nodeBuilderPath = 1;
-    oneof Change {
-        SetProperty setProperty = 2;
-        RemoveProperty removeProperty = 3;
-        AddChildNode addNode = 4;
-        RemoveChildNode removeNode = 5;
-    }
-}
-
-message SetProperty {
-    Property property = 1;
-}
-
-message RemoveProperty {
-    string name = 1;
-}
-
-message AddChildNode {
-    string childName = 1;
-}
-
-message RemoveChildNode {
-    string childName = 1;
 }
