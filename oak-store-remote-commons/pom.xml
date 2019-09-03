@@ -58,6 +58,7 @@
               org.apache.jackrabbit.oak.remote.proto,
               com.google.protobuf,
               io.grpc,
+              io.grpc.netty.shaded.io*,
               io.grpc.protobuf,
               io.grpc.protobuf.lite,
               io.grpc.stub
@@ -65,6 +66,7 @@
             <Embed-Dependency>
               grpc-api,
               grpc-context,
+              grpc-netty-shaded,
               grpc-protobuf,
               grpc-stub,
               protobuf-java
@@ -147,6 +149,11 @@
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
+      <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty-shaded</artifactId>
       <version>1.22.1</version>
     </dependency>
     <dependency>
