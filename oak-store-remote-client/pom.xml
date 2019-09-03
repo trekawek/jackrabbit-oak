@@ -46,6 +46,9 @@
         <artifactId>maven-bundle-plugin</artifactId>
         <configuration>
           <instructions>
+            <Export-Package>
+              org.apache.jackrabbit.oak.remote.client
+            </Export-Package>
             <Import-Package>
               !com.google.errorprone.annotations,
               !com.google.errorprone.annotations.concurrent,
@@ -79,13 +82,6 @@
               !sun.security.x509,
               *
             </Import-Package>
-            <Embed-Dependency>
-              grpc-core,
-              opencensus-api,
-              opencensus-contrib-grpc-metrics,
-              perfmark-api,
-              guava
-            </Embed-Dependency>
           </instructions>
         </configuration>
       </plugin>
@@ -190,11 +186,6 @@
 
     <!-- General utility libraries -->
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>26.0-jre</version>
-    </dependency>
-    <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
     </dependency>
@@ -235,6 +226,7 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-core</artifactId>
       <version>1.22.1</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
@@ -247,11 +239,13 @@
       <groupId>io.opencensus</groupId>
       <artifactId>opencensus-api</artifactId>
       <version>0.21.0</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.opencensus</groupId>
       <artifactId>opencensus-contrib-grpc-metrics</artifactId>
       <version>0.21.0</version>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
@@ -264,6 +258,7 @@
       <groupId>io.perfmark</groupId>
       <artifactId>perfmark-api</artifactId>
       <version>0.16.0</version>
+      <scope>provided</scope>
     </dependency>
 
     <!-- Logging -->
