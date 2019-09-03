@@ -136,6 +136,12 @@
       <version>${jackrabbit.version}</version>
     </dependency>
 
+    <!-- Segment dependencies -->
+    <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-core</artifactId>
+    </dependency>
+
     <!-- General utility libraries -->
     <dependency>
       <groupId>com.google.guava</groupId>
