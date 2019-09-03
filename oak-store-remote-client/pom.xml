@@ -81,15 +81,10 @@
             </Import-Package>
             <Embed-Dependency>
               grpc-netty-shaded,
-              grpc-protobuf,
-              grpc-stub,
-              grpc-api,
               grpc-core,
-              grpc-protobuf-lite,
               grpc-context,
               opencensus-api,
               opencensus-contrib-grpc-metrics,
-              protobuf-java,
               perfmark-api,
               guava
             </Embed-Dependency>
@@ -222,17 +217,20 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-protobuf</artifactId>
       <version>1.22.1</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
       <version>1.22.1</version>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-api</artifactId>
       <version>1.22.1</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
@@ -243,17 +241,6 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-context</artifactId>
       <version>1.22.1</version>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-protobuf-lite</artifactId>
-      <version>1.22.1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.protobuf</groupId>
-          <artifactId>protobuf-lite</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
     <dependency>
@@ -271,6 +258,7 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>3.7.1</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.perfmark</groupId>

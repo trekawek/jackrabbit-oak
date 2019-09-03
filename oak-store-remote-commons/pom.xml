@@ -47,8 +47,27 @@
         <configuration>
           <instructions>
             <Import-Package>
+              !com.google.rpc,
+              !javax.annotation,
+              !sun.misc,
               *
             </Import-Package>
+            <Export-Package>
+              org.apache.jackrabbit.oak.remote.common,
+              org.apache.jackrabbit.oak.remote.common.persistence,
+              org.apache.jackrabbit.oak.remote.proto,
+              com.google.protobuf,
+              io.grpc,
+              io.grpc.protobuf,
+              io.grpc.protobuf.lite,
+              io.grpc.stub
+            </Export-Package>
+            <Embed-Dependency>
+              grpc-api,
+              grpc-protobuf,
+              grpc-stub,
+              protobuf-java
+            </Embed-Dependency>
           </instructions>
         </configuration>
       </plugin>
@@ -107,6 +126,17 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-protobuf</artifactId>
       <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf-lite</artifactId>
+      <version>1.22.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.protobuf</groupId>
+          <artifactId>protobuf-lite</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
