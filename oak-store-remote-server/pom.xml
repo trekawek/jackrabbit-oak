@@ -151,6 +151,11 @@
     <!-- GRPC -->
     <dependency>
       <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty-shaded</artifactId>
+      <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
       <version>1.22.1</version>
     </dependency>
@@ -214,7 +219,7 @@
               <repository>oak/oak-store-remote-server</repository>
               <tag>${project.version}</tag>
               <buildArgs>
-                <JAR_FILE>${project.build.finalName}-server.jar</JAR_FILE>
+                <JAR_FILE>${project.build.finalName}.jar</JAR_FILE>
               </buildArgs>
             </configuration>
           </plugin>
