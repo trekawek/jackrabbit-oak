@@ -93,6 +93,7 @@
             <Embed-Dependency>
               grpc-api,
               grpc-context,
+              grpc-core,
               grpc-netty-shaded,
               grpc-protobuf,
               grpc-stub,
