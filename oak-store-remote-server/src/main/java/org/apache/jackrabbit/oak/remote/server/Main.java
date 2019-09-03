@@ -137,6 +137,7 @@ public class Main {
         CloudBlobClient client = cloud.createCloudBlobClient();
         CloudBlobContainer container = client.getContainerReference(getenv("segmentAzureContainer"));
         setTimeouts(container);
+        container.createIfNotExists();
         CloudBlobDirectory directory = container.getDirectoryReference("aem");
         return directory;
     }
