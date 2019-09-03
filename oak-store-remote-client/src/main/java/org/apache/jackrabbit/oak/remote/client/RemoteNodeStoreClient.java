@@ -44,7 +44,6 @@ public class RemoteNodeStoreClient {
 
     private final SegmentServiceStub segmentAsyncService;
 
-
     public RemoteNodeStoreClient(String host, int port) {
         this(ManagedChannelBuilder.forAddress(host, port).usePlaintext());
     }

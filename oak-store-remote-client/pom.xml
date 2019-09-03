@@ -82,7 +82,6 @@
             <Embed-Dependency>
               grpc-netty-shaded,
               grpc-core,
-              grpc-context,
               opencensus-api,
               opencensus-contrib-grpc-metrics,
               perfmark-api,
@@ -241,6 +240,7 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-context</artifactId>
       <version>1.22.1</version>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>

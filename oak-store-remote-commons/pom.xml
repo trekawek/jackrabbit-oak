@@ -64,6 +64,7 @@
             </Export-Package>
             <Embed-Dependency>
               grpc-api,
+              grpc-context,
               grpc-protobuf,
               grpc-stub,
               protobuf-java
@@ -120,6 +121,11 @@
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-api</artifactId>
+      <version>1.22.1</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-context</artifactId>
       <version>1.22.1</version>
     </dependency>
     <dependency>

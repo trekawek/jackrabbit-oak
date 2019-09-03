@@ -1,6 +1,5 @@
 package org.apache.jackrabbit.oak.remote.server;
 
-import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.RevisionableNodeState;
