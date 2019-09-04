@@ -126,16 +126,20 @@ public class LeaseService extends LeaseServiceGrpc.LeaseServiceImplBase {
             }
             Instant inactiveDeadline = Instant.now().minus(60, ChronoUnit.SECONDS);
             Instant deactivatingDeadline = Instant.now().minus(10, ChronoUnit.SECONDS);
-            if (lastUpdate.isBefore(inactiveDeadline) && entry.state != ClusterEntryState.INACTIVE) {
-                entry.state = ClusterEntryState.INACTIVE;
-                seq++;
-            } else if (lastUpdate.isBefore(deactivatingDeadline) && entry.state != ClusterEntryState.DEACTIVATING) {
-                entry.state = ClusterEntryState.DEACTIVATING;
-                seq++;
-            } else if (entry.state != ClusterEntryState.ACTIVE) {
-                entry.state = ClusterEntryState.ACTIVE;
-                seq++;
+            if (lastUpdate.isBefore(inactiveDeadline)) {
+                updateState(entry, ClusterEntryState.INACTIVE);
+            } else if (lastUpdate.isBefore(deactivatingDeadline)) {
+                updateState(entry, ClusterEntryState.DEACTIVATING);
+            } else {
+                updateState(entry, ClusterEntryState.ACTIVE);
             }
+        }
+    }
+
+    private void updateState(ClusterEntry entry, ClusterEntryState newState) {
+        if (entry.state != newState) {
+            entry.state = newState;
+            seq++;
         }
     }
 

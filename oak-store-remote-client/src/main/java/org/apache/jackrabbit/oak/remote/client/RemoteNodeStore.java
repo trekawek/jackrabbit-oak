@@ -297,7 +297,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             NodeStateId id = client.getNodeStoreService().merge(createCommitObject(info, baseNodeState, headNodeState));
 
             if (Strings.isNullOrEmpty(id.getRevision())) {
-                log.warn("Rebased to an outdated root state {}, attempt {}/5", i+1);
+                log.warn("Rebased to an outdated root state, attempt {}/5", i+1);
                 ex = new CommitFailedException(CommitFailedException.MERGE, 1, "Can't merge, revision on remote has been updated");
                 continue;
             }
