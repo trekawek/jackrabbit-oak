@@ -5,6 +5,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import org.apache.jackrabbit.core.data.FileDataStore;
+import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
@@ -43,7 +44,7 @@ public abstract class AbstractRemoteNodeStoreTest {
     protected RemoteNodeStore remoteNodeStore;
 
     @Before
-    public void setup() throws IOException, InvalidFileStoreVersionException, URISyntaxException, InvalidKeyException, StorageException {
+    public void setup() throws IOException, InvalidFileStoreVersionException, URISyntaxException, InvalidKeyException, StorageException, CommitFailedException {
         container = azurite.getContainer("oak-test");
 
         FileDataStore fds = new FileDataStore();

@@ -39,6 +39,8 @@ import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
 import org.apache.jackrabbit.oak.segment.RecordId;
 import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
 import org.apache.jackrabbit.oak.segment.SegmentNodeState;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
@@ -48,6 +50,7 @@ import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.CompositeObserver;
+import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.apache.jackrabbit.oak.spi.state.ConflictAnnotatingRebaseDiff;
@@ -130,12 +133,12 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             return this;
         }
 
-        public RemoteNodeStore build() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
+        public RemoteNodeStore build() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException, CommitFailedException {
             return new RemoteNodeStore(this);
         }
     }
 
-    private RemoteNodeStore(Builder builder) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
+    private RemoteNodeStore(Builder builder) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException, CommitFailedException {
         this.client = builder.client;
         this.blobStore = builder.blobStore;
         this.privateDirName = builder.privateDirName;
@@ -168,6 +171,13 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         SplitPersistence splitPersistence = new SplitPersistence(tailingPersistence, privatePersistence);
 
         SegmentWriteListener listener = new SegmentWriteListener();
+        fileStore = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
+                .withBlobStore(blobStore)
+                .withCustomPersistence(splitPersistence)
+                .withIOMonitor(listener)
+                .build();
+        createHead(fileStore);
+
         listener.setDelegate(segmentBlob -> {
                     client.getSegmentService().newPrivateSegment(SegmentProtos.PrivateSegment.newBuilder()
                             .setSegmentStoreDir(privateDirName)
@@ -175,12 +185,6 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                             .build());
                 }
         );
-
-        fileStore = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
-                .withBlobStore(blobStore)
-                .withCustomPersistence(splitPersistence)
-                .withIOMonitor(listener)
-                .build();
 
         leaseInfo = client.getLeaseService().acquire(Empty.getDefaultInstance());
         lastClusterView = client.getLeaseService().renew(leaseInfo);
@@ -201,6 +205,14 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             public void onCompleted() {
             }
         });
+    }
+
+    private void createHead(FileStore fileStore) throws CommitFailedException, IOException {
+        SegmentNodeStore segmentNodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
+        NodeBuilder builder = segmentNodeStore.getRoot().builder();
+        builder.setProperty(":initialized", true);
+        segmentNodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
+        fileStore.flush();
     }
 
     private void renewLease() {

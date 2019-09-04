@@ -17,11 +17,8 @@
 package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.io.Closer;
-import com.google.common.io.Files;
 import com.microsoft.azure.storage.StorageException;
-import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.commons.io.FileUtils;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.ConfigurationPolicy;
@@ -38,7 +35,6 @@ import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
-import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo;
@@ -55,7 +51,6 @@ import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.Dictionary;
@@ -104,7 +99,7 @@ public class RemoteNodeStoreService {
     private String role;
 
     @Activate
-    protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
+    protected void activate(ComponentContext context, Map<String, ?> config) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException, CommitFailedException {
         this.context = context;
         remoteHost = PropertiesUtil.toString(config.get(REMOTE_HOST), "localhost");
         remotePort = PropertiesUtil.toInteger(config.get(REMOTE_PORT), 12300);
@@ -117,7 +112,7 @@ public class RemoteNodeStoreService {
         unregisterRemoteNodeStore();
     }
 
-    private void registerRemoteNodeStore() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException {
+    private void registerRemoteNodeStore() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException, CommitFailedException {
         registrations = Closer.create();
 
         RemoteNodeStoreClient client = new RemoteNodeStoreClient(remoteHost, remotePort);
