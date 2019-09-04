@@ -260,6 +260,14 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
         CommitFailedException ex = null;
         for (int i = 0; i < 5; i++) {
+            try {
+                if (i > 0) {
+                    Thread.sleep(500);
+                }
+            } catch (InterruptedException e1) {
+                log.error("Interrupted", e1);
+            }
+
             SegmentNodeState rootState = getRoot();
 
             if (!SegmentNodeState.fastEquals(rootState, nodeBuilder.getBaseState())) {
@@ -272,13 +280,8 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             try {
                 headNodeState = (SegmentNodeState) commitHook.processCommit(baseNodeState, nodeBuilder.getNodeState(), info);
             } catch (CommitFailedException e) {
-                log.warn("Hooks failed", e);
+                log.warn("Hooks failed, attempt {}/5", i+1);
                 ex = e;
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e1) {
-                    log.error("Interrupted", e1);
-                }
                 continue;
             }
 
@@ -292,13 +295,8 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             NodeStateId id = client.getNodeStoreService().merge(createCommitObject(info, baseNodeState, headNodeState));
 
             if (Strings.isNullOrEmpty(id.getRevision())) {
-                log.warn("Rebased to outdated root state, retrying");
+                log.warn("Rebased to an outdated root state {}, attempt {}/5", i+1);
                 ex = new CommitFailedException(CommitFailedException.MERGE, 1, "Can't merge, revision on remote has been updated");
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    log.error("Interrupted", e);
-                }
                 continue;
             }
 
