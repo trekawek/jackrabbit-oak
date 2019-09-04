@@ -24,6 +24,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.json.JsopDiff;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
@@ -281,6 +282,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 headNodeState = (SegmentNodeState) commitHook.processCommit(baseNodeState, nodeBuilder.getNodeState(), info);
             } catch (CommitFailedException e) {
                 log.warn("Hooks failed, attempt {}/5", i+1);
+                log.info("diff: {}", JsopDiff.diffToJsop(baseNodeState, nodeBuilder.getNodeState()));
                 ex = e;
                 continue;
             }
