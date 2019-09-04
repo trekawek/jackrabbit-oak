@@ -64,20 +64,24 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
 
     @Override
     public void merge(Commit commit, StreamObserver<NodeStateId> responseObserver) {
-        NodeState currentRoot = nodeStore.getRoot();
-        String currentRootRevision = RevisionableNodeUtils.getRevision(currentRoot);
-        if (!currentRootRevision.equals(commit.getBaseNodeState().getRevision())) {
-            responseObserver.onNext(NodeStateId.getDefaultInstance());
-            responseObserver.onCompleted();
-            return;
-        }
-
         try {
-            NodeBuilder builder = currentRoot.builder();
-            NodeState newHead = privateFileStores.getNodeState(commit.getSegmentStoreDir(), commit.getHeadNodeState().getRevision());
-            newHead.compareAgainstBaseState(currentRoot, new ApplyDiff(builder));
+            NodeState newRoot;
+            synchronized (this) {
+                NodeState currentRoot = nodeStore.getRoot();
 
-            NodeState newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(commit.getCommitInfo()));
+                String currentRootRevision = RevisionableNodeUtils.getRevision(currentRoot);
+                if (!currentRootRevision.equals(commit.getBaseNodeState().getRevision())) {
+                    responseObserver.onNext(NodeStateId.getDefaultInstance());
+                    responseObserver.onCompleted();
+                    return;
+                }
+
+                NodeBuilder builder = currentRoot.builder();
+                NodeState newHead = privateFileStores.getNodeState(commit.getSegmentStoreDir(), commit.getHeadNodeState().getRevision());
+                newHead.compareAgainstBaseState(currentRoot, new ApplyDiff(builder));
+
+                newRoot = nodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfoUtil.deserialize(commit.getCommitInfo()));
+            }
             fileStore.flush();
             responseObserver.onNext(getNodeStateId(newRoot));
             responseObserver.onCompleted();
