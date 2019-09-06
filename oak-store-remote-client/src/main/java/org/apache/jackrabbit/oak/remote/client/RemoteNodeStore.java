@@ -19,7 +19,6 @@ package org.apache.jackrabbit.oak.remote.client;
 import com.google.common.base.Strings;
 import com.google.common.io.Files;
 import com.google.protobuf.Empty;
-import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
@@ -45,7 +44,6 @@ import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
-import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.split.SplitPersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
@@ -136,12 +134,12 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             return this;
         }
 
-        public RemoteNodeStore build() throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException, CommitFailedException {
+        public RemoteNodeStore build() throws Exception {
             return new RemoteNodeStore(this);
         }
     }
 
-    private RemoteNodeStore(Builder builder) throws IOException, InvalidFileStoreVersionException, URISyntaxException, StorageException, CommitFailedException {
+    private RemoteNodeStore(Builder builder) throws Exception {
         this.client = builder.client;
         this.blobStore = builder.blobStore;
         this.privateDirName = builder.privateDirName;

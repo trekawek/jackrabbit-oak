@@ -44,7 +44,7 @@ public abstract class AbstractRemoteNodeStoreTest {
     protected RemoteNodeStore remoteNodeStore;
 
     @Before
-    public void setup() throws IOException, InvalidFileStoreVersionException, URISyntaxException, InvalidKeyException, StorageException, CommitFailedException {
+    public void setup() throws Exception {
         container = azurite.getContainer("oak-test");
 
         FileDataStore fds = new FileDataStore();
