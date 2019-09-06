@@ -48,7 +48,6 @@ import org.apache.jackrabbit.oak.spi.state.ConflictAnnotatingRebaseDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
-import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
 import org.apache.jackrabbit.oak.stats.StatisticsProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -61,7 +60,7 @@ import org.slf4j.LoggerFactory;
  * The root node of the JCR content tree is actually stored in the node "/root",
  * and checkpoints are stored under "/checkpoints".
  */
-public class SegmentNodeStore implements NodeStore, Observable, RevisionableNodeStore {
+public class SegmentNodeStore implements NodeStore, Observable {
 
     public static class SegmentNodeStoreBuilder {
         private static final Logger LOG = LoggerFactory.getLogger(SegmentNodeStoreBuilder.class);
@@ -75,12 +74,9 @@ public class SegmentNodeStore implements NodeStore, Observable, RevisionableNode
         @NotNull
         private final SegmentWriter writer;
 
-        @NotNull
-        private final SegmentIdProvider idProvider;
-
         @Nullable
         private final BlobStore blobStore;
-
+        
         private boolean isCreated;
         
         private boolean dispatchChanges = true;
@@ -94,12 +90,10 @@ public class SegmentNodeStore implements NodeStore, Observable, RevisionableNode
                 @NotNull Revisions revisions,
                 @NotNull SegmentReader reader,
                 @NotNull SegmentWriter writer,
-                @NotNull SegmentIdProvider idProvider,
                 @Nullable BlobStore blobStore) {
             this.revisions = revisions;
             this.reader = reader;
             this.writer = writer;
-            this.idProvider = idProvider;
             this.blobStore = blobStore;
         }
 
@@ -158,11 +152,9 @@ public class SegmentNodeStore implements NodeStore, Observable, RevisionableNode
             @NotNull Revisions revisions,
             @NotNull SegmentReader reader,
             @NotNull SegmentWriter writer,
-            @NotNull SegmentIdProvider idProvider,
             @Nullable BlobStore blobStore) {
         return new SegmentNodeStoreBuilder(checkNotNull(revisions),
-                checkNotNull(reader), checkNotNull(writer), checkNotNull(idProvider),
-                blobStore);
+                checkNotNull(reader), checkNotNull(writer), blobStore);
     }
 
     static final String ROOT = "root";
@@ -171,12 +163,6 @@ public class SegmentNodeStore implements NodeStore, Observable, RevisionableNode
 
     @NotNull
     private final SegmentWriter writer;
-
-    @NotNull
-    private final SegmentReader reader;
-
-    @NotNull
-    private final SegmentIdProvider idProvider;
 
     @NotNull
     private final Scheduler scheduler;
@@ -190,8 +176,6 @@ public class SegmentNodeStore implements NodeStore, Observable, RevisionableNode
 
     private SegmentNodeStore(SegmentNodeStoreBuilder builder) {
         this.writer = builder.writer;
-        this.reader = builder.reader;
-        this.idProvider = builder.idProvider;
         this.blobStore = builder.blobStore;
         this.stats = new SegmentNodeStoreStats(builder.statsProvider);
         this.scheduler = LockBasedScheduler.builder(builder.revisions, builder.reader, stats)
@@ -212,12 +196,6 @@ public class SegmentNodeStore implements NodeStore, Observable, RevisionableNode
     @Override @NotNull
     public NodeState getRoot() {
         return scheduler.getHeadNodeState().getChildNode(ROOT);
-    }
-
-    @Override @Nullable
-    public NodeState getNodeByRevision(String revision) {
-        RecordId id = RecordId.fromString(idProvider, revision);
-        return reader.readNode(id);
     }
 
     @NotNull

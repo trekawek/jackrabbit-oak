@@ -73,6 +73,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.apache.jackrabbit.oak.remote.common.SegmentNodeStateUtil.getRevision;
+
 public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private static final Logger log = LoggerFactory.getLogger(RemoteNodeStore.class);
@@ -404,8 +406,8 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, SegmentNodeState baseNodeState, SegmentNodeState headNodeState) {
         Commit.Builder commitBuilder = Commit.newBuilder();
         commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
-        commitBuilder.getBaseNodeStateBuilder().setRevision(baseNodeState.getRevision());
-        commitBuilder.getHeadNodeStateBuilder().setRevision(headNodeState.getRevision());
+        commitBuilder.getBaseNodeStateBuilder().setRevision(getRevision(baseNodeState));
+        commitBuilder.getHeadNodeStateBuilder().setRevision(getRevision(headNodeState));
         commitBuilder.setSegmentStoreDir(privateDirName);
         return commitBuilder.build();
     }

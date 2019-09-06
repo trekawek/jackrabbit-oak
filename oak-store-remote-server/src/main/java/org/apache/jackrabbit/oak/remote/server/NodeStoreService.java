@@ -20,6 +20,7 @@ import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
+import org.apache.jackrabbit.oak.remote.common.SegmentNodeStateUtil;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos.ChangeEvent;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
@@ -38,7 +39,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
+import static org.apache.jackrabbit.oak.remote.common.SegmentNodeStateUtil.getNodeStateId;
 
 public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplBase {
 
@@ -69,7 +70,7 @@ public class NodeStoreService extends NodeStoreServiceGrpc.NodeStoreServiceImplB
             synchronized (this) {
                 NodeState currentRoot = nodeStore.getRoot();
 
-                String currentRootRevision = RevisionableNodeUtils.getRevision(currentRoot);
+                String currentRootRevision = SegmentNodeStateUtil.getRevision(currentRoot);
                 if (!currentRootRevision.equals(commit.getBaseNodeState().getRevision())) {
                     responseObserver.onNext(NodeStateId.getDefaultInstance());
                     responseObserver.onCompleted();

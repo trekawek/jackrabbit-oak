@@ -26,17 +26,17 @@ import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos.CreateCheckpointR
 import org.apache.jackrabbit.oak.remote.proto.CheckpointServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
-import org.apache.jackrabbit.oak.spi.state.RevisionableNodeStore;
+import org.apache.jackrabbit.oak.spi.state.NodeStore;
 
 import java.util.Map;
 
-import static org.apache.jackrabbit.oak.remote.server.RevisionableNodeUtils.getNodeStateId;
+import static org.apache.jackrabbit.oak.remote.common.SegmentNodeStateUtil.getNodeStateId;
 
 public class CheckpointService extends CheckpointServiceGrpc.CheckpointServiceImplBase {
 
-    private final RevisionableNodeStore nodeStore;
+    private final NodeStore nodeStore;
 
-    public CheckpointService(RevisionableNodeStore nodeStore) {
+    public CheckpointService(NodeStore nodeStore) {
         this.nodeStore = nodeStore;
     }
 

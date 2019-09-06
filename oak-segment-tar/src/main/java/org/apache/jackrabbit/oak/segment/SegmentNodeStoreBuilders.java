@@ -38,8 +38,7 @@ public final class SegmentNodeStoreBuilders {
     @NotNull
     public static SegmentNodeStoreBuilder builder(@NotNull FileStore store) {
         return SegmentNodeStore.builder(store.getRevisions(),
-                store.getReader(), store.getWriter(), store.getSegmentIdProvider(),
-                store.getBlobStore());
+                store.getReader(), store.getWriter(), store.getBlobStore());
     }
 
     /**
@@ -48,8 +47,7 @@ public final class SegmentNodeStoreBuilders {
     @NotNull
     public static SegmentNodeStoreBuilder builder(@NotNull MemoryStore store) {
         return SegmentNodeStore.builder(store.getRevisions(),
-                store.getReader(), store.getWriter(), store.getSegmentIdProvider(),
-                store.getBlobStore());
+                store.getReader(), store.getWriter(), store.getBlobStore());
     }
 
     /**
@@ -58,7 +56,6 @@ public final class SegmentNodeStoreBuilders {
     @NotNull
     public static SegmentNodeStoreBuilder builder(@NotNull ReadOnlyFileStore store) {
         return SegmentNodeStore.builder(store.getRevisions(),
-                store.getReader(), store.getWriter(), store.getSegmentIdProvider(),
-                store.getBlobStore());
+                store.getReader(), store.getWriter(), store.getBlobStore());
     }
 }
