@@ -33,7 +33,7 @@ import org.apache.jackrabbit.commons.SimpleValueFactory;
 import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
-import org.apache.jackrabbit.oak.segment.spi.RevisionableNodeStoreFactory;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepositoryFactory;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo;
@@ -71,7 +71,7 @@ public class RemoteNodeStoreService {
     private BlobStore blobStore;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY, policy = ReferencePolicy.STATIC)
-    private RevisionableNodeStoreFactory nodeStoreFactory;
+    private RevRepositoryFactory nodeStoreFactory;
 
     private ComponentContext context;
 

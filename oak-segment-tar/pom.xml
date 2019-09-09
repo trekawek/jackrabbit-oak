@@ -45,10 +45,11 @@
                 <configuration>
                     <instructions>
                         <Export-Package>
-                               org.apache.jackrabbit.oak.segment.spi,
+                        	org.apache.jackrabbit.oak.segment.spi,
                             org.apache.jackrabbit.oak.segment.spi.monitor,
                             org.apache.jackrabbit.oak.segment.spi.persistence,
-                            org.apache.jackrabbit.oak.segment.spi.persistence.split
+                            org.apache.jackrabbit.oak.segment.spi.persistence.split,
+                            org.apache.jackrabbit.oak.segment.spi.rev
                         </Export-Package>
                         <Embed-Dependency>
                             netty-*,

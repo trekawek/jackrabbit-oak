@@ -9,10 +9,10 @@ import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.client.TailingPersistenceFactory;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
-import org.apache.jackrabbit.oak.segment.RevisionableNodeStoreFactoryService;
+import org.apache.jackrabbit.oak.segment.RevRepositoryService;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.azure.AzuriteDockerRule;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepository;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.junit.After;
 import org.junit.Before;
@@ -59,8 +59,8 @@ public abstract class AbstractRemoteNodeStoreTest {
         RemoteNodeStoreClient client = new RemoteNodeStoreClient(inProcessChannelBuilder);
         TailingPersistenceFactory persistenceFactory = new TailingPersistenceFactory(container, client, name, name + "-priv");
 
-        RevisionableNodeStoreFactoryService nodeStoreFactory = new RevisionableNodeStoreFactoryService();
-        RevisionableNodeStore revNodeStore = nodeStoreFactory.builder().withBlobStore(blobStore).withPersistence(persistenceFactory.create()).build();
+        RevRepositoryService nodeStoreFactory = new RevRepositoryService();
+        RevRepository revNodeStore = nodeStoreFactory.builder().withBlobStore(blobStore).withPersistence(persistenceFactory.create()).build();
 
         remoteNodeStore = new RemoteNodeStore.Builder()
                 .setBlobStore(blobStore)

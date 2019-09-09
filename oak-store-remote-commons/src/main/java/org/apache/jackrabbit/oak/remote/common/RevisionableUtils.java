@@ -1,7 +1,7 @@
 package org.apache.jackrabbit.oak.remote.common;
 
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeState;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevNodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -12,8 +12,8 @@ public final class RevisionableUtils {
     }
 
     public static String getRevision(NodeState nodeState) {
-        checkArgument(nodeState instanceof RevisionableNodeState);
-        return ((RevisionableNodeState) nodeState).getRevision();
+        checkArgument(nodeState instanceof RevNodeState);
+        return ((RevNodeState) nodeState).getRevision();
     }
 
     public static NodeStateId getNodeStateId(NodeState nodeState) {

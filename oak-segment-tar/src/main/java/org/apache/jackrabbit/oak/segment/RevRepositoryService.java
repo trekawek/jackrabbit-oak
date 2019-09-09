@@ -24,20 +24,24 @@ import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
-import org.apache.jackrabbit.oak.segment.spi.RevisionableNodeStoreFactory;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeState;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepositoryFactory;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevNodeState;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepository;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
 
 import java.io.File;
 import java.io.IOException;
 
+/**
+ * This service is able to create {@link RevRepository} instances, using the
+ * configured FileStore to do so.
+ */
 @Component(configurationPolicy = ConfigurationPolicy.OPTIONAL)
-public class RevisionableNodeStoreFactoryService implements RevisionableNodeStoreFactory {
+public class RevRepositoryService implements RevRepositoryFactory {
 
     @Override
-    public RevisionableNodeStore create(Builder builder) throws IOException {
+    public RevRepository create(Builder builder) throws IOException {
         File dir = Files.createTempDir();
 
         FileStoreBuilder fsBuilder = FileStoreBuilder.fileStoreBuilder(dir)
@@ -46,28 +50,28 @@ public class RevisionableNodeStoreFactoryService implements RevisionableNodeStor
 
         try {
             if (builder.isReadOnly()) {
-                return new ReadOnlyRevisionableNodeStore(fsBuilder.buildReadOnly(), dir);
+                return new RORevRepository(fsBuilder.buildReadOnly(), dir);
             } else {
-                return new DefaultRevisionableNodeStore(fsBuilder.build(), dir);
+                return new DefaultRevRepository(fsBuilder.build(), dir);
             }
         } catch (InvalidFileStoreVersionException e) {
             throw new IOException(e);
         }
     }
 
-    private static class DefaultRevisionableNodeStore implements RevisionableNodeStore {
+    private static class DefaultRevRepository implements RevRepository {
 
         private final File directory;
 
         private final FileStore fileStore;
 
-        public DefaultRevisionableNodeStore(FileStore fileStore, File directory) {
+        public DefaultRevRepository(FileStore fileStore, File directory) {
             this.fileStore = fileStore;
             this.directory = directory;
         }
 
         @Override
-        public RevisionableNodeState getNodeStateByRevision(String revision) {
+        public RevNodeState getNodeStateByRevision(String revision) {
             RecordId recordId = RecordId.fromString(fileStore.getSegmentIdProvider(), revision);
             return fileStore.getReader().readNode(recordId);
         }
@@ -89,19 +93,19 @@ public class RevisionableNodeStoreFactoryService implements RevisionableNodeStor
         }
     }
 
-    private static class ReadOnlyRevisionableNodeStore implements RevisionableNodeStore {
+    private static class RORevRepository implements RevRepository {
 
         private final File directory;
 
         private final ReadOnlyFileStore fileStore;
 
-        public ReadOnlyRevisionableNodeStore(ReadOnlyFileStore fileStore, File directory) {
+        public RORevRepository(ReadOnlyFileStore fileStore, File directory) {
             this.fileStore = fileStore;
             this.directory = directory;
         }
 
         @Override
-        public RevisionableNodeState getNodeStateByRevision(String revision) {
+        public RevNodeState getNodeStateByRevision(String revision) {
             RecordId recordId = RecordId.fromString(fileStore.getSegmentIdProvider(), revision);
             return fileStore.getReader().readNode(recordId);
         }

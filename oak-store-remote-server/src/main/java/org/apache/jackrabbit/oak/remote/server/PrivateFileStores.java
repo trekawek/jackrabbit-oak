@@ -21,9 +21,9 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
 import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
-import org.apache.jackrabbit.oak.segment.RevisionableNodeStoreFactoryService;
+import org.apache.jackrabbit.oak.segment.RevRepositoryService;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepository;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.slf4j.Logger;
@@ -48,7 +48,7 @@ public class PrivateFileStores {
 
     private final BlobStore blobStore;
 
-    private final RevisionableNodeStoreFactoryService revNodeStoreService = new RevisionableNodeStoreFactoryService();
+    private final RevRepositoryService revNodeStoreService = new RevRepositoryService();
 
     public PrivateFileStores(CloudBlobDirectory sharedDirectory, BlobStore blobStore) throws URISyntaxException, StorageException {
         this.container = sharedDirectory.getContainer();
@@ -95,7 +95,7 @@ public class PrivateFileStores {
 
     private class FileStoreEntry implements Closeable {
 
-        private final RevisionableNodeStore revNodeStore;
+        private final RevRepository revNodeStore;
 
         private final TailingPersistence privatePersistence;
 

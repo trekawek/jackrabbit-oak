@@ -14,17 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.segment.spi;
+package org.apache.jackrabbit.oak.segment.spi.rev;
 
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 
 import java.io.IOException;
 
-public interface RevisionableNodeStoreFactory {
+/**
+ * This is a factory, creating the RevRepository instances. It was introduced
+ * not to expose oak-segment-tar implementation details in the OSGi environment.
+ */
+public interface RevRepositoryFactory {
 
-    RevisionableNodeStore create(Builder builder) throws IOException;
+    RevRepository create(Builder builder) throws IOException;
 
     default Builder builder() {
         return new Builder(this);
@@ -32,7 +35,7 @@ public interface RevisionableNodeStoreFactory {
 
     class Builder {
 
-        private final RevisionableNodeStoreFactory factory;
+        private final RevRepositoryFactory factory;
 
         private SegmentNodeStorePersistence persistence;
 
@@ -40,7 +43,7 @@ public interface RevisionableNodeStoreFactory {
 
         private boolean readOnly;
 
-        public Builder(RevisionableNodeStoreFactory factory) {
+        public Builder(RevRepositoryFactory factory) {
             this.factory = factory;
         }
 
@@ -59,7 +62,7 @@ public interface RevisionableNodeStoreFactory {
             return this;
         }
 
-        public RevisionableNodeStoreFactory getFactory() {
+        public RevRepositoryFactory getFactory() {
             return factory;
         }
 
@@ -75,7 +78,7 @@ public interface RevisionableNodeStoreFactory {
             return readOnly;
         }
 
-        public RevisionableNodeStore build() throws IOException {
+        public RevRepository build() throws IOException {
             return factory.create(this);
         }
     }

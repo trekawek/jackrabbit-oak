@@ -41,12 +41,10 @@ import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
 import org.apache.jackrabbit.oak.remote.client.TailingPersistenceFactory;
-import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
-import org.apache.jackrabbit.oak.segment.RevisionableNodeStoreFactoryService;
-import org.apache.jackrabbit.oak.segment.spi.RevisionableNodeStoreFactory;
+import org.apache.jackrabbit.oak.segment.RevRepositoryService;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepository;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.slf4j.Logger;
@@ -219,7 +217,7 @@ public class RemoteNodeStoreFixture extends NodeStoreFixture {
                         privateDirName
                 ).create();
 
-                RevisionableNodeStore revNodeStore = new RevisionableNodeStoreFactoryService()
+                RevRepository revNodeStore = new RevRepositoryService()
                         .builder()
                         .withPersistence(tailingPersistence)
                         .withBlobStore(blobStore)

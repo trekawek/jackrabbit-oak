@@ -33,7 +33,7 @@ import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.LeaseProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
-import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
+import org.apache.jackrabbit.oak.segment.spi.rev.RevRepository;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -73,7 +73,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private final StreamObserver observerStreamEvent;
 
-    private final RevisionableNodeStore nodeStore;
+    private final RevRepository nodeStore;
 
     private final String privateDirName;
 
@@ -89,7 +89,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
         private BlobStore blobStore;
 
-        private RevisionableNodeStore nodeStore;
+        private RevRepository nodeStore;
 
         private String privateDirName;
 
@@ -108,7 +108,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             return this;
         }
 
-        public Builder setNodeStore(RevisionableNodeStore nodeStore) {
+        public Builder setNodeStore(RevRepository nodeStore) {
             this.nodeStore = nodeStore;
             return this;
         }
