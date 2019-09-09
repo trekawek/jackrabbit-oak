@@ -58,7 +58,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.google.gson.internal.$Gson$Preconditions.checkArgument;
 import static org.apache.jackrabbit.oak.remote.common.RevisionableUtils.getRevision;
 
 public class RemoteNodeStore implements NodeStore, Closeable, Observable {
@@ -258,7 +257,9 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     }
 
     private void reset(@NotNull NodeBuilder builder, NodeState newBase) {
-        checkArgument(builder instanceof MemoryNodeBuilder);
+        if (!(builder instanceof MemoryNodeBuilder)) {
+            throw new IllegalArgumentException("Invalid node builder: " + builder.getClass());
+        }
         ((MemoryNodeBuilder) builder).reset(newBase);
     }
 
