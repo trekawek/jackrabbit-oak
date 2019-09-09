@@ -47,7 +47,6 @@ import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
-import org.osgi.service.metatype.annotations.Designate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,8 +60,9 @@ import java.util.UUID;
 
 import static org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo.getOrCreateId;
 
-@Component(configurationPolicy = ConfigurationPolicy.REQUIRE)
-@Designate(ocd = Configuration.class)
+@Component(
+        configurationPolicy = ConfigurationPolicy.REQUIRE,
+        configurationPid = {Configuration.PID})
 public class RemoteNodeStoreService {
 
     private static final Logger LOG = LoggerFactory.getLogger(RemoteNodeStoreService.class);
