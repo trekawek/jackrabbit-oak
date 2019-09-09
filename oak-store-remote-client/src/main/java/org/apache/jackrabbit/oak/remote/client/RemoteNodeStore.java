@@ -187,7 +187,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         NodeState base = builder.getBaseState();
 
         CommitFailedException ex = null;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 10; i++) {
             try {
                 if (i > 0) {
                     Thread.sleep(500);
