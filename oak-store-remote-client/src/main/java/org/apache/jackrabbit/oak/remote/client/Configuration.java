@@ -38,7 +38,7 @@ import static org.apache.jackrabbit.oak.remote.client.Configuration.PID;
             name = "Azure connection string (optional)",
             description = "Connection string to be used to connect to the Azure Storage. " +
                     "Setting it will override the accountName and accessKey properties.")
-    String connectionURL() default "";
+    String connectionURL();
 
     @AttributeDefinition(
             name = "Remote server host",

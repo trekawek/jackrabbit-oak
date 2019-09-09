@@ -16,6 +16,7 @@
  */
 package org.apache.jackrabbit.oak.remote.client;
 
+import com.google.common.base.Strings;
 import com.google.common.io.Closer;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageCredentials;
@@ -116,7 +117,7 @@ public class RemoteNodeStoreService {
 
     private static CloudBlobContainer createContainer(Configuration config) throws URISyntaxException, StorageException, InvalidKeyException {
         CloudStorageAccount cloud;
-        if (config.connectionURL() != null) {
+        if (!Strings.isNullOrEmpty(config.connectionURL())) {
             cloud = CloudStorageAccount.parse(config.connectionURL());
         } else {
             StorageCredentials credentials = new StorageCredentialsAccountAndKey(
