@@ -31,7 +31,7 @@ import org.apache.jackrabbit.oak.fixture.MemoryFixture;
 import org.apache.jackrabbit.oak.fixture.NodeStoreFixture;
 import org.apache.jackrabbit.oak.composite.CompositeMemoryStoreFixture;
 import org.apache.jackrabbit.oak.composite.CompositeSegmentStoreFixture;
-import org.apache.jackrabbit.oak.remote.RemoteStoreFixture;
+import org.apache.jackrabbit.oak.remote.RemoteNodeStoreFixture;
 import org.apache.jackrabbit.oak.segment.azure.fixture.SegmentAzureFixture;
 import org.apache.jackrabbit.oak.segment.fixture.SegmentTarFixture;
 
@@ -55,7 +55,7 @@ public class NodeStoreFixtures {
 
     public static final NodeStoreFixture COW_DOCUMENT = new COWStoreFixture();
 
-    public static final NodeStoreFixture REMOTE = new RemoteStoreFixture();
+    public static final NodeStoreFixture REMOTE = new RemoteNodeStoreFixture();
 
     public static Collection<Object[]> asJunitParameters(Set<FixturesHelper.Fixture> fixtures) {
         List<NodeStoreFixture> configuredFixtures = new ArrayList<NodeStoreFixture>();

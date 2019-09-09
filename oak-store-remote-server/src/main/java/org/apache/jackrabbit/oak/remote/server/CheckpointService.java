@@ -30,7 +30,7 @@ import org.apache.jackrabbit.oak.spi.state.NodeStore;
 
 import java.util.Map;
 
-import static org.apache.jackrabbit.oak.remote.common.SegmentNodeStateUtil.getNodeStateId;
+import static org.apache.jackrabbit.oak.remote.common.RevisionableUtils.getNodeStateId;
 
 public class CheckpointService extends CheckpointServiceGrpc.CheckpointServiceImplBase {
 

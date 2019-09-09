@@ -28,7 +28,9 @@ import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceBlockingStub;
 import org.apache.jackrabbit.oak.remote.proto.SegmentServiceGrpc.SegmentServiceStub;
 
-public class RemoteNodeStoreClient {
+import java.io.Closeable;
+
+public class RemoteNodeStoreClient implements Closeable {
 
     private final ManagedChannel channel;
 
@@ -82,7 +84,8 @@ public class RemoteNodeStoreClient {
         return segmentService;
     }
 
-    public void shutdown() {
+    @Override
+    public void close() {
         channel.shutdown();
     }
 

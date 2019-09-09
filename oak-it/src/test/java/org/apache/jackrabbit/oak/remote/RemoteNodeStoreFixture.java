@@ -40,7 +40,13 @@ import org.apache.jackrabbit.oak.fixture.NodeStoreFixture;
 import org.apache.jackrabbit.oak.plugins.blob.datastore.DataStoreBlobStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStore;
 import org.apache.jackrabbit.oak.remote.client.RemoteNodeStoreClient;
+import org.apache.jackrabbit.oak.remote.client.TailingPersistenceFactory;
+import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
 import org.apache.jackrabbit.oak.remote.server.NodeStoreServer;
+import org.apache.jackrabbit.oak.segment.RevisionableNodeStoreFactoryService;
+import org.apache.jackrabbit.oak.segment.spi.RevisionableNodeStoreFactory;
+import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
+import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.slf4j.Logger;
@@ -63,9 +69,9 @@ import static com.spotify.docker.client.DockerClient.LogsParam.follow;
 import static com.spotify.docker.client.DockerClient.LogsParam.stderr;
 import static com.spotify.docker.client.DockerClient.LogsParam.stdout;
 
-public class RemoteStoreFixture extends NodeStoreFixture {
+public class RemoteNodeStoreFixture extends NodeStoreFixture {
 
-    private static final Logger log = LoggerFactory.getLogger(RemoteStoreFixture.class);
+    private static final Logger log = LoggerFactory.getLogger(RemoteNodeStoreFixture.class);
 
     private Map<NodeStore, RemoteNSInstance> instances = new IdentityHashMap<>();
 
@@ -203,12 +209,27 @@ public class RemoteStoreFixture extends NodeStoreFixture {
             try {
                 File segmentStore = Files.createTempDir();
                 closer.register(() -> FileUtils.deleteDirectory(segmentStore));
+
+                String privateDirName = "oak-private-" + UUID.randomUUID().toString();
+
+                SegmentNodeStorePersistence tailingPersistence = new TailingPersistenceFactory(
+                        dockerContainer.getContainer(name),
+                        client,
+                        name,
+                        privateDirName
+                ).create();
+
+                RevisionableNodeStore revNodeStore = new RevisionableNodeStoreFactoryService()
+                        .builder()
+                        .withPersistence(tailingPersistence)
+                        .withBlobStore(blobStore)
+                        .build();
+
                 remoteNodeStore = new RemoteNodeStore.Builder()
                         .setBlobStore(blobStore)
                         .setClient(client)
-                        .setCloudContainer(dockerContainer.getContainer(name))
-                        .setSharedDirName("oak")
-                        .setPrivateDirName("oak-private-" + UUID.randomUUID().toString())
+                        .setNodeStore(revNodeStore)
+                        .setPrivateDirName(privateDirName)
                         .build();
                 closer.register(remoteNodeStore);
             } catch (Exception e) {

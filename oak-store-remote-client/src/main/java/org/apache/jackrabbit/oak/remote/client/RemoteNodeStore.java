@@ -17,17 +17,15 @@
 package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.base.Strings;
-import com.google.common.io.Files;
 import com.google.protobuf.Empty;
-import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import io.grpc.stub.StreamObserver;
 import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.json.JsopDiff;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
-import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
+import org.apache.jackrabbit.oak.plugins.memory.MemoryNodeBuilder;
 import org.apache.jackrabbit.oak.remote.common.CommitInfoUtil;
-import org.apache.jackrabbit.oak.remote.common.SegmentWriteListener;
+import org.apache.jackrabbit.oak.remote.common.RevisionableUtils;
 import org.apache.jackrabbit.oak.remote.proto.ChangeEventProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos;
 import org.apache.jackrabbit.oak.remote.proto.CheckpointProtos.CreateCheckpointRequest;
@@ -35,21 +33,11 @@ import org.apache.jackrabbit.oak.remote.proto.CommitProtos;
 import org.apache.jackrabbit.oak.remote.proto.CommitProtos.Commit;
 import org.apache.jackrabbit.oak.remote.proto.LeaseProtos;
 import org.apache.jackrabbit.oak.remote.proto.NodeStateProtos.NodeStateId;
-import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
-import org.apache.jackrabbit.oak.segment.RecordId;
-import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
-import org.apache.jackrabbit.oak.segment.SegmentNodeState;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
-import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
-import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
-import org.apache.jackrabbit.oak.segment.split.SplitPersistence;
+import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.commit.CompositeObserver;
-import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
 import org.apache.jackrabbit.oak.spi.commit.Observable;
 import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.apache.jackrabbit.oak.spi.state.ConflictAnnotatingRebaseDiff;
@@ -64,14 +52,14 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.apache.jackrabbit.oak.remote.common.SegmentNodeStateUtil.getRevision;
+import static com.google.gson.internal.$Gson$Preconditions.checkArgument;
+import static org.apache.jackrabbit.oak.remote.common.RevisionableUtils.getRevision;
 
 public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
@@ -85,9 +73,9 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private final StreamObserver observerStreamEvent;
 
-    private final String privateDirName;
+    private final RevisionableNodeStore nodeStore;
 
-    private final StreamObserver segmentStreamObserver;
+    private final String privateDirName;
 
     private LeaseProtos.LeaseInfo leaseInfo;
 
@@ -95,17 +83,13 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     private ScheduledExecutorService leaseRenewProcess = Executors.newScheduledThreadPool(1);
 
-    private FileStore fileStore;
-
     public static class Builder {
 
         private RemoteNodeStoreClient client;
 
         private BlobStore blobStore;
 
-        private CloudBlobContainer cloudBlobContainer;
-
-        private String sharedDirName;
+        private RevisionableNodeStore nodeStore;
 
         private String privateDirName;
 
@@ -119,18 +103,13 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             return this;
         }
 
-        public Builder setCloudContainer(CloudBlobContainer cloudBlobContainer) {
-            this.cloudBlobContainer = cloudBlobContainer;
-            return this;
-        }
-
-        public Builder setSharedDirName(String sharedDirName) {
-            this.sharedDirName = sharedDirName;
-            return this;
-        }
-
         public Builder setPrivateDirName(String privateDirName) {
             this.privateDirName = privateDirName;
+            return this;
+        }
+
+        public Builder setNodeStore(RevisionableNodeStore nodeStore) {
+            this.nodeStore = nodeStore;
             return this;
         }
 
@@ -142,50 +121,9 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
     private RemoteNodeStore(Builder builder) throws Exception {
         this.client = builder.client;
         this.blobStore = builder.blobStore;
+        this.nodeStore = builder.nodeStore;
         this.privateDirName = builder.privateDirName;
         this.compositeObserver = new CompositeObserver();
-
-        AzurePersistence sharedPersistence;
-        AzurePersistence privatePersistence;
-        try {
-            sharedPersistence = new AzurePersistence(builder.cloudBlobContainer.getDirectoryReference(builder.sharedDirName));
-            privatePersistence = new AzurePersistence(builder.cloudBlobContainer.getDirectoryReference(builder.privateDirName));
-        } catch (URISyntaxException e) {
-            throw new IOException(e);
-        }
-
-        TailingPersistence tailingPersistence = new TailingPersistence(sharedPersistence, client.getSegmentService());
-        segmentStreamObserver = client.getSegmentAsyncService().observeSegments(new StreamObserver<SegmentProtos.SegmentBlob>() {
-            @Override
-            public void onNext(SegmentProtos.SegmentBlob segmentBlob) {
-                tailingPersistence.onNewSegment(segmentBlob);
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-            }
-
-            @Override
-            public void onCompleted() {
-            }
-        });
-        SplitPersistence splitPersistence = new SplitPersistence(tailingPersistence, privatePersistence);
-
-        SegmentWriteListener listener = new SegmentWriteListener();
-        fileStore = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
-                .withBlobStore(blobStore)
-                .withCustomPersistence(splitPersistence)
-                .withIOMonitor(listener)
-                .build();
-        createHead(fileStore);
-
-        listener.setDelegate(segmentBlob -> {
-                    client.getSegmentService().newPrivateSegment(SegmentProtos.PrivateSegment.newBuilder()
-                            .setSegmentStoreDir(privateDirName)
-                            .setSegmentBlob(segmentBlob)
-                            .build());
-                }
-        );
 
         leaseInfo = client.getLeaseService().acquire(Empty.getDefaultInstance());
         lastClusterView = client.getLeaseService().renew(leaseInfo);
@@ -208,14 +146,6 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         });
     }
 
-    private void createHead(FileStore fileStore) throws CommitFailedException, IOException {
-        SegmentNodeStore segmentNodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
-        NodeBuilder builder = segmentNodeStore.getRoot().builder();
-        builder.setProperty(":initialized", true);
-        segmentNodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
-        fileStore.flush();
-    }
-
     private void renewLease() {
         LeaseProtos.ClusterView response = client.getLeaseService().renew(leaseInfo);
         if (Strings.isNullOrEmpty(response.getId())) {
@@ -228,16 +158,13 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     public void close() throws IOException {
         observerStreamEvent.onCompleted();
-        segmentStreamObserver.onCompleted();
         leaseRenewProcess.shutdown();
         try {
             leaseRenewProcess.awaitTermination(1, TimeUnit.MINUTES);
             this.client.getLeaseService().release(leaseInfo);
-            this.client.shutdown();
         } catch (InterruptedException e) {
             throw new IOException(e);
         }
-        fileStore.close();
     }
 
     @Override
@@ -248,16 +175,16 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     @NotNull
-    public SegmentNodeState getRoot() {
+    public NodeState getRoot() {
         NodeStateId id = client.getNodeStoreService().getRoot(Empty.getDefaultInstance());
         return createNodeState(id);
     }
 
     @Override
     public synchronized @NotNull NodeState merge(@NotNull NodeBuilder builder, @NotNull CommitHook commitHook, @NotNull CommitInfo info) throws CommitFailedException {
-        SegmentNodeBuilder nodeBuilder = assertRootBuilder(builder);
-        NodeState head = nodeBuilder.getNodeState();
-        NodeState base = nodeBuilder.getBaseState();
+        assertRootBuilder(builder);
+        NodeState head = builder.getNodeState();
+        NodeState base = builder.getBaseState();
 
         CommitFailedException ex = null;
         for (int i = 0; i < 5; i++) {
@@ -269,26 +196,26 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
                 log.error("Interrupted", e1);
             }
 
-            SegmentNodeState rootState = getRoot();
+            NodeState rootState = getRoot();
 
-            if (!SegmentNodeState.fastEquals(rootState, nodeBuilder.getBaseState())) {
-                nodeBuilder.reset(rootState);
-                head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
+            if (!RevisionableUtils.fastEquals(rootState, builder.getBaseState())) {
+                reset(builder, rootState);
+                head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(builder));
             }
 
-            SegmentNodeState baseNodeState = (SegmentNodeState) nodeBuilder.getBaseState();
-            SegmentNodeState headNodeState;
+            NodeState baseNodeState = builder.getBaseState();
+            NodeState headNodeState;
             try {
-                headNodeState = (SegmentNodeState) commitHook.processCommit(baseNodeState, nodeBuilder.getNodeState(), info);
+                headNodeState = commitHook.processCommit(baseNodeState, builder.getNodeState(), info);
             } catch (CommitFailedException e) {
                 log.warn("Hooks failed, attempt {}/5", i+1);
-                log.info("diff: {}", JsopDiff.diffToJsop(baseNodeState, nodeBuilder.getNodeState()));
+                log.info("diff: {}", JsopDiff.diffToJsop(baseNodeState, builder.getNodeState()));
                 ex = e;
                 continue;
             }
 
             try {
-                fileStore.getWriter().flush();
+                nodeStore.flushData();
             } catch (IOException e) {
                 log.error("Can't flush", e);
                 continue;
@@ -303,7 +230,7 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
             }
 
             NodeState mergedRoot = createNodeState(id);
-            nodeBuilder.reset(mergedRoot);
+            reset(builder, mergedRoot);
             return mergedRoot;
         }
         throw ex;
@@ -311,35 +238,38 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
 
     @Override
     public @NotNull NodeState rebase(@NotNull NodeBuilder builder) {
-        SegmentNodeBuilder nodeBuilder = assertRootBuilder(builder);
-        NodeState head = nodeBuilder.getNodeState();
-        NodeState base = nodeBuilder.getBaseState();
-        SegmentNodeState newBase = getRoot();
-        if (!SegmentNodeState.fastEquals(base, newBase)) {
-            nodeBuilder.reset(newBase);
-            head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(nodeBuilder));
-            head = nodeBuilder.getNodeState();
+        NodeState head = builder.getNodeState();
+        NodeState base = builder.getBaseState();
+        NodeState newBase = getRoot();
+        if (!RevisionableUtils.fastEquals(base, newBase)) {
+            reset(builder, newBase);
+            head.compareAgainstBaseState(base, new ConflictAnnotatingRebaseDiff(builder));
+            head = builder.getNodeState();
         }
         return head;
     }
 
     @Override
     public NodeState reset(@NotNull NodeBuilder builder) {
-        SegmentNodeBuilder nodeBuilder = assertRootBuilder(builder);
+        assertRootBuilder(builder);
         NodeState root = getRoot();
-        nodeBuilder.reset(root);
+        reset(builder, root);
         return root;
     }
 
-    private SegmentNodeBuilder assertRootBuilder(NodeBuilder builder) {
-        if (!(builder instanceof SegmentNodeBuilder)) {
+    private void reset(@NotNull NodeBuilder builder, NodeState newBase) {
+        checkArgument(builder instanceof MemoryNodeBuilder);
+        ((MemoryNodeBuilder) builder).reset(newBase);
+    }
+
+    private void assertRootBuilder(NodeBuilder builder) {
+        if (!(builder instanceof MemoryNodeBuilder)) {
             throw new IllegalArgumentException("Invalid node builder: " + builder.getClass());
         }
-        SegmentNodeBuilder nodeBuilder = (SegmentNodeBuilder) builder;
-        if (!nodeBuilder.isRootBuilder()) {
+        MemoryNodeBuilder nodeBuilder = (MemoryNodeBuilder) builder;
+        if (!nodeBuilder.isRoot()) {
             throw new IllegalArgumentException("Not a root builder: " + builder.getClass());
         }
-        return nodeBuilder;
     }
 
     @Override
@@ -394,14 +324,13 @@ public class RemoteNodeStore implements NodeStore, Closeable, Observable {
         return client.getCheckpointService().releaseCheckpoint(checkpointId).getValue();
     }
 
-    private SegmentNodeState createNodeState(NodeStateId id) {
+    private NodeState createNodeState(NodeStateId id) {
         String revision = id.getRevision();
-        RecordId recordId = RecordId.fromString(fileStore.getSegmentIdProvider(), revision);
-        return fileStore.getReader().readNode(recordId);
+        return nodeStore.getNodeStateByRevision(revision);
     }
 
     @NotNull
-    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, SegmentNodeState baseNodeState, SegmentNodeState headNodeState) {
+    private CommitProtos.Commit createCommitObject(@NotNull CommitInfo info, NodeState baseNodeState, NodeState headNodeState) {
         Commit.Builder commitBuilder = Commit.newBuilder();
         commitBuilder.setCommitInfo(CommitInfoUtil.serialize(info));
         commitBuilder.getBaseNodeStateBuilder().setRevision(getRevision(baseNodeState));

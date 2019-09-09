@@ -47,6 +47,7 @@ import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.commons.Buffer;
 import org.apache.jackrabbit.oak.plugins.memory.EmptyNodeState;
 import org.apache.jackrabbit.oak.plugins.memory.MemoryChildNodeEntry;
+import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeState;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.AbstractNodeState;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
@@ -61,7 +62,7 @@ import org.jetbrains.annotations.Nullable;
  * A record of type "NODE". This class can read a node record from a segment. It
  * currently doesn't cache data (but the template is fully loaded).
  */
-public class SegmentNodeState extends Record implements NodeState {
+public class SegmentNodeState extends Record implements NodeState, RevisionableNodeState {
     @NotNull
     private final SegmentReader reader;
 
@@ -720,4 +721,8 @@ public class SegmentNodeState extends Record implements NodeState {
         return AbstractNodeState.toString(this);
     }
 
+    @Override
+    public String getRevision() {
+        return getRecordId().toString();
+    }
 }

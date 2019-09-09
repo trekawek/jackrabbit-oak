@@ -16,32 +16,25 @@
  */
 package org.apache.jackrabbit.oak.remote.server;
 
-import com.google.common.io.Closer;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-import org.apache.commons.io.FileUtils;
 import org.apache.jackrabbit.oak.remote.common.persistence.TailingPersistence;
 import org.apache.jackrabbit.oak.remote.proto.SegmentProtos;
-import org.apache.jackrabbit.oak.segment.RecordId;
+import org.apache.jackrabbit.oak.segment.RevisionableNodeStoreFactoryService;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
-import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
-import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
-import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
+import org.apache.jackrabbit.oak.segment.spi.state.RevisionableNodeStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-
-import static com.google.common.io.Files.createTempDir;
 
 public class PrivateFileStores {
 
@@ -55,6 +48,8 @@ public class PrivateFileStores {
 
     private final BlobStore blobStore;
 
+    private final RevisionableNodeStoreFactoryService revNodeStoreService = new RevisionableNodeStoreFactoryService();
+
     public PrivateFileStores(CloudBlobDirectory sharedDirectory, BlobStore blobStore) throws URISyntaxException, StorageException {
         this.container = sharedDirectory.getContainer();
         this.sharedDirectoryName = sharedDirectory.getPrefix();
@@ -63,9 +58,7 @@ public class PrivateFileStores {
     }
 
     public NodeState getNodeState(String segmentStoreDir, String revision) throws IOException {
-        ReadOnlyFileStore fileStore = getFileStoreEntry(segmentStoreDir).fileStore;
-        RecordId recordId = RecordId.fromString(fileStore.getSegmentIdProvider(), revision);
-        return fileStore.getReader().readNode(recordId);
+        return getFileStoreEntry(segmentStoreDir).revNodeStore.getNodeStateByRevision(revision);
     }
 
     public synchronized void onNewSharedSegment(SegmentProtos.SegmentBlob segmentBlob) {
@@ -86,10 +79,10 @@ public class PrivateFileStores {
         if (fileStoreMap.containsKey(segmentStoreDir)) {
             return fileStoreMap.get(segmentStoreDir);
         }
-        TailingPersistence privatePersistence = null;
+        TailingPersistence privatePersistence;
         try {
             privatePersistence = new TailingPersistence(
-                    new AzurePersistence(container.getDirectoryReference(segmentStoreDir)),
+                    new AzurePersistence(container.getDirectoryReference(sharedDirectoryName)),
                     null,
                     Arrays.asList(sharedDirectoryName, segmentStoreDir));
         } catch (URISyntaxException | StorageException e) {
@@ -100,32 +93,23 @@ public class PrivateFileStores {
         return entry;
     }
 
-    private static class FileStoreEntry implements Closeable {
+    private class FileStoreEntry implements Closeable {
 
-        private final ReadOnlyFileStore fileStore;
+        private final RevisionableNodeStore revNodeStore;
 
         private final TailingPersistence privatePersistence;
 
-        private final Closer closer = Closer.create();
-
         public FileStoreEntry(TailingPersistence privatePersistence, BlobStore blobStore) throws IOException {
             this.privatePersistence = privatePersistence;
-            File dir = createTempDir();
-            closer.register(() -> FileUtils.deleteDirectory(dir));
-            FileStoreBuilder builder = FileStoreBuilder
-                    .fileStoreBuilder(dir)
-                    .withCustomPersistence(privatePersistence)
-                    .withBlobStore(blobStore);
-            try {
-                fileStore = builder.buildReadOnly();
-            } catch (InvalidFileStoreVersionException e) {
-                throw new IOException(e);
-            }
-            closer.register(fileStore);
+            this.revNodeStore = revNodeStoreService.builder()
+                    .withBlobStore(blobStore)
+                    .withPersistence(privatePersistence)
+                    .readOnly()
+                    .build();
         }
 
         public void close() throws IOException {
-            closer.close();
+            revNodeStore.close();
         }
     }
 }

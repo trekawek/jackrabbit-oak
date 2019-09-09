@@ -22,6 +22,7 @@ import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import org.apache.commons.io.FileUtils;
+import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.remote.common.SegmentWriteListener;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
@@ -31,6 +32,9 @@ import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
+import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.commit.EmptyHook;
+import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +64,7 @@ public class NodeStoreServer implements Closeable  {
     public NodeStoreServer(ServerBuilder<?> serverBuilder, CloudBlobDirectory sharedSegmentStoreDir, BlobStore blobStore) throws URISyntaxException, StorageException, IOException, InvalidFileStoreVersionException {
         SegmentWriteListener segmentWriteListener = new SegmentWriteListener();
         this.fileStore = createFileStore(sharedSegmentStoreDir, blobStore, segmentWriteListener);
+        init(fileStore);
         this.nodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
         PrivateFileStores privateFileStores = new PrivateFileStores(sharedSegmentStoreDir, blobStore);
         this.server = serverBuilder
@@ -84,6 +89,17 @@ public class NodeStoreServer implements Closeable  {
         FileStore fileStore = builder.build();
         closer.register(fileStore);
         return fileStore;
+    }
+
+    private void init(FileStore fileStore) throws IOException {
+        try {
+            SegmentNodeStore segmentNodeStore = SegmentNodeStoreBuilders.builder(fileStore).build();
+            NodeBuilder builder = segmentNodeStore.getRoot().builder();
+            builder.setProperty(":initialized", true);
+            segmentNodeStore.merge(builder, EmptyHook.INSTANCE, CommitInfo.EMPTY);
+        } catch (CommitFailedException e) {
+            throw new IOException(e);
+        }
     }
 
     public SegmentNodeStore getNodeStore() {

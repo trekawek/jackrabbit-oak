@@ -17,21 +17,23 @@
 package org.apache.jackrabbit.oak.remote.client;
 
 import com.google.common.io.Closer;
-import com.microsoft.azure.storage.blob.CloudBlobDirectory;
+import com.microsoft.azure.storage.CloudStorageAccount;
+import com.microsoft.azure.storage.StorageCredentials;
+import com.microsoft.azure.storage.StorageCredentialsAccountAndKey;
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import org.apache.felix.scr.annotations.Activate;
 import org.apache.felix.scr.annotations.Component;
 import org.apache.felix.scr.annotations.ConfigurationPolicy;
 import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.apache.felix.scr.annotations.ReferencePolicy;
 import org.apache.jackrabbit.commons.SimpleValueFactory;
 import org.apache.jackrabbit.oak.api.Descriptors;
 import org.apache.jackrabbit.oak.api.jmx.CheckpointMBean;
-import org.apache.jackrabbit.oak.commons.PropertiesUtil;
 import org.apache.jackrabbit.oak.osgi.OsgiWhiteboard;
-import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
+import org.apache.jackrabbit.oak.segment.spi.RevisionableNodeStoreFactory;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo;
@@ -45,19 +47,22 @@ import org.apache.jackrabbit.oak.spi.whiteboard.WhiteboardUtils;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.ComponentContext;
+import org.osgi.service.metatype.annotations.Designate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Hashtable;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.apache.jackrabbit.oak.spi.cluster.ClusterRepositoryInfo.getOrCreateId;
 
 @Component(policy = ConfigurationPolicy.REQUIRE, metatype = true)
+@Designate(ocd = Configuration.class)
 public class RemoteNodeStoreService {
 
     private static final Logger LOG = LoggerFactory.getLogger(RemoteNodeStoreService.class);
@@ -66,72 +71,77 @@ public class RemoteNodeStoreService {
     private BlobStore blobStore;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY, policy = ReferencePolicy.STATIC)
-    private SegmentNodeStorePersistence persistence;
-
-    @Property(label = "Remote server host",
-            description = "The host name of the remote server",
-            value = "localhost"
-    )
-    private static final String REMOTE_HOST = "remoteHost";
-
-    @Property(label = "Remote server port",
-            description = "The port number of the remote server",
-            intValue = 12300
-    )
-    private static final String REMOTE_PORT = "remotePort";
-
-    @Property(label = "NodeStoreProvider role",
-            description = "Property indicating that this component will not register as a NodeStore but as a NodeStoreProvider with given role")
-    private static final String ROLE = "role";
+    private RevisionableNodeStoreFactory nodeStoreFactory;
 
     private ComponentContext context;
 
-    private Closer registrations;
+    private Closer closer;
 
-    private String remoteHost;
+    private Configuration config;
 
-    private int remotePort;
+    private RemoteNodeStoreClient client;
 
-    private String role;
+    private String privateDirName;
+
+    private SegmentNodeStorePersistence persistence;
 
     @Activate
-    protected void activate(ComponentContext context, Map<String, ?> config) throws Exception {
+    protected void activate(ComponentContext context, Configuration config) throws Exception {
         this.context = context;
-        remoteHost = PropertiesUtil.toString(config.get(REMOTE_HOST), "localhost");
-        remotePort = PropertiesUtil.toInteger(config.get(REMOTE_PORT), 12300);
-        role = PropertiesUtil.toString(config.get(ROLE), null);
+        this.config = config;
+        this.closer = Closer.create();
+        createClient();
+        registerPersistence();
         registerRemoteNodeStore();
     }
 
     @Deactivate
     protected void deactivate() throws IOException {
-        unregisterRemoteNodeStore();
+        closer.close();
+    }
+
+    private void createClient() {
+        client = new RemoteNodeStoreClient(config.remoteHost(), config.remotePort());
+        closer.register(client);
+    }
+
+    private void registerPersistence() throws StorageException, InvalidKeyException, URISyntaxException, IOException {
+        String sharedDirName = config.rootPath();
+        privateDirName = sharedDirName + "-" + UUID.randomUUID().toString();
+        CloudBlobContainer container = createContainer(config);
+        TailingPersistenceFactory persistenceFactory = new TailingPersistenceFactory(container, client, config.rootPath(), privateDirName);
+        closer.register(persistenceFactory);
+        persistence = persistenceFactory.create();
+    }
+
+    private static CloudBlobContainer createContainer(Configuration config) throws URISyntaxException, StorageException, InvalidKeyException {
+        CloudStorageAccount cloud;
+        if (config.connectionURL() != null) {
+            cloud = CloudStorageAccount.parse(config.connectionURL());
+        } else {
+            StorageCredentials credentials = new StorageCredentialsAccountAndKey(
+                    config.accountName(),
+                    config.accessKey());
+            cloud = new CloudStorageAccount(credentials, true);
+        }
+        return cloud.createCloudBlobClient().getContainerReference(config.containerName());
     }
 
     private void registerRemoteNodeStore() throws Exception {
-        registrations = Closer.create();
-
-        RemoteNodeStoreClient client = new RemoteNodeStoreClient(remoteHost, remotePort);
         RemoteNodeStore.Builder builder = new RemoteNodeStore.Builder();
         builder.setBlobStore(blobStore);
         builder.setClient(client);
-        if (persistence instanceof AzurePersistence) {
-            AzurePersistence azurePersistence = (AzurePersistence) persistence;
-            CloudBlobDirectory sharedDirectory = azurePersistence.getSegmentstoreDirectory();
-            builder.setCloudContainer(sharedDirectory.getContainer())
-                    .setSharedDirName(sharedDirectory.getPrefix())
-                    .setPrivateDirName(sharedDirectory.getPrefix() + UUID.randomUUID().toString());
-        } else {
-            throw new IllegalArgumentException("Invalid persistence, only AzurePersistence is supported");
-        }
+        builder.setPrivateDirName(privateDirName);
+        builder.setNodeStore(nodeStoreFactory.builder().withBlobStore(blobStore).withPersistence(persistence).build());
+
         RemoteNodeStore store = builder.build();
 
         Whiteboard whiteboard = new OsgiWhiteboard(context.getBundleContext());
 
-        if (role == null) {
+        if (config.role() == null) {
             ObserverTracker observerTracker = new ObserverTracker(store);
             observerTracker.start(context.getBundleContext());
-            registrations.register(() -> observerTracker.stop());
+            closer.register(() -> observerTracker.stop());
 
             registerMBean(whiteboard,
                     CheckpointMBean.class,
@@ -150,19 +160,19 @@ public class RemoteNodeStoreService {
                     NodeStore.class.getName(),
                     store,
                     props);
-            registrations.register(() -> nsReg.unregister());
+            closer.register(() -> nsReg.unregister());
         } else {
             registerDescriptors(whiteboard, store);
 
             Dictionary<String, Object> props = new Hashtable<String, Object>();
-            props.put(NodeStoreProvider.ROLE, role);
+            props.put(NodeStoreProvider.ROLE, config.role());
 
             LOG.info("Registering the remote node store provider");
             ServiceRegistration nsReg = context.getBundleContext().registerService(
                     NodeStoreProvider.class.getName(),
                     (NodeStoreProvider) () -> store,
                     props);
-            registrations.register(() -> nsReg.unregister());
+            closer.register(() -> nsReg.unregister());
         }
     }
 
@@ -180,18 +190,11 @@ public class RemoteNodeStoreService {
 
     private <T> void register(Whiteboard whiteboard, Class<T> iface, T bean) {
         Registration reg = whiteboard.register(iface, bean, new HashMap<>());
-        registrations.register(() -> reg.unregister());
+        closer.register(() -> reg.unregister());
     }
 
    private <T> void registerMBean(Whiteboard whiteboard, Class<T> iface, T bean, String type, String name) {
         Registration reg = WhiteboardUtils.registerMBean(whiteboard, iface, bean, type, name);
-        registrations.register(() -> reg.unregister());
-    }
-
-    private void unregisterRemoteNodeStore() throws IOException {
-        if (registrations != null) {
-            registrations.close();
-            registrations = null;
-        }
+        closer.register(() -> reg.unregister());
     }
 }
