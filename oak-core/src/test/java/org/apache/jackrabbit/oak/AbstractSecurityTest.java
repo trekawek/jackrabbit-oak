@@ -17,6 +17,8 @@
 package org.apache.jackrabbit.oak;
 
 import java.security.Principal;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -28,6 +30,7 @@ import javax.jcr.SimpleCredentials;
 import javax.jcr.ValueFactory;
 import javax.jcr.security.AccessControlManager;
 import javax.jcr.security.Privilege;
+import javax.security.auth.Subject;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginException;
 
@@ -60,6 +63,7 @@ import org.apache.jackrabbit.oak.security.internal.SecurityProviderBuilder;
 import org.apache.jackrabbit.oak.spi.security.ConfigurationParameters;
 import org.apache.jackrabbit.oak.spi.security.SecurityProvider;
 import org.apache.jackrabbit.oak.spi.security.authentication.ConfigurationUtil;
+import org.apache.jackrabbit.oak.spi.security.authentication.SystemSubject;
 import org.apache.jackrabbit.oak.spi.security.authorization.AuthorizationConfiguration;
 import org.apache.jackrabbit.oak.spi.security.principal.PrincipalConfiguration;
 import org.apache.jackrabbit.oak.spi.security.privilege.PrivilegeConfiguration;
@@ -180,6 +184,11 @@ public abstract class AbstractSecurityTest {
     @NotNull
     protected ContentSession createAdminSession(@NotNull ContentRepository repository) throws LoginException, NoSuchWorkspaceException {
         return repository.login(getAdminCredentials(), null);
+    }
+
+    @NotNull
+    protected ContentSession createSystemSession() throws PrivilegedActionException {
+        return Subject.doAs(SystemSubject.INSTANCE, (PrivilegedExceptionAction<ContentSession>) () -> contentRepository.login(null, null));
     }
 
     protected NamePathMapper getNamePathMapper() {

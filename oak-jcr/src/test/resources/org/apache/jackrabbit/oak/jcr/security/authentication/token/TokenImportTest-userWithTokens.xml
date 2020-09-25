@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sv:node sv:name="t" xmlns:mix="http://www.jcp.org/jcr/mix/1.0" xmlns:nt="http://www.jcp.org/jcr/nt/1.0" xmlns:fn_old="http://www.w3.org/2004/10/xpath-functions" xmlns:fn="http://www.w3.org/2005/xpath-functions" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:sv="http://www.jcp.org/jcr/sv/1.0" xmlns:rep="internal" xmlns:jcr="http://www.jcp.org/jcr/1.0">
+    <sv:property sv:name="jcr:primaryType" sv:type="Name"><sv:value>rep:User</sv:value></sv:property>
+    <sv:property sv:name="jcr:uuid" sv:type="String"><sv:value>e358efa4-89f5-3062-b10d-d7316b65649e</sv:value></sv:property>
+    <sv:property sv:name="rep:authorizableId" sv:type="String"><sv:value>t</sv:value></sv:property>
+    <sv:property sv:name="rep:principalName" sv:type="String"><sv:value>tPrinc</sv:value></sv:property>
+    <sv:node sv:name=".tokens">
+        <sv:property sv:name="jcr:primaryType" sv:type="Name"><sv:value>rep:Unstructured</sv:value></sv:property>
+        <sv:node sv:name="88dccc3c-6698-464f-a095-db0a046aa37e">
+            <sv:property sv:name="jcr:primaryType" sv:type="Name"><sv:value>rep:Token</sv:value></sv:property>
+            <sv:property sv:name="jcr:uuid" sv:type="String"><sv:value>88dccc3c-6698-464f-a095-db0a046aa37e</sv:value></sv:property>
+            <sv:property sv:name="ip" sv:type="String"><sv:value>127.0.0.1</sv:value></sv:property>
+            <sv:property sv:name="rep:token.exp" sv:type="Date"><sv:value>2100-01-01T00:00:00.656Z</sv:value></sv:property>
+            <sv:property sv:name="rep:token.key" sv:type="String"><sv:value>{SHA-256}eadf03e7e25fda1d-3aa620e6365002f595334046bc2baee85920321a4f9b4a6ff942dd137c0e3420</sv:value></sv:property>
+        </sv:node>
+    </sv:node>
+</sv:node>

@@ -20,6 +20,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.UUID;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.jackrabbit.JcrConstants;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.Tree;
@@ -466,7 +467,7 @@ public class TokenValidatorTest extends AbstractTokenTest {
             // create a validator that has 'tokensTree' as parentBefore and parentAfter
             NodeState ns = getTreeProvider().asNodeState(tokensTree);
             TreeProvider tp = when(mock(TreeProvider.class).createReadOnlyTree(ns)).thenReturn(tokensTree).getMock();
-            TokenValidatorProvider tvp = new TokenValidatorProvider(ConfigurationParameters.EMPTY, tp);
+            TokenValidatorProvider tvp = new TokenValidatorProvider(ConfigurationParameters.EMPTY, tp, ImmutableSet.of());
             Validator v = tvp.getRootValidator(ns, ns, new CommitInfo("sid", "uid", CommitMarker.asCommitAttributes()));
             assertNotNull(v);
             v.childNodeChanged(tokenTree.getName(), mock(NodeState.class), mock(NodeState.class));
@@ -527,7 +528,7 @@ public class TokenValidatorTest extends AbstractTokenTest {
 
     @NotNull
     private Validator createRootValidator(@NotNull Tree before, @NotNull Tree after) {
-        TokenValidatorProvider tvp = new TokenValidatorProvider(ConfigurationParameters.EMPTY, getTreeProvider());
+        TokenValidatorProvider tvp = new TokenValidatorProvider(ConfigurationParameters.EMPTY, getTreeProvider(), ImmutableSet.of());
         Validator v = tvp.getRootValidator(getTreeProvider().asNodeState(before), getTreeProvider().asNodeState(after), new CommitInfo("sid", "uid", CommitMarker.asCommitAttributes()));
         assertNotNull(v);
         return v;
@@ -535,7 +536,7 @@ public class TokenValidatorTest extends AbstractTokenTest {
 
     @NotNull
     private Validator createValidator(@NotNull Tree before, @NotNull Tree after, @NotNull String path, boolean isAdd) throws CommitFailedException {
-        TokenValidatorProvider tvp = new TokenValidatorProvider(ConfigurationParameters.EMPTY, getTreeProvider());
+        TokenValidatorProvider tvp = new TokenValidatorProvider(ConfigurationParameters.EMPTY, getTreeProvider(), ImmutableSet.of());
         NodeState b = getTreeProvider().asNodeState(before);
         NodeState a = getTreeProvider().asNodeState(after);
         Validator v = tvp.getRootValidator(b, a, new CommitInfo("sid", "uid", CommitMarker.asCommitAttributes()));

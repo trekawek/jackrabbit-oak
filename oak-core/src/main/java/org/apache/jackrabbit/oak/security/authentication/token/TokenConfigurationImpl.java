@@ -38,6 +38,7 @@ import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenConfigur
 import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenProvider;
 import org.apache.jackrabbit.oak.spi.security.user.UserConfiguration;
 import org.apache.jackrabbit.oak.spi.security.user.util.PasswordUtil;
+import org.apache.jackrabbit.oak.spi.xml.ProtectedItemImporter;
 import org.jetbrains.annotations.NotNull;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -144,7 +145,7 @@ public class TokenConfigurationImpl extends ConfigurationBase implements TokenCo
     @NotNull
     @Override
     public List<? extends ValidatorProvider> getValidators(@NotNull String workspaceName, @NotNull Set<Principal> principals, @NotNull MoveTracker moveTracker) {
-        ValidatorProvider vp = new TokenValidatorProvider(getSecurityProvider().getParameters(UserConfiguration.NAME), getTreeProvider());
+        ValidatorProvider vp = new TokenValidatorProvider(getSecurityProvider().getParameters(UserConfiguration.NAME), getTreeProvider(), principals);
         return ImmutableList.of(vp);
     }
 
@@ -160,6 +161,12 @@ public class TokenConfigurationImpl extends ConfigurationBase implements TokenCo
     public TokenProvider getTokenProvider(@NotNull Root root) {
         UserConfiguration uc = getSecurityProvider().getConfiguration(UserConfiguration.class);
         return new TokenProviderImpl(root, getParameters(), uc, newCredentialsSupport());
+    }
+
+    @NotNull
+    @Override
+    public List<ProtectedItemImporter> getProtectedItemImporters() {
+        return ImmutableList.of(new TokenImporter());
     }
 
     @NotNull

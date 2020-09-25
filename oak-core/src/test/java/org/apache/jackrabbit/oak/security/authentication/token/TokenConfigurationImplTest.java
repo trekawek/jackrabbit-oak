@@ -26,6 +26,7 @@ import org.apache.jackrabbit.oak.spi.security.authentication.credentials.Credent
 import org.apache.jackrabbit.oak.spi.security.authentication.credentials.SimpleCredentialsSupport;
 import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenConfiguration;
 import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenProvider;
+import org.apache.jackrabbit.oak.spi.xml.ProtectedItemImporter;
 import org.junit.Test;
 
 import javax.jcr.Credentials;
@@ -162,4 +163,15 @@ public class TokenConfigurationImplTest extends AbstractSecurityTest {
         verify(cs, times(2)).getAttributes(creds);
 
     }
+
+    @Test
+    public void testGetProtectedItemImporters() {
+        TokenConfiguration config = getConfig(TokenConfiguration.class);
+        List<? extends ProtectedItemImporter> importers = config.getProtectedItemImporters();
+
+        assertFalse(importers.isEmpty());
+        assertEquals(1, importers.size());
+        assertTrue(importers.get(0) instanceof TokenImporter);
+    }
+
 }

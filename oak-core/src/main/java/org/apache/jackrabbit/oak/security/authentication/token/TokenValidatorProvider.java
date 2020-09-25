@@ -30,6 +30,7 @@ import org.apache.jackrabbit.oak.spi.commit.ValidatorProvider;
 import org.apache.jackrabbit.oak.spi.commit.VisibleValidator;
 import org.apache.jackrabbit.oak.spi.security.ConfigurationParameters;
 import org.apache.jackrabbit.oak.spi.security.authentication.token.TokenConstants;
+import org.apache.jackrabbit.oak.spi.security.principal.SystemPrincipal;
 import org.apache.jackrabbit.oak.spi.security.user.UserConstants;
 import org.apache.jackrabbit.oak.spi.security.user.util.PasswordUtil;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
@@ -38,6 +39,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.security.Principal;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkState;
 
@@ -49,8 +53,11 @@ class TokenValidatorProvider extends ValidatorProvider implements TokenConstants
 
     private final TreeProvider treeProvider;
 
-    TokenValidatorProvider(@NotNull ConfigurationParameters userConfig, @NotNull TreeProvider treeProvider) {
+    private final boolean isSystem;
+
+    TokenValidatorProvider(@NotNull ConfigurationParameters userConfig, @NotNull TreeProvider treeProvider, @NotNull Set<Principal> principals) {
         userRootPath = userConfig.getConfigValue(UserConstants.PARAM_USER_PATH, UserConstants.DEFAULT_USER_PATH);
+        isSystem = principals.contains(SystemPrincipal.INSTANCE);
         this.treeProvider = treeProvider;
     }
 
@@ -156,7 +163,7 @@ class TokenValidatorProvider extends ValidatorProvider implements TokenConstants
         //--------------------------------------------------------< private >---
 
         private void verifyCommitInfo() throws CommitFailedException {
-            if (!CommitMarker.isValidCommitInfo(commitInfo)) {
+            if (!CommitMarker.isValidCommitInfo(commitInfo) && !isSystem) {
                 throw constraintViolation(63, "Attempt to manually create or change a token node or it's parent.");
             }
         }
